@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "repository_sync_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh mirror and repository sync fixture"
+
+[dependencies]
+meshdep = "2.0.0"

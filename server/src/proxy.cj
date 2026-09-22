@@ -132,7 +132,7 @@ class ProxyArtifactHandler <: HttpRequestHandler {
     }
 }
 
-private func fetchUpstream(upstream: String, token: String, path: String): (UInt16, Array<UInt8>) {
+func fetchUpstream(upstream: String, token: String, path: String): (UInt16, Array<UInt8>) {
     let client = ClientBuilder().noProxy().build()
     try {
         let requestBuilder = HttpRequestBuilder().method("GET").url("${upstream}${path}")
@@ -155,7 +155,7 @@ private func fetchUpstream(upstream: String, token: String, path: String): (UInt
     }
 }
 
-private func checksumFromCachedIndex(storage: String, name: String, version: String): String {
+func checksumFromCachedIndex(storage: String, name: String, version: String): String {
     let firstLevel = name[..2]
     let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
     let indexPath = Path(storage).join("index").join("default").join(firstLevel).join(secondLevel).join(name)
@@ -174,12 +174,12 @@ private func checksumFromCachedIndex(storage: String, name: String, version: Str
     throw Exception("requested version is missing from the cached package index")
 }
 
-private func jsonString(object: JsonObject, field: String): String {
+func jsonString(object: JsonObject, field: String): String {
     let value = object.get(field) ?? throw Exception("index is missing ${field}")
     return value.asString().getValue()
 }
 
-private func ensureParent(path: Path): Unit {
+func ensureParent(path: Path): Unit {
     let parent = path.parent
     if (!exists(parent)) {
         Directory.create(parent, recursive: true)

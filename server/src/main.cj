@@ -113,7 +113,18 @@ private class RegistryDistributor <: HttpRequestDistributor {
     }
 }
 
-main() {
+main(): Int64 {
+    let arguments = getCommandLine()[1..]
+    if (!arguments.isEmpty()) {
+        match (arguments[0]) {
+            case "mirror" => return if (runMirror(arguments[1..])) { 0 } else { 1 }
+            case "sync" => return if (runSync(arguments[1..])) { 0 } else { 1 }
+            case _ =>
+                eprintln("Usage: cjrepo [mirror <upstream> <package> <version> | sync <source> <destination> <package> <version>]")
+                return 2
+        }
+    }
+
     let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken())
     distributor.register("/health", { context =>
         context.responseBuilder
@@ -133,4 +144,5 @@ main() {
         println("CjRepo proxy upstream: ${configuredUpstream()}")
     }
     server.serve()
+    return 0
 }

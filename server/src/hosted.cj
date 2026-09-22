@@ -6,6 +6,7 @@ package cjrepo
 import std.collection.*
 import std.fs.*
 import std.io.*
+import std.regex.*
 import stdx.net.http.*
 import stdx.crypto.digest.*
 import stdx.encoding.hex.*
@@ -163,8 +164,7 @@ private func requiredString(object: JsonObject, field: String): String {
 }
 
 func isSafePackageSegment(segment: String): Bool {
-    return !segment.isEmpty() && segment != "." && segment != ".." &&
-        !segment.contains("/") && !segment.contains("\\") && !segment.contains(":")
+    return Regex("^[A-Za-z0-9][A-Za-z0-9._+-]*$").matches(segment)
 }
 
 func respondError(context: HttpContext, status: UInt16, message: String): Unit {

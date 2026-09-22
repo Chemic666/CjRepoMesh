@@ -167,9 +167,12 @@ registry + organization + package + version
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
 - [x] Proxy Cache MISS/HIT 与上游离线构建；
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
+- [x] 指定包/版本主动 Mirror，校验并幂等跳过；
+- [x] 带令牌的 CjRepo-to-CjRepo Sync，重复同步幂等；
+- [x] Source 离线后 Destination 独立完成 cjpm 构建；
 - [ ] 来源 provenance 持久化；
 - [ ] 私有中心仓 organization、读鉴权、并发写安全和一键部署；
-- [ ] Proxy TTL/并发填充、Mirror、Sync。
+- [ ] Proxy TTL/并发填充、批量 Mirror、Sync 断点恢复。
 
 如果某项受阻，按以下顺序降险：
 
