@@ -5,6 +5,7 @@ package cjpm.implement
 
 import std.collection.*
 import std.fs.*
+import std.sort.*
 import cjpm.config.*
 
 private func directRequirement(tomlInfo: TomlInfo, fullName: String): (String, Bool) {
@@ -24,6 +25,67 @@ private func directRequirement(tomlInfo: TomlInfo, fullName: String): (String, B
         }
     }
     return ("(,)", false)
+}
+
+private func inferredDoctorPackage(): Option<String> {
+    if (!fileExists(Path(DIR_CURRENT).join(CONFIG_FILE_NAME))) {
+        return None
+    }
+    let tomlInfo = loadModuleFile(DIR_CURRENT) ?? return None
+    let names = ArrayList<String>()
+    for ((name, dep) in tomlInfo.dependencies) {
+        if (dep.version.isSome()) {
+            names.add(name)
+        }
+    }
+    let ordered = names.toArray()
+    sort(ordered)
+    return if (ordered.isEmpty()) { None } else { Some(ordered[0]) }
+}
+
+public func doRepoDoctor(packageArgument: Option<String>): Bool {
+    let fullName = match (packageArgument) {
+        case Some(name) => name
+        case None =>
+            match (inferredDoctorPackage()) {
+                case Some(name) => name
+                case None =>
+                    eprintln("Error: no direct repository dependency is available; use 'cjpm repo doctor <package>'")
+                    return false
+            }
+    }
+    if (!dependenciesNameCheck(fullName, "argument to 'cjpm repo doctor'")) {
+        return false
+    }
+
+    println("Repository Diagnostics")
+    println("Package: ${fullName}")
+    let router = RepositoryRouter.new() ?? return false
+    let candidates = router.getDepots(fullName)
+    var allPassed = true
+    for (depot in candidates) {
+        let priority = FINAL_CJPM_CONFIG_INFO.repository[depot.registryName].priority
+        println("")
+        println("${depot.registryName}")
+        println("  Configuration  PASS  priority=${priority}")
+        let (org, name) = splitFullName(fullName)
+        let (passed, output) = try {
+            depot.updateIndexWithOutput(name, org)
+        } catch (e: Exception) {
+            (false, e.message)
+        }
+        if (passed) {
+            println("  Metadata API   PASS  status=${depot.lastResponseStatus}")
+        } else {
+            allPassed = false
+            println("  Metadata API   FAIL  status=${depot.lastResponseStatus}")
+            println("  Detail         ${output}")
+            println("  Fallback       ${if (RepositoryRouter.canContinueAfter(depot.lastResponseStatus)) { "ALLOWED" } else { "BLOCKED" }}")
+        }
+    }
+    println("")
+    println("Overall: ${if (allPassed) { "PASS" } else { "FAIL" }}")
+    return allPassed
 }
 
 public func doRepoExplainRecorded(fullName: String): Bool {

@@ -11,6 +11,7 @@ Explain repository routing and package source selection.
 Usage:
   cjpm repo explain <package>
   cjpm repo explain <package> --recorded
+  cjpm repo doctor [package]
 
 Examples:
   cjpm repo explain meshdep
@@ -31,14 +32,27 @@ class RepoCommand <: Handle {
     }
 
     public override func handleCommand(): Bool {
-        if ((this.arguments.size != 2 && this.arguments.size != 3) || this.arguments[0] != "explain" ||
-            (this.arguments.size == 3 && this.arguments[2] != "--recorded")) {
+        if (!this.arguments.isEmpty() && this.arguments[0] == "doctor") {
+            if (this.arguments.size == 1) {
+                return doRepoDoctor(None)
+            }
+            if (this.arguments.size == 2) {
+                return doRepoDoctor(Some(this.arguments[1]))
+            }
+            eprintln("Error: usage is 'cjpm repo doctor [package]'")
+            return false
+        }
+        if (!this.arguments.isEmpty() && this.arguments[0] == "explain") {
+            if (this.arguments.size == 2) {
+                return doRepoExplain(this.arguments[1])
+            }
+            if (this.arguments.size == 3 && this.arguments[2] == "--recorded") {
+                return doRepoExplainRecorded(this.arguments[1])
+            }
             eprintln("Error: usage is 'cjpm repo explain <package> [--recorded]'")
             return false
         }
-        if (this.arguments.size == 3) {
-            return doRepoExplainRecorded(this.arguments[1])
-        }
-        return doRepoExplain(this.arguments[1])
+        eprintln("Error: usage is 'cjpm repo explain <package> [--recorded]' or 'cjpm repo doctor [package]'")
+        return false
     }
 }

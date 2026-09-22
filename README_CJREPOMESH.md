@@ -9,6 +9,7 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 - 原生 `[replace]` 强制版本在多仓下生效，并遵循仓库优先级与回退规则；
 - `cjpm repo explain <package>` 展示需求、替换、路由、候选版本、来源仓和 SHA-256；
 - 构建生成 `cjpm-provenance.json`，`repo explain --recorded` 可在仓库离线时审计来源；
+- `cjpm repo doctor [package]` 逐仓诊断配置、认证、元数据 API 与安全回退判定；
 - 同版本按仓库优先级确定来源；
 - 404/5xx 回退，401/403 安全阻断；
 - `token-env` 私有读认证；

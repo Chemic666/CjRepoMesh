@@ -24,6 +24,7 @@
 - `cjpm repo explain <package>` 复用真实 Router 与 DepRecord 输出解析决策；
 - `cjpm-provenance.json` 原子记录最终版本、仓库名称、地址与 SHA-256；
 - `cjpm repo explain <package> --recorded` 支持离线审计上一次真实构建；
+- `cjpm repo doctor [package]` 逐仓检查真实 Metadata API，并标识允许或禁止回退；
 - 旧 `repository.home` 配置和缓存路径兼容。
 
 当前已验证的配置示例：
@@ -91,6 +92,7 @@ meshdep = "1.0.0"
 | 替换版本不存在 | 明确失败并指出 `replace` 制品不存在 | PASS |
 | `repo explain` | 普通解析与替换场景的版本、来源和校验和与真实构建一致 | PASS |
 | 来源持久化 | 构建后仓库离线，仍能解释上次选定来源与校验和 | PASS |
+| `repo doctor` | 正常仓逐仓 200；401 显示认证屏障并返回失败 | PASS |
 | 404 | 回退下一仓 | PASS |
 | 5xx | 回退下一仓 | PASS |
 | 401 | 立即失败，不访问下一仓 | PASS |
@@ -104,7 +106,6 @@ meshdep = "1.0.0"
 
 - 仓库级 fallback 配置开关；
 - TLS/网络异常的结构化分类；
-- `cjpm repo doctor`；
 - 多仓 install/publish 的显式目标仓选择；
 - 完整 Maple HLT/LLT。
 

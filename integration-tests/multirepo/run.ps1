@@ -136,6 +136,13 @@ Assert-Output $result "repository: low"
 Assert-Output $result "checksum: sha256:"
 Write-Host "PASS repo explain reports the selected version, source and checksum"
 
+Reset-App "app"
+$result = Invoke-WithRepositories "app" @($high, $low) @("repo", "doctor", "meshdep")
+Assert-Output $result "Repository Diagnostics"
+Assert-Output $result "Metadata API   PASS  status=200"
+Assert-Output $result "Overall: PASS"
+Write-Host "PASS repo doctor checks every allowed repository"
+
 Reset-App "app-pinned"
 $result = Invoke-WithRepositories "app-pinned" @($high, $low) @("run")
 Assert-Output $result "high-1.0.0"
@@ -191,6 +198,14 @@ if ((Test-Path -LiteralPath $lowLog) -and (Get-Item -LiteralPath $lowLog).Length
 }
 Assert-Output $result "status 401"
 Write-Host "PASS 401 blocks fallback"
+
+Reset-App "app-auth-barrier"
+$result = Invoke-WithRepositories "app-auth-barrier" @($unauthorized, $low) `
+    @("repo", "doctor", "meshdep") $false
+Assert-Output $result "Metadata API   FAIL  status=401"
+Assert-Output $result "Fallback       BLOCKED"
+Assert-Output $result "Overall: FAIL"
+Write-Host "PASS repo doctor identifies authentication barriers"
 
 Reset-App "app-token"
 Remove-Item Env:CJREPOMESH_TEST_TOKEN -ErrorAction SilentlyContinue

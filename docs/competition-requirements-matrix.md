@@ -178,6 +178,7 @@ registry + organization + package + version
 - [x] 并发重复发布原子化，严格产生一个成功和一个 409；
 - [x] 并发 Proxy 首次请求合并为一次校验后的上游填充；
 - [x] Proxy 索引 TTL 到期后刷新，版本化制品不重复下载；
+- [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [ ] 私有中心仓 organization、读鉴权、按包细粒度锁和 Docker/Linux 部署验证；
 - [ ] 批量 Mirror、Sync 断点恢复。
 
