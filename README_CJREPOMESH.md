@@ -30,12 +30,9 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 ## 验证入口
 
 ```powershell
-integration-tests\multirepo\run.ps1
-integration-tests\hosted-server\run.ps1
-integration-tests\proxy\run.ps1
-integration-tests\sync\run.ps1
-integration-tests\deployment\run.ps1
-benchmark\proxy\run.ps1
+.\integration-tests\run-all.ps1
 ```
+
+性能测试单独运行 `benchmark/proxy/run.ps1`，避免把性能波动与功能回归混在一起。架构与关键决策见 [架构说明](docs/architecture.md)，测试覆盖见 [端到端验证](integration-tests/README.md)，最近一次实测结果见 [全量验证报告](docs/verification-report.md)。
 
 Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、按包细粒度锁、批量 Mirror 清单、断点续传和 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。

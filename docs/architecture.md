@@ -1,0 +1,168 @@
+# CjRepoMesh 架构说明
+
+> 更新日期：2026-09-22  
+> 范围：当前仓库中已经实现并通过本地自动验证的能力  
+> 原则：Repository Router 只决定候选来源，版本选择继续由原 cjpm 依赖求解器完成
+
+## 1. 官方交付与冲奖增强
+
+| 分类 | 能力 | 当前状态 |
+| --- | --- | --- |
+| 官方交付 | 多仓配置、优先级查找 | 已实现并有端到端测试 |
+| 官方交付 | 多仓解析、冲突处理、`[replace]` 强制替换 | 已复用原求解器并有端到端测试 |
+| 官方交付 | 私有中心仓一键部署 | Windows 已验证；Linux/Docker 尚未验证 |
+| 官方交付 | Hosted、Proxy、Mirror、仓间 Sync | 已实现最小闭环并有端到端测试 |
+| 冲奖增强 | 独占命名空间与安全感知回退 | 已实现并有攻击/故障测试 |
+| 冲奖增强 | `repo explain`、`repo doctor`、来源持久化 | 已实现并有在线、离线测试 |
+| 冲奖增强 | 并发原子写、Proxy 填充合并和索引 TTL | 已实现并有并发、过期测试 |
+| 冲奖增强 | 可重复 Benchmark | 已保留原始样本与 Median/P95 报告 |
+
+## 2. 总体架构
+
+```mermaid
+flowchart TD
+    P[Cangjie Project] --> C[cangjie-repo.toml / cjpm.toml]
+    C --> R[Repository Router]
+    R -->|候选版本 + 来源| D[原 cjpm Dependency Resolver]
+    D --> G[Final Dependency Graph]
+    G --> A[Download + SHA-256]
+    A --> K[Repository-aware Cache]
+    A --> V[cjpm-provenance.json]
+
+    R --> H[Hosted / Private]
+    R --> X[Proxy Registry]
+    R --> M[Mirror Registry]
+    R --> O[Official Registry]
+
+    subgraph S[CjRepo Server]
+        API[Registry API]
+        AUTH[Publish Authentication]
+        PROXY[Proxy Cache + TTL]
+        MIRROR[Mirror Command]
+        SYNC[Sync Command]
+        STORE[Atomic Filesystem Storage]
+        API --> AUTH
+        API --> PROXY
+        AUTH --> STORE
+        PROXY --> STORE
+        MIRROR --> STORE
+        SYNC --> API
+    end
+
+    H --> API
+    X --> API
+    M --> API
+```
+
+这条链路刻意把两个问题分开：
+
+- Repository Resolution：哪些仓库允许被访问、以什么顺序访问、每个版本来自哪里；
+- Dependency Resolution：版本范围、传递依赖、冲突合并和最终依赖图。
+
+前者由 CjRepoMesh 增强，后者继续使用官方 cjpm 原有实现。仓库优先级因此不会错误地覆盖版本求解规则。
+
+## 3. 解析决策流程
+
+```mermaid
+flowchart TD
+    Q[Package Requirement] --> O{存在 replace?}
+    O -->|是| RV[固定目标版本]
+    O -->|否| NR[保留原版本范围]
+    RV --> RM[匹配 Namespace Route]
+    NR --> RM
+    RM --> EX{exclusive?}
+    EX -->|是| ONE[仅保留指定仓库]
+    EX -->|否| ALL[保留所有已启用仓库]
+    ONE --> SORT[priority 降序 + 名称稳定排序]
+    ALL --> SORT
+    SORT --> FETCH[依次请求 Metadata]
+    FETCH --> ERR{响应类型}
+    ERR -->|200| MERGE[聚合版本候选与来源]
+    ERR -->|404 / 5xx| NEXT[在安全边界内回退]
+    ERR -->|401 / 403| STOP[立即失败，禁止回退]
+    NEXT --> FETCH
+    MERGE --> SOLVER[原 cjpm Dependency Resolver]
+    SOLVER --> SOURCE[同一最终版本按优先级选源]
+    SOURCE --> VERIFY[下载并校验 SHA-256]
+    VERIFY --> RECORD[缓存 + Provenance]
+```
+
+核心不变量：
+
+1. 高优先级仓提供 `1.0.0`、低优先级仓提供 `2.0.0` 时，只要原版本范围允许，仍由原求解器选择 `2.0.0`；
+2. 多个仓都提供最终选中的同一版本时，才按仓库优先级确定下载来源；
+3. `401/403`、独占路由和校验失败不能通过访问公共仓被绕过；
+4. `[replace]` 固定版本，但不能绕过路由、认证和完整性边界。
+
+## 4. CjRepo Server
+
+服务端保持为单个仓颉进程和文件系统存储，避免为比赛引入数据库、缓存集群或消息队列。
+
+### 4.1 cjpm 兼容接口
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/health` | 健康检查 |
+| `POST` | `/pkg/<package>` | 发布 Hosted 包 |
+| `GET` | `/index/<prefix>/<package>` | 查询包版本元数据 |
+| `GET` | `/pkg/<package>/<version>` | 下载版本化制品 |
+
+### 4.2 存储和一致性
+
+```text
+storage/
+├── index/default/<prefix>/<package>
+└── artifacts/default/<package>/<version>/<package>-<version>.cjp
+```
+
+- 服务端复核客户端提供的 SHA-256；
+- 制品和索引使用临时文件加原子替换；
+- 进程级存储锁保证并发发布和首次代理填充的一致性；
+- 重复发布同一版本返回冲突，不静默覆盖；
+- Proxy 只让元数据索引按 TTL 过期，已校验的版本化制品保持不可变缓存；
+- Mirror 和 Sync 在写入前均重新验证 SHA-256。
+
+## 5. 安全边界
+
+| 风险 | 当前控制 |
+| --- | --- |
+| Dependency Confusion | `exclusive = true` 的命名空间路由，公共仓不会被访问 |
+| 认证失败后错误回退 | `401/403` 立即阻断 |
+| 下载内容被篡改 | cjpm、Proxy、Mirror、Sync 全链路 SHA-256 校验 |
+| 同名同版本跨仓污染 | 仓库维度的缓存与来源映射 |
+| 静默强制替换 | 继续使用显式 `[replace]`，并由 `repo explain` 展示 |
+| 来源不可追溯 | 原子写入 `cjpm-provenance.json`，支持离线解释 |
+| Token 进入配置仓库 | `token-env` 与进程环境变量 |
+
+## 6. 代码地图
+
+| 模块 | 主要位置 | 职责 |
+| --- | --- | --- |
+| 配置模型 | `cjpm/src/config/central_repository.cj` | 兼容旧单仓配置，解析命名仓库与路由 |
+| 多仓客户端 | `cjpm/src/implement/central_repository.cj` | 候选聚合、优先级、回退、认证和下载 |
+| 原依赖求解 | `cjpm/src/implement/dep_engine.cj` | 保持官方版本选择与冲突处理语义 |
+| Explain / Doctor | `cjpm/src/command/repo.cj`、`cjpm/src/implement/repo.cj` | 解释真实决策和探测仓库状态 |
+| 来源记录 | `cjpm/src/implement/provenance.cj` | 原子持久化最终来源和校验和 |
+| Hosted | `server/src/hosted.cj` | 发布、查询、下载、鉴权与校验 |
+| Proxy | `server/src/proxy.cj` | 按需缓存、TTL、离线命中与上游错误处理 |
+| Storage | `server/src/storage.cj` | 文件布局、原子写与并发保护 |
+| Mirror / Sync | `server/src/main.cj`、`server/src/sync.cj` | 主动镜像和 CjRepo-to-CjRepo 增量复制 |
+| 自动验证 | `integration-tests/run-all.ps1` | 五组端到端测试的统一入口 |
+
+## 7. 已知边界
+
+- 当前服务端只支持默认 organization，读取端尚未鉴权；
+- 存储锁是进程级全局锁，尚未细化到包级；
+- Mirror/Sync 以显式包和版本为粒度，尚无批量清单、调度和断点续传；
+- Windows 一键部署已验证，Linux/Docker 尚未在用户提供的环境中验证；
+- 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT，因此不能宣称通过全部官方回归；
+- `cjpm-provenance.json` 是 CjRepoMesh 的审计文件，不冒充官方 lockfile 格式。
+
+## 8. 证据入口
+
+- 总体全量验证：`integration-tests/run-all.ps1`
+- 最近一次全量结果：`docs/verification-report.md`
+- 多仓实现与场景矩阵：`docs/multirepo-implementation.md`
+- 官方要求映射：`docs/competition-requirements-matrix.md`
+- 获奖就绪度与缺口：`docs/award-readiness.md`
+- Proxy 性能报告：`benchmark/results/proxy-benchmark.md`
