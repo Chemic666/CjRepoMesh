@@ -25,6 +25,8 @@
 3. 自动生成发布 Token，并仅写入被忽略的 `.env`；
 4. 构建、启动并等待 `/health` 通过。
 
+重复执行且未显式传入 `-PublishToken` 时，脚本会复用已有 `.env` 中的 Token，避免普通重建意外轮换凭据。
+
 指定端口、Token 或上游代理：
 
 ```powershell
@@ -33,6 +35,16 @@
   -PublishToken "replace-with-a-long-random-token" `
   -Upstream "https://upstream.example.com"
 ```
+
+## 运行诊断
+
+运行安全与健康诊断：
+
+```powershell
+.\deployment\docker\doctor.ps1
+```
+
+诊断会检查服务 API、Docker 健康状态、非 root 用户、只读根文件系统、capability、安全选项、仅本机端口绑定及持久化卷。
 
 ## 停止与数据
 

@@ -27,6 +27,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker engine is not running. Start Docker Desktop and retry."
 }
 
+if ([string]::IsNullOrWhiteSpace($PublishToken) -and (Test-Path -LiteralPath $envPath)) {
+    $existingToken = Get-Content -LiteralPath $envPath |
+        Where-Object { $_.StartsWith("CJREPO_PUBLISH_TOKEN=") } |
+        Select-Object -First 1
+    if ($existingToken) {
+        $PublishToken = $existingToken.Substring($existingToken.IndexOf("=") + 1)
+    }
+}
 if ([string]::IsNullOrWhiteSpace($PublishToken)) {
     $randomBytes = New-Object byte[] 32
     $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
