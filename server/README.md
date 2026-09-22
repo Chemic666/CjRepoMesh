@@ -59,6 +59,20 @@ main.exe mirror https://upstream.example.com meshdep 2.0.0
 
 Mirror 会下载索引和制品、验证 SHA-256 后写入本地仓。若本地已有相同且校验正确的版本，则返回 `SKIP`，不访问上游。
 
+批量镜像使用清单：
+
+```text
+# mirror.txt：每行一个 package/version，空行和注释会被忽略
+meshdep 1.0.0
+meshdep 2.0.0
+```
+
+```powershell
+main.exe mirror-manifest https://upstream.example.com mirror.txt
+```
+
+命令会继续处理清单中的后续条目，并在结尾输出 `total`、`succeeded`、`failed` 汇总；任一条目失败或清单为空时返回非零状态。重复执行已经完整缓存的清单只输出 `SKIP`，不访问上游。
+
 ## Repository Sync
 
 将一个 CjRepo 中的指定版本增量同步到另一个 CjRepo：
@@ -70,4 +84,4 @@ main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 
 同步会从 Source 获取索引与制品、验证 SHA-256，再通过目标仓发布协议写入。目标版本已经存在时，409 被解释为幂等 `SKIP`。
 
-当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 当前以显式包和版本为粒度，尚无批量清单、调度与断点续传；尚未提供 Docker 部署。
+当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror 已支持批量清单但尚无调度，Sync 仍以显式包和版本为粒度，二者均尚无断点续传；尚未提供 Docker 部署。

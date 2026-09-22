@@ -167,7 +167,7 @@ registry + organization + package + version
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
 - [x] Proxy Cache MISS/HIT 与上游离线构建；
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
-- [x] 指定包/版本主动 Mirror，校验并幂等跳过；
+- [x] 批量清单主动 Mirror，逐项校验、幂等跳过并汇总部分失败；
 - [x] 带令牌的 CjRepo-to-CjRepo Sync，重复同步幂等；
 - [x] Source 离线后 Destination 独立完成 cjpm 构建；
 - [x] Windows 一条命令构建并启动私有仓，提供健康诊断和安全停止；
@@ -181,7 +181,7 @@ registry + organization + package + version
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [ ] 私有中心仓 organization、读鉴权、按包细粒度锁和 Docker/Linux 部署验证；
-- [ ] 批量 Mirror、Sync 断点恢复。
+- [ ] Sync 批量清单、Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：
 

@@ -13,6 +13,8 @@ $mirrorStorage = Join-Path $testRoot "mirror-storage"
 $destinationStorage = Join-Path $testRoot "destination-storage"
 $appRoot = Join-Path $testRoot "app"
 $upstreamLog = Join-Path $fixtureRoot "low.requests.log"
+$mirrorManifest = Join-Path $testRoot "mirror-manifest.txt"
+$invalidMirrorManifest = Join-Path $testRoot "mirror-manifest-invalid.txt"
 
 if ([string]::IsNullOrWhiteSpace($Cjpm)) {
     $Cjpm = Join-Path $projectRoot "cjpm\target\release\bin\cjpm.exe"
@@ -104,18 +106,25 @@ try {
     Start-Sleep -Milliseconds 500
 
     $env:CJREPO_STORAGE = $mirrorStorage
-    $mirrorOutput = (& $serverExe mirror "http://127.0.0.1:39401" meshdep 2.0.0 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or -not $mirrorOutput.Contains("result=SYNCED")) {
-        throw "Mirror command failed:`n$mirrorOutput"
+    $mirrorOutput = (& $serverExe mirror-manifest "http://127.0.0.1:39401" $mirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or -not $mirrorOutput.Contains("total=2 succeeded=2 failed=0")) {
+        throw "Mirror manifest command failed:`n$mirrorOutput"
     }
     $firstRequestCount = @(Get-Content -LiteralPath $upstreamLog).Count
 
-    $mirrorAgain = (& $serverExe mirror "http://127.0.0.1:39401" meshdep 2.0.0 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or -not $mirrorAgain.Contains("result=SKIP") -or
+    $mirrorAgain = (& $serverExe mirror-manifest "http://127.0.0.1:39401" $mirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or -not $mirrorAgain.Contains("total=2 succeeded=2 failed=0") -or
+        @($mirrorAgain -split "result=SKIP").Count -ne 3 -or
         @(Get-Content -LiteralPath $upstreamLog).Count -ne $firstRequestCount) {
         throw "Idempotent mirror check failed:`n$mirrorAgain"
     }
-    Write-Host "PASS manifest-style mirror prefetch is checksum-verified and idempotent"
+
+    $invalidMirror = (& $serverExe mirror-manifest "http://127.0.0.1:39401" $invalidMirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0 -or -not $invalidMirror.Contains("total=2 succeeded=1 failed=1") -or
+        @(Get-Content -LiteralPath $upstreamLog).Count -ne $firstRequestCount) {
+        throw "Mirror manifest failure summary check failed:`n$invalidMirror"
+    }
+    Write-Host "PASS batch mirror manifest is checksum-verified, idempotent and reports partial failure"
 
     Stop-Process -Id $upstream.Id -Force
     $processes.Remove($upstream) | Out-Null

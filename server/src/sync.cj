@@ -52,6 +52,64 @@ func runMirror(arguments: Array<String>): Bool {
     }
 }
 
+/**
+ * Mirrors every package/version pair in a plain-text manifest.
+ *
+ * Blank lines and lines beginning with '#' are ignored. Each remaining line
+ * must contain exactly two space-separated fields: package and version. A bad
+ * entry does not prevent later entries from being attempted; the final status
+ * is unsuccessful if any entry failed.
+ */
+func runMirrorManifest(arguments: Array<String>): Bool {
+    if (arguments.size != 2) {
+        eprintln("Usage: cjrepo mirror-manifest <upstream> <file>")
+        return false
+    }
+
+    let upstream = trimTrailingSlash(arguments[0])
+    let manifestPath = arguments[1]
+    var total: Int64 = 0
+    var succeeded: Int64 = 0
+    var failed: Int64 = 0
+
+    try {
+        let content = String.fromUtf8(File.readFrom(manifestPath))
+        var lineNumber: Int64 = 0
+        for (rawLine in content.lines()) {
+            lineNumber += 1
+            let line = rawLine.trimAscii()
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue
+            }
+
+            total += 1
+            let fields = line.split(" ", removeEmpty: true)
+            if (fields.size != 2) {
+                failed += 1
+                eprintln("[mirror-manifest] line=${lineNumber} result=FAILED reason=expected-package-and-version")
+                continue
+            }
+
+            if (runMirror([upstream, fields[0], fields[1]])) {
+                succeeded += 1
+            } else {
+                failed += 1
+                eprintln("[mirror-manifest] line=${lineNumber} package=${fields[0]} version=${fields[1]} result=FAILED")
+            }
+        }
+    } catch (e: Exception) {
+        eprintln("Error: cannot read mirror manifest '${manifestPath}': ${e.message}")
+        return false
+    }
+
+    println("[mirror-manifest] total=${total} succeeded=${succeeded} failed=${failed}")
+    if (total == 0) {
+        eprintln("Error: mirror manifest contains no package entries")
+        return false
+    }
+    return failed == 0
+}
+
 func runSync(arguments: Array<String>): Bool {
     if (arguments.size != 4) {
         eprintln("Usage: cjrepo sync <source> <destination> <package> <version>")

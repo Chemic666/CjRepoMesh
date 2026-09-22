@@ -131,9 +131,10 @@ main(): Int64 {
     if (!arguments.isEmpty()) {
         match (arguments[0]) {
             case "mirror" => return if (runMirror(arguments[1..])) { 0 } else { 1 }
+            case "mirror-manifest" => return if (runMirrorManifest(arguments[1..])) { 0 } else { 1 }
             case "sync" => return if (runSync(arguments[1..])) { 0 } else { 1 }
             case _ =>
-                eprintln("Usage: cjrepo [mirror <upstream> <package> <version> | sync <source> <destination> <package> <version>]")
+                eprintln("Usage: cjrepo [mirror <upstream> <package> <version> | mirror-manifest <upstream> <file> | sync <source> <destination> <package> <version>]")
                 return 2
         }
     }
