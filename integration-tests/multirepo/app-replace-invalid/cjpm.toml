@@ -1,0 +1,12 @@
+[package]
+cjc-version = "1.0.0"
+name = "multirepo_replace_invalid"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh invalid replace integration test"
+
+[dependencies]
+meshdep = "[1.0.0, 3.0.0)"
+
+[replace]
+meshdep = "9.9.9"

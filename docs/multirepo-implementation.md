@@ -20,6 +20,7 @@
 - Namespace Routing；
 - `exclusive = true` 私有命名空间隔离；
 - 多仓 `cjpm update`；
+- 原生 `[replace]` 单版本强制替换在多仓候选与下载链路中保持生效；
 - 旧 `repository.home` 配置和缓存路径兼容。
 
 当前已验证的配置示例：
@@ -62,6 +63,18 @@ strict-tls = true
 
 因此，仓库优先级不覆盖版本求解。例如高优先级仓只有 1.0.0、低优先级仓有 2.0.0，需求允许二者时仍选择 2.0.0。这符合“不得破坏原有依赖解析规则”的要求。
 
+强制替换继续使用 cjpm 已有语义：
+
+```toml
+[dependencies]
+meshdep = "[1.0.0, 3.0.0)"
+
+[replace]
+meshdep = "1.0.0"
+```
+
+这里 `[replace]` 决定必须使用 1.0.0；Repository Router 再从能提供该版本的仓库中按优先级选源，并在允许的错误类型上回退。当前没有另造 `repository.overrides`，也不允许 `[replace]` 绕过独占命名空间和认证边界。
+
 ## 自动验证
 
 入口：`integration-tests/multirepo/run.ps1`
@@ -70,6 +83,9 @@ strict-tls = true
 |---|---|---|
 | 跨仓版本聚合 | 选择最高兼容版本 | PASS |
 | 同版本来源冲突 | 高优先级仓获胜 | PASS |
+| `[replace]` 强制版本 | 宽范围依赖被锁定到指定单版本 | PASS |
+| 替换版本来源回退 | 优先仓 404 后从下一仓取得同一版本 | PASS |
+| 替换版本不存在 | 明确失败并指出 `replace` 制品不存在 | PASS |
 | 404 | 回退下一仓 | PASS |
 | 5xx | 回退下一仓 | PASS |
 | 401 | 立即失败，不访问下一仓 | PASS |

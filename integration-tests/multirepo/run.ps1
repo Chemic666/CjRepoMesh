@@ -117,6 +117,29 @@ $result = Invoke-WithRepositories "app-pinned" @($high, $low) @("run")
 Assert-Output $result "high-1.0.0"
 Write-Host "PASS repository priority breaks duplicate-version ties"
 
+Reset-App "app-replace"
+$result = Invoke-WithRepositories "app-replace" @($high, $low) @("run")
+Assert-Output $result "high-1.0.0"
+if (-not (Test-Path -LiteralPath (Join-Path $testRoot "app-replace\cjpm.lock"))) {
+    throw "replace did not produce a lockfile"
+}
+$replaceLock = Get-Content -LiteralPath (Join-Path $testRoot "app-replace\cjpm.lock") -Raw
+if (-not $replaceLock.Contains('version = "1.0.0"') -or $replaceLock.Contains('version = "2.0.0"')) {
+    throw "replace lockfile does not prove that meshdep was forced to 1.0.0:`n$replaceLock"
+}
+Write-Host "PASS existing cjpm replace forces a version across repositories"
+
+Reset-App "app-replace-fallback"
+$result = Invoke-WithRepositories "app-replace-fallback" @($missing, $low) @("run")
+Assert-Output $result "low-1.0.0"
+Write-Host "PASS replaced version follows multi-repository fallback"
+
+Reset-App "app-replace-invalid"
+$result = Invoke-WithRepositories "app-replace-invalid" @($high, $low) @("run") $false
+Assert-Output $result "field 'replace'"
+Assert-Output $result "does not exist"
+Write-Host "PASS missing replacement version fails explicitly"
+
 Reset-App "app-fallback"
 $result = Invoke-WithRepositories "app-fallback" @($missing, $low) @("run")
 Assert-Output $result "low-2.0.0"
