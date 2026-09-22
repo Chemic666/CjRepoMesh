@@ -5,3 +5,22 @@
 cjlint/build/build/*
 cjlint/build/logs/*
 cjlint/dist/
+
+# CjRepoMesh local build and integration-test output
+cjpm/target/
+cjpm/build-script-cache/
+cjpm/cjpm.lock
+cjpm/cpp/build-native*/
+cjpm/cpp/build-ninja/
+cjpm/cpp/out/
+cjpm/cpp/third_party/
+server/target/
+server/build-script-cache/
+server/cjpm.lock
+integration-tests/**/target/
+integration-tests/**/cache/
+integration-tests/**/cjpm.lock
+integration-tests/**/build-script-cache/
+integration-tests/hosted-server/storage/
+integration-tests/hosted-server/downloaded.cjp
+integration-tests/multirepo/*.requests.log
