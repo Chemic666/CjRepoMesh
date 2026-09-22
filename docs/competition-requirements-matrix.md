@@ -174,7 +174,7 @@ registry + organization + package + version
 - [x] 发布后停止/重启，持久化制品仍可下载并通过 SHA-256 校验；
 - [x] 原生 `[replace]` 在多仓中强制单版本，并验证优先级、404 回退和不存在失败；
 - [x] `cjpm repo explain` 通过真实解析链展示路由、替换、版本、来源和校验和；
-- [ ] 来源 provenance 持久化；
+- [x] 独立 provenance 文件持久化最终来源，仓库离线时仍可审计；
 - [ ] 私有中心仓 organization、读鉴权、并发写安全和 Docker/Linux 部署验证；
 - [ ] Proxy TTL/并发填充、批量 Mirror、Sync 断点恢复。
 

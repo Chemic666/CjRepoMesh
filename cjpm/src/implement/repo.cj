@@ -26,6 +26,32 @@ private func directRequirement(tomlInfo: TomlInfo, fullName: String): (String, B
     return ("(,)", false)
 }
 
+public func doRepoExplainRecorded(fullName: String): Bool {
+    if (!dependenciesNameCheck(fullName, "argument to 'cjpm repo explain'")) {
+        return false
+    }
+    let provenance = match (loadRepositoryProvenance(DIR_CURRENT)) {
+        case Some(value) => value
+        case None =>
+            eprintln("Error: '${REPOSITORY_PROVENANCE_FILE_NAME}' does not exist or is invalid; run cjpm build first")
+            return false
+    }
+    for (entry in provenance.packages) {
+        if (entry.packageName == fullName) {
+            println("Recorded resolution:")
+            println("  package: ${entry.packageName}")
+            println("  version: ${entry.version}")
+            println("  repository: ${entry.repository}")
+            println("  registry: ${entry.registry}")
+            println("  checksum: sha256:${entry.sha256}")
+            println("  source: ${REPOSITORY_PROVENANCE_FILE_NAME}")
+            return true
+        }
+    }
+    eprintln("Error: package '${fullName}' is not recorded in '${REPOSITORY_PROVENANCE_FILE_NAME}'")
+    return false
+}
+
 public func doRepoExplain(fullName: String): Bool {
     if (!dependenciesNameCheck(fullName, "argument to 'cjpm repo explain'")) {
         return false

@@ -40,6 +40,7 @@ function Reset-App([string]$name) {
     Remove-TestOutput (Join-Path $app "cache")
     Remove-TestOutput (Join-Path $app "target")
     Remove-TestOutput (Join-Path $app "cjpm.lock")
+    Remove-TestOutput (Join-Path $app "cjpm-provenance.json")
 }
 
 function Invoke-Cjpm([string]$workDir, [string[]]$arguments, [bool]$expectSuccess = $true) {
@@ -110,7 +111,21 @@ $public = @{ Port = 39147; Mode = "public" }
 Reset-App "app"
 $result = Invoke-WithRepositories "app" @($high, $low) @("run")
 Assert-Output $result "low-2.0.0"
+$provenance = Get-Content -LiteralPath (Join-Path $testRoot "app\cjpm-provenance.json") -Raw | ConvertFrom-Json
+$meshSource = $provenance.packages | Where-Object { $_.package -eq "meshdep" }
+if ($provenance.formatVersion -ne 1 -or $meshSource.version -ne "2.0.0" -or
+    $meshSource.repository -ne "low" -or [string]::IsNullOrWhiteSpace($meshSource.sha256)) {
+    throw "repository provenance did not record the selected package source"
+}
 Write-Host "PASS highest compatible version across repositories"
+Write-Host "PASS selected repository source and checksum are persisted"
+
+$result = Invoke-Cjpm (Join-Path $testRoot "app") @("repo", "explain", "meshdep", "--recorded")
+Assert-Output $result "Recorded resolution:"
+Assert-Output $result "version: 2.0.0"
+Assert-Output $result "repository: low"
+Assert-Output $result "checksum: sha256:"
+Write-Host "PASS recorded source remains explainable while repositories are offline"
 
 Reset-App "app"
 $result = Invoke-WithRepositories "app" @($high, $low) @("repo", "explain", "meshdep")

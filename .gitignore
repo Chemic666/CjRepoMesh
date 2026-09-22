@@ -21,6 +21,7 @@ integration-tests/**/target/
 integration-tests/**/cache/
 integration-tests/**/cjpm.lock
 integration-tests/**/build-script-cache/
+integration-tests/**/cjpm-provenance.json
 integration-tests/hosted-server/storage/
 integration-tests/hosted-server/downloaded.cjp
 integration-tests/proxy/storage/

@@ -10,6 +10,7 @@ Explain repository routing and package source selection.
 
 Usage:
   cjpm repo explain <package>
+  cjpm repo explain <package> --recorded
 
 Examples:
   cjpm repo explain meshdep
@@ -30,9 +31,13 @@ class RepoCommand <: Handle {
     }
 
     public override func handleCommand(): Bool {
-        if (this.arguments.size != 2 || this.arguments[0] != "explain") {
-            eprintln("Error: usage is 'cjpm repo explain <package>'")
+        if ((this.arguments.size != 2 && this.arguments.size != 3) || this.arguments[0] != "explain" ||
+            (this.arguments.size == 3 && this.arguments[2] != "--recorded")) {
+            eprintln("Error: usage is 'cjpm repo explain <package> [--recorded]'")
             return false
+        }
+        if (this.arguments.size == 3) {
+            return doRepoExplainRecorded(this.arguments[1])
         }
         return doRepoExplain(this.arguments[1])
     }

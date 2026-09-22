@@ -508,6 +508,11 @@ public class DepAnalysisEngine {
             downloadFlag &&= task.get()
         }
 
+        if (downloadFlag && !writeRepositoryProvenance(this.rootModulePath, this.currentState.fixedVersionMap,
+            this.indexMap, this.sourceDepotMap)) {
+            eprintln("Warning: dependency resolution succeeded, but repository provenance could not be saved")
+        }
+
         return downloadFlag
     }
 
