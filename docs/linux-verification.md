@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-22  
 > 参赛源码提交：`b7fc9a2`  
-> 结论：Linux 原生构建、服务启动和关键多仓闭环通过；Docker 尚未验证
+> 结论：Linux 原生构建、服务启动和关键多仓闭环通过；后续 Docker 验证亦已通过
 
 ## 环境
 
@@ -62,7 +62,7 @@ cd ../../server
 
 ## 边界
 
-- 本记录证明 WSL 2 中的 Linux 原生编译和关键运行链路，不等同于 Docker Compose 一键部署验证；
+- 本记录聚焦 WSL 2 中的 Linux 原生编译和关键运行链路；Docker Compose 的独立结果见 `docs/docker-verification.md`；
 - Linux 下尚未提供与 `integration-tests/run-all.ps1` 等价的全量统一入口；
 - 五组完整端到端回归仍以 Windows 验证报告为准；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT。

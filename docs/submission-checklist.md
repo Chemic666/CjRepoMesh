@@ -31,7 +31,8 @@
 - [ ] Benchmark Markdown 与 JSON 结果一致；
 - [ ] Windows 一键部署在干净数据目录重新验证；
 - [x] WSL 2 / Ubuntu 22.04 Linux 原生基线已记录在 `docs/linux-verification.md`；
-- [ ] 基于最终提交重跑 Linux 关键链路并补充 Docker 镜像摘要、命令和结果；
+- [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
+- [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
 - [ ] 未运行完整 Maple HLT/LLT 时继续明确标注，不写“全部官方测试通过”；
 - [ ] 所有测试结束后无遗留服务监听测试端口。
 

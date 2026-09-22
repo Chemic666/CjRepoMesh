@@ -30,4 +30,4 @@
 .\benchmark\proxy\run.ps1
 ```
 
-当前五组全量统一入口验证的是 Windows 本地闭环。Linux 原生构建、服务启动、双仓最高兼容版本选择和离线来源解释已在 WSL 2 / Ubuntu 22.04 上通过，证据见 `docs/linux-verification.md`；这仍不等价于 Linux 全量统一入口、Docker 验证或完整官方 Maple HLT/LLT。
+当前五组全量统一入口验证的是 Windows 本地闭环。Linux 原生构建、服务启动、双仓最高兼容版本选择和离线来源解释已在 WSL 2 / Ubuntu 22.04 上通过，Docker Compose 的真实发布、容器重建持久化和安全诊断亦已通过，证据分别见 `docs/linux-verification.md` 与 `docs/docker-verification.md`；这仍不等价于 Linux 全量统一入口或完整官方 Maple HLT/LLT。

@@ -117,6 +117,17 @@ meshdep = "1.0.0"
 
 默认地址为 `http://127.0.0.1:8080`，数据保存在 `deployment/windows/data`。端口、存储、Proxy 上游和索引 TTL 均可通过参数配置，详见 [Windows 部署说明](deployment/windows/README.md)。
 
+## Docker Compose 快速开始
+
+在 WSL 中完成 Linux 构建且 Docker Desktop 已启动后：
+
+```powershell
+.\deployment\docker\up.ps1
+.\deployment\docker\doctor.ps1
+```
+
+脚本只打包 Linux 服务二进制和两项必要运行库，容器以非 root、只读根文件系统、无 capabilities 方式运行。真实发布、容器销毁重建和持久化下载已经通过，见 [Docker 验证记录](docs/docker-verification.md) 与 [部署说明](deployment/docker/README.md)。
+
 ### 解析解释与诊断
 
 ```powershell
@@ -170,7 +181,7 @@ Sync 从 Source 取得索引和制品、验证 SHA-256，再通过目标仓发�
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-最近一次 Windows 完整运行记录为 5/5 组 PASS，详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md)。此外，增强版 cjpm、CjRepo Server、双仓版本选择和离线来源解释已在 WSL 2 / Ubuntu 22.04 上通过原生验证，见 [Linux 验证记录](docs/linux-verification.md)。最终提交前仍需基于最终提交号重新运行全量回归。
+最近一次 Windows 完整运行记录为 5/5 组 PASS，详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md)。此外，增强版 cjpm、CjRepo Server、双仓版本选择和离线来源解释已通过 [Linux 原生验证](docs/linux-verification.md)，Docker Compose 已通过真实发布、容器重建持久化和 9 项安全诊断，见 [Docker 验证记录](docs/docker-verification.md)。最终提交前仍需基于最终提交号重新运行全量回归。
 
 性能测试单独运行，避免把性能波动混入功能回归：
 
@@ -210,7 +221,7 @@ docs/                 架构、验收、报告、演示和提交材料
 - 服务端只支持默认 organization，读取端尚未鉴权；
 - 当前使用进程级存储锁，尚未细化为按包锁；
 - Mirror/Sync 尚无调度和断点续传；
-- Linux 原生构建和关键多仓闭环已验证；Docker Compose 尚未验证；
+- Linux 原生构建、关键多仓闭环和 Docker Compose 部署已验证；Linux 全量统一回归尚未完成；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - `cjpm-provenance.json` 是独立审计文件，不是官方 lockfile 新格式。
 
