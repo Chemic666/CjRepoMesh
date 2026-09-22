@@ -33,6 +33,20 @@ private func configuredUpstreamToken(): String {
     return getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
 }
 
+private func configuredProxyTtlSeconds(): Int64 {
+    let raw = getVariable("CJREPO_PROXY_TTL_SECONDS") ?? "86400"
+    try {
+        let value = Int64.parse(raw)
+        if (value < 0) {
+            throw Exception("TTL cannot be negative")
+        }
+        return value
+    } catch (_: Exception) {
+        eprintln("Warning: invalid CJREPO_PROXY_TTL_SECONDS '${raw}', using 86400")
+        return 86400
+    }
+}
+
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
@@ -43,12 +57,14 @@ private class RegistryDistributor <: HttpRequestDistributor {
     private let storage: String
     private let upstream: String
     private let upstreamToken: String
+    private let proxyTtlSeconds: Int64
     private let exactHandlers = HashMap<String, HttpRequestHandler>()
 
-    public init(storage: String, upstream: String, upstreamToken: String) {
+    public init(storage: String, upstream: String, upstreamToken: String, proxyTtlSeconds: Int64) {
         this.storage = storage
         this.upstream = upstream
         this.upstreamToken = upstreamToken
+        this.proxyTtlSeconds = proxyTtlSeconds
     }
 
     public func register(path: String, handler: HttpRequestHandler): Unit {
@@ -64,11 +80,8 @@ private class RegistryDistributor <: HttpRequestDistributor {
             let relative = path[7..]
             if (isSafeIndexPath(relative)) {
                 let indexPath = Path(storage).join("index").join("default").join(relative).toString()
-                if (exists(indexPath)) {
-                    return if (upstream.isEmpty()) { FileHandler(indexPath) } else { CacheHitHandler(indexPath, path) }
-                }
                 if (!upstream.isEmpty()) {
-                    return ProxyIndexHandler(storage, upstream, upstreamToken, relative)
+                    return ProxyIndexHandler(storage, upstream, upstreamToken, relative, proxyTtlSeconds)
                 }
                 return FileHandler(indexPath)
             }
@@ -125,7 +138,8 @@ main(): Int64 {
         }
     }
 
-    let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken())
+    let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken(),
+        configuredProxyTtlSeconds())
     distributor.register("/health", { context =>
         context.responseBuilder
             .header("Content-Type", "application/json; charset=utf-8")
@@ -142,6 +156,7 @@ main(): Int64 {
     println("CjRepo storage: ${configuredStorage()}")
     if (!configuredUpstream().isEmpty()) {
         println("CjRepo proxy upstream: ${configuredUpstream()}")
+        println("CjRepo proxy index TTL: ${configuredProxyTtlSeconds()} seconds")
     }
     server.serve()
     return 0

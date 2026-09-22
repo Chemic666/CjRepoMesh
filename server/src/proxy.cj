@@ -6,6 +6,7 @@ package cjrepo
 import std.collection.*
 import std.fs.*
 import std.sync.*
+import std.time.*
 import stdx.net.http.*
 import stdx.crypto.digest.*
 import stdx.encoding.hex.*
@@ -31,12 +32,14 @@ class ProxyIndexHandler <: HttpRequestHandler {
     private let upstream: String
     private let upstreamToken: String
     private let relative: String
+    private let ttlSeconds: Int64
 
-    public init(storage: String, upstream: String, upstreamToken: String, relative: String) {
+    public init(storage: String, upstream: String, upstreamToken: String, relative: String, ttlSeconds: Int64) {
         this.storage = storage
         this.upstream = upstream
         this.upstreamToken = upstreamToken
         this.relative = relative
+        this.ttlSeconds = ttlSeconds
     }
 
     public func handle(context: HttpContext): Unit {
@@ -48,7 +51,7 @@ class ProxyIndexHandler <: HttpRequestHandler {
             var responseBody = "".toArray()
             var cacheResult = "MISS"
             synchronized(STORAGE_WRITE_MUTEX) {
-                if (exists(cachePath)) {
+                if (proxyCacheIsFresh(cachePath, ttlSeconds)) {
                     responseBody = File.readFrom(cachePath)
                     cacheResult = "HIT_AFTER_WAIT"
                 } else {
@@ -92,6 +95,15 @@ class ProxyIndexHandler <: HttpRequestHandler {
             respondError(context, 502, "proxy index fetch failed: ${e.message}")
         }
     }
+}
+
+func proxyCacheIsFresh(path: Path, ttlSeconds: Int64): Bool {
+    if (!exists(path) || ttlSeconds == 0) {
+        return false
+    }
+    let now = DateTime.now().toUnixTimeStamp().toSeconds()
+    let modified = FileInfo(path).lastModificationTime.toUnixTimeStamp().toSeconds()
+    return now - modified < ttlSeconds
 }
 
 class ProxyArtifactHandler <: HttpRequestHandler {

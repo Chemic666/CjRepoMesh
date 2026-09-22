@@ -19,12 +19,13 @@
   -Port 8081 `
   -Storage "D:\CjRepoData" `
   -PublishToken "change-this-token" `
-  -Upstream "https://upstream.example.com"
+  -Upstream "https://upstream.example.com" `
+  -ProxyTtlSeconds 86400
 ```
 
 若仓颉环境尚未加载，可通过 `-EnvSetup` 指定官方 SDK 的环境脚本。开发机默认自动识别 `D:\Apps\Cangjie\envsetup.ps1`。`-NoBuild` 仅用于已经构建过服务端的测试或离线重启。
 
-令牌只通过子进程环境传递，不写入部署状态或日志。共享环境必须设置发布令牌。
+令牌只通过子进程环境传递，不写入部署状态或日志。共享环境必须设置发布令牌。`ProxyTtlSeconds` 控制代理索引刷新间隔，默认 86400 秒；带版本号并通过 SHA-256 校验的制品按不可变内容缓存。
 
 ## 检查与停止
 

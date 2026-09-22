@@ -176,12 +176,21 @@ try {
     }
     Write-Host "PASS proxy cache MISS fetches and validates index and artifact"
 
+    (Get-Item -LiteralPath $indexCache).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddDays(-2)
+    Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:39300/index/me/sh/meshdep" | Out-Null
+    $ttlRequests = @(Get-Content -LiteralPath $upstreamLog)
+    if (($ttlRequests | Where-Object { $_ -eq "GET /index/me/sh/meshdep" }).Count -ne 2 -or
+        ($ttlRequests | Where-Object { $_ -eq "GET /pkg/meshdep/2.0.0" }).Count -ne 1) {
+        throw "Expired index TTL did not refresh exactly once: $($ttlRequests -join ', ')"
+    }
+    Write-Host "PASS expired proxy index refreshes without refetching immutable artifacts"
+
     Stop-Process -Id $upstreamProcess.Id -Force
     $upstreamProcess = $null
     Reset-App
     Invoke-App
     $secondRequests = @(Get-Content -LiteralPath $upstreamLog)
-    if ($secondRequests.Count -ne $firstRequests.Count) {
+    if ($secondRequests.Count -ne $ttlRequests.Count) {
         throw "Proxy cache HIT unexpectedly contacted the stopped upstream"
     }
     Write-Host "PASS proxy cache HIT supports an offline build"

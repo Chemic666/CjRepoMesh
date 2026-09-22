@@ -6,6 +6,8 @@ param(
     [string]$PublishToken = "",
     [string]$Upstream = "",
     [string]$UpstreamToken = "",
+    [ValidateRange(0, 31536000)]
+    [long]$ProxyTtlSeconds = 86400,
     [string]$EnvSetup = "",
     [switch]$NoBuild
 )
@@ -87,7 +89,8 @@ $environmentNames = @(
     "CJREPO_STORAGE",
     "CJREPO_PUBLISH_TOKEN",
     "CJREPO_UPSTREAM",
-    "CJREPO_UPSTREAM_TOKEN"
+    "CJREPO_UPSTREAM_TOKEN",
+    "CJREPO_PROXY_TTL_SECONDS"
 )
 $oldEnvironment = @{}
 foreach ($name in $environmentNames) {
@@ -101,6 +104,7 @@ try {
     $env:CJREPO_PUBLISH_TOKEN = $PublishToken
     $env:CJREPO_UPSTREAM = $Upstream
     $env:CJREPO_UPSTREAM_TOKEN = $UpstreamToken
+    $env:CJREPO_PROXY_TTL_SECONDS = [string]$ProxyTtlSeconds
 
     $process = Start-Process -FilePath $serverExe -WorkingDirectory $serverRoot `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
@@ -143,6 +147,7 @@ try {
         port = $Port
         storage = $Storage
         upstream = $Upstream
+        proxyTtlSeconds = $ProxyTtlSeconds
         startedAt = [DateTimeOffset]::Now.ToString("o")
     } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 } catch {

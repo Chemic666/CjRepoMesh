@@ -177,8 +177,9 @@ registry + organization + package + version
 - [x] 独立 provenance 文件持久化最终来源，仓库离线时仍可审计；
 - [x] 并发重复发布原子化，严格产生一个成功和一个 409；
 - [x] 并发 Proxy 首次请求合并为一次校验后的上游填充；
+- [x] Proxy 索引 TTL 到期后刷新，版本化制品不重复下载；
 - [ ] 私有中心仓 organization、读鉴权、按包细粒度锁和 Docker/Linux 部署验证；
-- [ ] Proxy TTL、批量 Mirror、Sync 断点恢复。
+- [ ] 批量 Mirror、Sync 断点恢复。
 
 如果某项受阻，按以下顺序降险：
 
