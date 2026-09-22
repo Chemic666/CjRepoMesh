@@ -27,6 +27,7 @@ public class CommandFactory {
             case "uninstall" => UninstallCommand(args)
             case "bundle" => BundleCommand(args)
             case "publish" => PublishCommand(args)
+            case "repo" => RepoCommand(args)
             case _ => CpmCommand(args)
         }
         return handle

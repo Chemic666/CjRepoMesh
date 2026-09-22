@@ -112,6 +112,15 @@ $result = Invoke-WithRepositories "app" @($high, $low) @("run")
 Assert-Output $result "low-2.0.0"
 Write-Host "PASS highest compatible version across repositories"
 
+Reset-App "app"
+$result = Invoke-WithRepositories "app" @($high, $low) @("repo", "explain", "meshdep")
+Assert-Output $result "Requested:"
+Assert-Output $result "[1.0.0, 3.0.0)"
+Assert-Output $result "selected version: 2.0.0"
+Assert-Output $result "repository: low"
+Assert-Output $result "checksum: sha256:"
+Write-Host "PASS repo explain reports the selected version, source and checksum"
+
 Reset-App "app-pinned"
 $result = Invoke-WithRepositories "app-pinned" @($high, $low) @("run")
 Assert-Output $result "high-1.0.0"
@@ -128,6 +137,13 @@ if (-not $replaceLock.Contains('version = "1.0.0"') -or $replaceLock.Contains('v
     throw "replace lockfile does not prove that meshdep was forced to 1.0.0:`n$replaceLock"
 }
 Write-Host "PASS existing cjpm replace forces a version across repositories"
+
+Reset-App "app-replace"
+$result = Invoke-WithRepositories "app-replace" @($high, $low) @("repo", "explain", "meshdep")
+Assert-Output $result "applied: [1.0.0, 3.0.0) -> 1.0.0"
+Assert-Output $result "selected version: 1.0.0"
+Assert-Output $result "repository: high"
+Write-Host "PASS repo explain makes replacement and source priority visible"
 
 Reset-App "app-replace-fallback"
 $result = Invoke-WithRepositories "app-replace-fallback" @($missing, $low) @("run")

@@ -21,6 +21,7 @@
 - `exclusive = true` 私有命名空间隔离；
 - 多仓 `cjpm update`；
 - 原生 `[replace]` 单版本强制替换在多仓候选与下载链路中保持生效；
+- `cjpm repo explain <package>` 复用真实 Router 与 DepRecord 输出解析决策；
 - 旧 `repository.home` 配置和缓存路径兼容。
 
 当前已验证的配置示例：
@@ -86,6 +87,7 @@ meshdep = "1.0.0"
 | `[replace]` 强制版本 | 宽范围依赖被锁定到指定单版本 | PASS |
 | 替换版本来源回退 | 优先仓 404 后从下一仓取得同一版本 | PASS |
 | 替换版本不存在 | 明确失败并指出 `replace` 制品不存在 | PASS |
+| `repo explain` | 普通解析与替换场景的版本、来源和校验和与真实构建一致 | PASS |
 | 404 | 回退下一仓 | PASS |
 | 5xx | 回退下一仓 | PASS |
 | 401 | 立即失败，不访问下一仓 | PASS |
@@ -100,7 +102,7 @@ meshdep = "1.0.0"
 - 仓库级 fallback 配置开关；
 - TLS/网络异常的结构化分类；
 - lockfile 或独立 provenance 文件中的来源持久化；
-- `cjpm repo explain` 与 `repo doctor`；
+- `cjpm repo doctor`；
 - 多仓 install/publish 的显式目标仓选择；
 - 完整 Maple HLT/LLT。
 
