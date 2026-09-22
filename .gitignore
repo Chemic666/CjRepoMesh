@@ -28,3 +28,8 @@ integration-tests/proxy/*.log
 integration-tests/sync/mirror-storage/
 integration-tests/sync/destination-storage/
 integration-tests/multirepo/*.requests.log
+integration-tests/deployment/storage*/
+integration-tests/deployment/downloaded.cjp
+deployment/windows/data/
+deployment/windows/logs/
+deployment/windows/run/

@@ -170,8 +170,10 @@ registry + organization + package + version
 - [x] 指定包/版本主动 Mirror，校验并幂等跳过；
 - [x] 带令牌的 CjRepo-to-CjRepo Sync，重复同步幂等；
 - [x] Source 离线后 Destination 独立完成 cjpm 构建；
+- [x] Windows 一条命令构建并启动私有仓，提供健康诊断和安全停止；
+- [x] 发布后停止/重启，持久化制品仍可下载并通过 SHA-256 校验；
 - [ ] 来源 provenance 持久化；
-- [ ] 私有中心仓 organization、读鉴权、并发写安全和一键部署；
+- [ ] 私有中心仓 organization、读鉴权、并发写安全和 Docker/Linux 部署验证；
 - [ ] Proxy TTL/并发填充、批量 Mirror、Sync 断点恢复。
 
 如果某项受阻，按以下顺序降险：
