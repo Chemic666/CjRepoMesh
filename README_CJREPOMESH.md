@@ -35,4 +35,6 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 
 性能测试单独运行 `benchmark/proxy/run.ps1`，避免把性能波动与功能回归混在一起。架构与关键决策见 [架构说明](docs/architecture.md)，测试覆盖见 [端到端验证](integration-tests/README.md)，最近一次实测结果见 [全量验证报告](docs/verification-report.md)。
 
+参赛展示与交付收口分别见 [演示 Runbook](docs/demo-runbook.md) 和 [提交检查表](docs/submission-checklist.md)。
+
 Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、按包细粒度锁、Mirror/Sync 调度与断点续传，以及 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。
