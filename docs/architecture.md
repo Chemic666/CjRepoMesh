@@ -153,7 +153,7 @@ storage/
 
 - 当前服务端只支持默认 organization，读取端尚未鉴权；
 - 存储锁是进程级全局锁，尚未细化到包级；
-- Mirror 已支持显式批量清单，但尚无调度；Sync 仍以单个包和版本为粒度，二者均尚无断点续传；
+- Mirror/Sync 已支持显式批量清单，但尚无调度和断点续传；
 - Windows 一键部署已验证，Linux/Docker 尚未在用户提供的环境中验证；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT，因此不能宣称通过全部官方回归；
 - `cjpm-provenance.json` 是 CjRepoMesh 的审计文件，不冒充官方 lockfile 格式。

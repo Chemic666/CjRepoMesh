@@ -13,7 +13,7 @@
 | Multi-repository cjpm | 多仓聚合、优先级、`[replace]`、Explain、Doctor、Provenance、认证屏障、独占路由和旧配置兼容 |
 | Hosted repository | 发布、索引、下载、鉴权、SHA-256、重复版本和并发原子写 |
 | Proxy repository | MISS/HIT、并发填充合并、索引 TTL、离线缓存和损坏拒绝 |
-| Repository sync | 批量 Mirror 清单、部分失败汇总、带令牌增量 Sync、幂等和源仓离线构建 |
+| Repository sync | 批量 Mirror/Sync 清单、部分失败汇总、目标仓发布鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一条命令构建启动、健康检查、持久化重启、诊断和安全停止 |
 
 可显式指定增强版 cjpm 和环境脚本：

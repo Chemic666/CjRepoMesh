@@ -172,6 +172,64 @@ func runSync(arguments: Array<String>): Bool {
     }
 }
 
+/**
+ * Synchronizes every package/version pair in a plain-text manifest.
+ *
+ * Parsing and summary behavior matches mirror-manifest: malformed or failed
+ * entries are reported, later entries are still attempted, and any failure
+ * makes the command return a non-zero status.
+ */
+func runSyncManifest(arguments: Array<String>): Bool {
+    if (arguments.size != 3) {
+        eprintln("Usage: cjrepo sync-manifest <source> <destination> <file>")
+        return false
+    }
+
+    let source = trimTrailingSlash(arguments[0])
+    let destination = trimTrailingSlash(arguments[1])
+    let manifestPath = arguments[2]
+    var total: Int64 = 0
+    var succeeded: Int64 = 0
+    var failed: Int64 = 0
+
+    try {
+        let content = String.fromUtf8(File.readFrom(manifestPath))
+        var lineNumber: Int64 = 0
+        for (rawLine in content.lines()) {
+            lineNumber += 1
+            let line = rawLine.trimAscii()
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue
+            }
+
+            total += 1
+            let fields = line.split(" ", removeEmpty: true)
+            if (fields.size != 2) {
+                failed += 1
+                eprintln("[sync-manifest] line=${lineNumber} result=FAILED reason=expected-package-and-version")
+                continue
+            }
+
+            if (runSync([source, destination, fields[0], fields[1]])) {
+                succeeded += 1
+            } else {
+                failed += 1
+                eprintln("[sync-manifest] line=${lineNumber} package=${fields[0]} version=${fields[1]} result=FAILED")
+            }
+        }
+    } catch (e: Exception) {
+        eprintln("Error: cannot read sync manifest '${manifestPath}': ${e.message}")
+        return false
+    }
+
+    println("[sync-manifest] total=${total} succeeded=${succeeded} failed=${failed}")
+    if (total == 0) {
+        eprintln("Error: sync manifest contains no package entries")
+        return false
+    }
+    return failed == 0
+}
+
 private func fetchIndexVersion(upstream: String, token: String, name: String, version: String): (Array<UInt8>, String, String) {
     let path = indexRequestPath(name)
     let (status, body) = fetchUpstream(upstream, token, path)

@@ -145,15 +145,22 @@ try {
     Wait-Health 39502
 
     $env:CJREPO_SYNC_DESTINATION_TOKEN = "sync-token"
-    $syncOutput = (& $serverExe sync "http://127.0.0.1:39501" "http://127.0.0.1:39502" meshdep 2.0.0 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or -not $syncOutput.Contains("result=SYNCED")) {
-        throw "Repository sync failed:`n$syncOutput"
+    $syncOutput = (& $serverExe sync-manifest "http://127.0.0.1:39501" "http://127.0.0.1:39502" $mirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or -not $syncOutput.Contains("total=2 succeeded=2 failed=0") -or
+        @($syncOutput -split "result=SYNCED").Count -ne 3) {
+        throw "Repository sync manifest failed:`n$syncOutput"
     }
-    $syncAgain = (& $serverExe sync "http://127.0.0.1:39501" "http://127.0.0.1:39502" meshdep 2.0.0 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or -not $syncAgain.Contains("result=SKIP")) {
-        throw "Idempotent repository sync failed:`n$syncAgain"
+    $syncAgain = (& $serverExe sync-manifest "http://127.0.0.1:39501" "http://127.0.0.1:39502" $mirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or -not $syncAgain.Contains("total=2 succeeded=2 failed=0") -or
+        @($syncAgain -split "result=SKIP").Count -ne 3) {
+        throw "Idempotent repository sync manifest failed:`n$syncAgain"
     }
-    Write-Host "PASS CjRepo-to-CjRepo sync is authenticated and idempotent"
+
+    $invalidSync = (& $serverExe sync-manifest "http://127.0.0.1:39501" "http://127.0.0.1:39502" $invalidMirrorManifest 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0 -or -not $invalidSync.Contains("total=2 succeeded=1 failed=1")) {
+        throw "Repository sync manifest failure summary check failed:`n$invalidSync"
+    }
+    Write-Host "PASS batch CjRepo-to-CjRepo sync is authenticated, idempotent and reports partial failure"
 
     Stop-Process -Id $source.Id -Force
     $processes.Remove($source) | Out-Null

@@ -84,4 +84,13 @@ main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 
 同步会从 Source 获取索引与制品、验证 SHA-256，再通过目标仓发布协议写入。目标版本已经存在时，409 被解释为幂等 `SKIP`。
 
-当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror 已支持批量清单但尚无调度，Sync 仍以显式包和版本为粒度，二者均尚无断点续传；尚未提供 Docker 部署。
+批量同步复用 Mirror 的 `package version` 清单格式：
+
+```powershell
+$env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
+main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
+```
+
+批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
+
+当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传；尚未提供 Docker 部署。

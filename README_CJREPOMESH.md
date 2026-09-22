@@ -22,7 +22,7 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 - 并发发布原子化与并发 Proxy 首次填充合并，避免索引/制品损坏和重复上游请求；
 - Proxy 索引 TTL 刷新，版本化制品保持校验后不可变缓存；
 - 按批量清单主动 Mirror，逐项校验、汇总部分失败，重复执行幂等且不访问上游；
-- 带令牌的 CjRepo-to-CjRepo 增量 Sync，源仓离线后目标仓可独立构建；
+- 带令牌的 CjRepo-to-CjRepo 批量增量 Sync，支持幂等与部分失败汇总，源仓离线后目标仓可独立构建；
 - Windows 一条命令完成构建、后台启动和健康检查，支持安全停止与持久化重启；
 - 可重复 Proxy Benchmark，保留 Cold/Warm 原始样本及 Median/P95 报告；
 - CjRepo Server 到增强版 cjpm 的端到端构建验证。
@@ -35,4 +35,4 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 
 性能测试单独运行 `benchmark/proxy/run.ps1`，避免把性能波动与功能回归混在一起。架构与关键决策见 [架构说明](docs/architecture.md)，测试覆盖见 [端到端验证](integration-tests/README.md)，最近一次实测结果见 [全量验证报告](docs/verification-report.md)。
 
-Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、按包细粒度锁、定时 Mirror、Sync 批量清单、断点续传和 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。
+Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、按包细粒度锁、Mirror/Sync 调度与断点续传，以及 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。
