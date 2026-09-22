@@ -20,6 +20,10 @@ private func configuredStorage(): String {
     return getVariable("CJREPO_STORAGE") ?? Path(".").join("storage").toString()
 }
 
+private func configuredPublishToken(): String {
+    return getVariable("CJREPO_PUBLISH_TOKEN") ?? ""
+}
+
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
@@ -54,6 +58,9 @@ private class RegistryDistributor <: HttpRequestDistributor {
         if (path.startsWith("/pkg/")) {
             let relative = path[5..]
             let segments = relative.split("/", removeEmpty: true)
+            if (segments.size == 1 && isSafeSegment(segments[0])) {
+                return PublishHandler(storage, segments[0], configuredPublishToken())
+            }
             if (segments.size == 2 && isSafeSegment(segments[0]) && isSafeSegment(segments[1])) {
                 let name = segments[0]
                 let version = segments[1]
@@ -77,8 +84,7 @@ private class RegistryDistributor <: HttpRequestDistributor {
     }
 
     private func isSafeSegment(segment: String): Bool {
-        return !segment.isEmpty() && segment != "." && segment != ".." &&
-            !segment.contains("\\") && !segment.contains(":")
+        return isSafePackageSegment(segment)
     }
 }
 

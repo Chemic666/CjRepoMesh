@@ -52,17 +52,7 @@ try {
     Pop-Location
 }
 
-$indexDir = Join-Path $storage "index\default\me\sh"
-$artifactDir = Join-Path $storage "artifacts\default\meshdep\2.0.0"
-New-Item -ItemType Directory -Path $indexDir -Force | Out-Null
-New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
-
-$metadata = Get-Content -LiteralPath (Join-Path $packageRoot "target\meta-data.json") -Raw | ConvertFrom-Json
-$metadata.index | ConvertTo-Json -Compress -Depth 20 |
-    Set-Content -LiteralPath (Join-Path $indexDir "meshdep") -Encoding utf8NoBOM
 $artifactSource = Join-Path $packageRoot "target\meshdep-2.0.0.cjp"
-$artifactTarget = Join-Path $artifactDir "meshdep-2.0.0.cjp"
-Copy-Item -LiteralPath $artifactSource -Destination $artifactTarget
 
 Push-Location $serverRoot
 try {
@@ -76,8 +66,12 @@ try {
 
 $oldPort = $env:CJREPO_PORT
 $oldStorage = $env:CJREPO_STORAGE
+$oldPublishToken = $env:CJREPO_PUBLISH_TOKEN
+$oldClientPublishToken = $env:CJREPOMESH_PUBLISH_TOKEN
 $env:CJREPO_PORT = "39200"
 $env:CJREPO_STORAGE = $storage
+$env:CJREPO_PUBLISH_TOKEN = "publish-token"
+$env:CJREPOMESH_PUBLISH_TOKEN = "publish-token"
 $serverProcess = $null
 try {
     $serverProcess = Start-Process -FilePath $serverExe -WorkingDirectory $serverRoot `
@@ -100,13 +94,86 @@ try {
     }
     Write-Host "PASS Cangjie server health check"
 
+    $metadataBytes = [IO.File]::ReadAllBytes((Join-Path $packageRoot "target\meta-data.json"))
+    $artifactBytes = [IO.File]::ReadAllBytes($artifactSource)
+    $badTokenFrame = [IO.MemoryStream]::new()
+    try {
+        $badTokenFrame.WriteByte(1)
+        $badTokenFrame.Write([BitConverter]::GetBytes([int]$metadataBytes.Length))
+        $badTokenFrame.Write($metadataBytes)
+        $badTokenFrame.WriteByte(1)
+        $badTokenFrame.Write([BitConverter]::GetBytes([int]$artifactBytes.Length))
+        $badTokenFrame.Write($artifactBytes)
+        try {
+            Invoke-WebRequest -UseBasicParsing -Method Post -Uri "http://127.0.0.1:39200/pkg/meshdep" `
+                -Headers @{ Authorization = "wrong-token" } -Body $badTokenFrame.ToArray() | Out-Null
+            throw "Publish with an invalid token unexpectedly succeeded"
+        } catch {
+            if ($_.Exception.Response.StatusCode -ne 401) {
+                throw
+            }
+        }
+    } finally {
+        $badTokenFrame.Dispose()
+    }
+    Write-Host "PASS publish authentication rejects an invalid token"
+
+    $corruptArtifact = [byte[]]$artifactBytes.Clone()
+    $corruptArtifact[0] = $corruptArtifact[0] -bxor 0xff
+    $corruptFrame = [IO.MemoryStream]::new()
+    try {
+        $corruptFrame.WriteByte(1)
+        $corruptFrame.Write([BitConverter]::GetBytes([int]$metadataBytes.Length))
+        $corruptFrame.Write($metadataBytes)
+        $corruptFrame.WriteByte(1)
+        $corruptFrame.Write([BitConverter]::GetBytes([int]$corruptArtifact.Length))
+        $corruptFrame.Write($corruptArtifact)
+        try {
+            Invoke-WebRequest -UseBasicParsing -Method Post -Uri "http://127.0.0.1:39200/pkg/meshdep" `
+                -Headers @{ Authorization = "publish-token" } -Body $corruptFrame.ToArray() | Out-Null
+            throw "Publish with a corrupt artifact unexpectedly succeeded"
+        } catch {
+            if ($_.Exception.Response.StatusCode -ne 400) {
+                throw
+            }
+        }
+    } finally {
+        $corruptFrame.Dispose()
+    }
+    Write-Host "PASS publish rejects an artifact with a mismatched SHA-256"
+
+    Push-Location $packageRoot
+    try {
+        $publishOutput = (& $Cjpm publish 2>&1 | Out-String)
+        $publishExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($publishExit -ne 0) {
+        throw "cjpm publish failed:`n$publishOutput"
+    }
+    Write-Host "PASS cjpm publishes a package to CjRepo Server"
+
+    Push-Location $packageRoot
+    try {
+        $duplicateOutput = (& $Cjpm publish 2>&1 | Out-String)
+        $duplicateExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($duplicateExit -eq 0 -or -not $duplicateOutput.Contains("status 409")) {
+        throw "Duplicate publish did not return the expected conflict:`n$duplicateOutput"
+    }
+    Write-Host "PASS duplicate publish is rejected with 409"
+
     $indexResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:39200/index/me/sh/meshdep"
     $indexContent = if ($indexResponse.Content -is [byte[]]) {
         [Text.Encoding]::UTF8.GetString($indexResponse.Content)
     } else {
         [string]$indexResponse.Content
     }
-    if ($indexResponse.StatusCode -ne 200 -or -not $indexContent.Contains('"version":"2.0.0"')) {
+    $indexRecord = $indexContent | ConvertFrom-Json
+    if ($indexResponse.StatusCode -ne 200 -or $indexRecord.version -ne "2.0.0") {
         throw "Hosted index response was invalid"
     }
     Write-Host "PASS hosted index download"
@@ -139,4 +206,6 @@ try {
     }
     $env:CJREPO_PORT = $oldPort
     $env:CJREPO_STORAGE = $oldStorage
+    $env:CJREPO_PUBLISH_TOKEN = $oldPublishToken
+    $env:CJREPOMESH_PUBLISH_TOKEN = $oldClientPublishToken
 }

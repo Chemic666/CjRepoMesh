@@ -162,10 +162,11 @@ registry + organization + package + version
 - [x] 单仓 run/update/缓存布局兼容；
 - [x] Namespace exclusive routing（私有仓 404 时公共仓请求数仍为 0）；
 - [x] 仓颉原生私有仓 HTTP 服务骨架与健康检查；
-- [x] 默认 organization 的 Hosted Registry 索引与制品下载；
+- [x] 默认 organization 的 Hosted Registry 发布、索引与制品下载；
+- [x] 发布鉴权、SHA-256 复核和重复版本 409；
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
 - [ ] 来源 provenance 持久化；
-- [ ] 私有中心仓发布、鉴权和一键部署；
+- [ ] 私有中心仓 organization、读鉴权、并发写安全和一键部署；
 - [ ] Proxy、Mirror、Sync。
 
 如果某项受阻，按以下顺序降险：
