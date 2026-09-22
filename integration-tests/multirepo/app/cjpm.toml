@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "multirepo_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh multi-registry integration test"
+
+[dependencies]
+meshdep = "[1.0.0, 3.0.0)"
+

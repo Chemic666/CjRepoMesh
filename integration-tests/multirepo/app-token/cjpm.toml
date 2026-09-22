@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "multirepo_token_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh token-env read authentication test"
+
+[dependencies]
+meshdep = "1.0.0"
+

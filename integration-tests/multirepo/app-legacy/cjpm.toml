@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "legacy_single_registry_app"
+version = "1.0.0"
+output-type = "executable"
+description = "Legacy repository.home compatibility test"
+
+[dependencies]
+meshdep = "2.0.0"
+

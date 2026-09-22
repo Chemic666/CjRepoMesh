@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "multirepo_fallback_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh safe fallback test"
+
+[dependencies]
+meshdep = "2.0.0"
+

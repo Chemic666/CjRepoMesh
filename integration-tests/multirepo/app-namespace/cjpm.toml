@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "namespace_route_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh exclusive namespace route test"
+
+[dependencies]
+"company::auth" = "[1.0.0, 10.0.0)"
+

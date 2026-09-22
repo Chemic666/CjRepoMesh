@@ -1,0 +1,10 @@
+[package]
+cjc-version = "1.0.0"
+name = "multirepo_auth_barrier_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh authentication fallback barrier test"
+
+[dependencies]
+meshdep = "2.0.0"
+

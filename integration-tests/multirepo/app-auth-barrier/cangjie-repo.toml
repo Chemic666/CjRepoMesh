@@ -1,0 +1,14 @@
+[repository.cache]
+path = "./cache"
+
+[repository.private]
+registry = "http://127.0.0.1:39144"
+priority = 100
+
+[repository.low]
+registry = "http://127.0.0.1:39142"
+priority = 10
+
+[global]
+strict-tls = false
+

@@ -1,0 +1,7 @@
+[package]
+cjc-version = "1.0.0"
+name = "meshdep"
+version = "1.0.0"
+output-type = "static"
+description = "CjRepoMesh multi-registry high-priority fixture"
+
