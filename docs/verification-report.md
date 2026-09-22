@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-22  
 > 被测代码基线：`b0ce10a`
-> 结论：五组端到端测试通过
+> 结论：Windows 五组端到端测试通过；Linux 原生关键链路另行通过
 
 ## 环境
 
@@ -55,7 +55,8 @@
 
 ## 未覆盖范围
 
-- 未执行 Linux/Docker 部署验证；
+- Linux 原生 cjpm/Server 构建、服务启动、双仓版本选择和离线来源解释已通过，详见 `docs/linux-verification.md`；
+- 未执行 Linux 全量统一入口和 Docker Compose 部署验证；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
