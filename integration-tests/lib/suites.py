@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import tempfile
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Iterable
@@ -48,12 +48,21 @@ class TestContext:
                 self.env.pop(key)
         self._bundled: set[str] = set()
         self._server_ready = False
-        self._temporary = tempfile.TemporaryDirectory(prefix="cjrepomesh-integration-")
-        self.temp_root = Path(self._temporary.name).resolve()
+        self._temp_parent = self.tests_root / ".tmp"
+        self._temp_parent.mkdir(exist_ok=True)
+        self.temp_root = (
+            self._temp_parent / f"run-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        ).resolve()
+        self.temp_root.mkdir()
 
     def close(self) -> None:
         self.cleanup_generated()
-        self._temporary.cleanup()
+        if self.temp_root.exists():
+            shutil.rmtree(self.temp_root)
+        try:
+            self._temp_parent.rmdir()
+        except OSError:
+            pass
 
     def cleanup_generated(self) -> None:
         generated: list[Path] = []
