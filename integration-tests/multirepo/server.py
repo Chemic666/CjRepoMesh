@@ -14,7 +14,7 @@ LOG = ROOT / f"{REPOSITORY}.requests.log"
 def fixtures():
     if REPOSITORY in ("high", "token"):
         return [ROOT / "packages" / "meshdep-v1-high"]
-    if REPOSITORY == "low":
+    if REPOSITORY in ("low", "corrupt"):
         return [
             ROOT / "packages" / "meshdep-v1-low",
             ROOT / "packages" / "meshdep-v2-low",
@@ -74,7 +74,10 @@ class Handler(BaseHTTPRequestHandler):
                 info = metadata(item)
                 if info["name"] == name and info["version"] == version:
                     artifact = item / "target" / f"{name}-{version}.cjp"
-                    self.send_bytes(200, artifact.read_bytes())
+                    payload = artifact.read_bytes()
+                    if REPOSITORY == "corrupt":
+                        payload = bytes([payload[0] ^ 0xFF]) + payload[1:]
+                    self.send_bytes(200, payload)
                     return
         self.send_bytes(404, b'{"errors":[{"message":"not found"}]}', "application/json")
 

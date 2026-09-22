@@ -24,6 +24,15 @@ private func configuredPublishToken(): String {
     return getVariable("CJREPO_PUBLISH_TOKEN") ?? ""
 }
 
+private func configuredUpstream(): String {
+    let value = getVariable("CJREPO_UPSTREAM") ?? ""
+    return if (value.endsWith("/")) { value[..value.size - 1] } else { value }
+}
+
+private func configuredUpstreamToken(): String {
+    return getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
+}
+
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
@@ -32,10 +41,14 @@ private func configuredPublishToken(): String {
  */
 private class RegistryDistributor <: HttpRequestDistributor {
     private let storage: String
+    private let upstream: String
+    private let upstreamToken: String
     private let exactHandlers = HashMap<String, HttpRequestHandler>()
 
-    public init(storage: String) {
+    public init(storage: String, upstream: String, upstreamToken: String) {
         this.storage = storage
+        this.upstream = upstream
+        this.upstreamToken = upstreamToken
     }
 
     public func register(path: String, handler: HttpRequestHandler): Unit {
@@ -51,6 +64,12 @@ private class RegistryDistributor <: HttpRequestDistributor {
             let relative = path[7..]
             if (isSafeIndexPath(relative)) {
                 let indexPath = Path(storage).join("index").join("default").join(relative).toString()
+                if (exists(indexPath)) {
+                    return if (upstream.isEmpty()) { FileHandler(indexPath) } else { CacheHitHandler(indexPath, path) }
+                }
+                if (!upstream.isEmpty()) {
+                    return ProxyIndexHandler(storage, upstream, upstreamToken, relative)
+                }
                 return FileHandler(indexPath)
             }
         }
@@ -71,6 +90,12 @@ private class RegistryDistributor <: HttpRequestDistributor {
                     .join(version)
                     .join("${name}-${version}.cjp")
                     .toString()
+                if (exists(artifactPath)) {
+                    return if (upstream.isEmpty()) { FileHandler(artifactPath) } else { CacheHitHandler(artifactPath, path) }
+                }
+                if (!upstream.isEmpty()) {
+                    return ProxyArtifactHandler(storage, upstream, upstreamToken, name, version)
+                }
                 return FileHandler(artifactPath)
             }
         }
@@ -89,7 +114,7 @@ private class RegistryDistributor <: HttpRequestDistributor {
 }
 
 main() {
-    let distributor = RegistryDistributor(configuredStorage())
+    let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken())
     distributor.register("/health", { context =>
         context.responseBuilder
             .header("Content-Type", "application/json; charset=utf-8")
@@ -104,5 +129,8 @@ main() {
 
     println("CjRepo Server listening on http://127.0.0.1:${server.port}")
     println("CjRepo storage: ${configuredStorage()}")
+    if (!configuredUpstream().isEmpty()) {
+        println("CjRepo proxy upstream: ${configuredUpstream()}")
+    }
     server.serve()
 }

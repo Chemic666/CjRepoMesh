@@ -26,12 +26,12 @@ class PublishHandler <: HttpRequestHandler {
 
     public func handle(context: HttpContext): Unit {
         if (context.request.method != "POST") {
-            fail(context, 400, "publish endpoint requires POST")
+            respondError(context, 400, "publish endpoint requires POST")
             return
         }
         if (!publishToken.isEmpty() &&
             (context.request.headers.getFirst("Authorization") ?? "") != publishToken) {
-            fail(context, 401, "authentication failed")
+            respondError(context, 401, "authentication failed")
             return
         }
 
@@ -85,7 +85,7 @@ class PublishHandler <: HttpRequestHandler {
                 .join(version)
             let artifactPath = artifactDir.join("${name}-${version}.cjp")
             if (exists(artifactPath)) {
-                fail(context, 409, "artifact with the same name and version already exists")
+                respondError(context, 409, "artifact with the same name and version already exists")
                 return
             }
 
@@ -115,7 +115,7 @@ class PublishHandler <: HttpRequestHandler {
                 .header("Content-Type", "application/json; charset=utf-8")
                 .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
         } catch (e: Exception) {
-            fail(context, 400, e.message)
+            respondError(context, 400, e.message)
         }
     }
 }
@@ -167,7 +167,7 @@ func isSafePackageSegment(segment: String): Bool {
         !segment.contains("/") && !segment.contains("\\") && !segment.contains(":")
 }
 
-private func fail(context: HttpContext, status: UInt16, message: String): Unit {
+func respondError(context: HttpContext, status: UInt16, message: String): Unit {
     let safeMessage = message.replace("\\", "\\\\").replace("\"", "\\\"")
     context.responseBuilder
         .status(status)

@@ -36,4 +36,15 @@ GET /pkg/<包名>/<版本>
 
 服务端会拒绝包含危险路径片段的请求；不存在的索引或制品返回 404。
 
-当前限制：仅支持默认 organization；读取端尚未鉴权；并发发布同一版本尚未加锁；尚未提供 Docker 部署、Proxy、Mirror 和 Sync。
+## Proxy Repository
+
+设置上游地址后，同一组 cjpm 查询和下载 API 自动变为按需代理：
+
+```powershell
+$env:CJREPO_UPSTREAM = "https://upstream.example.com"
+$env:CJREPO_UPSTREAM_TOKEN = "optional-upstream-token"
+```
+
+Cache MISS 会从上游获取并落盘；制品必须与已缓存索引中的 SHA-256 一致才会写入。Cache HIT 不访问上游，因此缓存完整时支持离线构建。上游非 200 状态会原样透传，网络异常或完整性错误返回 502。
+
+当前限制：仅支持默认 organization；读取端尚未鉴权；并发发布和并发缓存填充尚未加锁；Proxy 尚无 TTL/刷新策略；尚未提供 Docker 部署、Mirror 和 Sync。

@@ -165,9 +165,11 @@ registry + organization + package + version
 - [x] 默认 organization 的 Hosted Registry 发布、索引与制品下载；
 - [x] 发布鉴权、SHA-256 复核和重复版本 409；
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
+- [x] Proxy Cache MISS/HIT 与上游离线构建；
+- [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
 - [ ] 来源 provenance 持久化；
 - [ ] 私有中心仓 organization、读鉴权、并发写安全和一键部署；
-- [ ] Proxy、Mirror、Sync。
+- [ ] Proxy TTL/并发填充、Mirror、Sync。
 
 如果某项受阻，按以下顺序降险：
 

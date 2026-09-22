@@ -23,4 +23,6 @@ integration-tests/**/cjpm.lock
 integration-tests/**/build-script-cache/
 integration-tests/hosted-server/storage/
 integration-tests/hosted-server/downloaded.cjp
+integration-tests/proxy/storage/
+integration-tests/proxy/*.log
 integration-tests/multirepo/*.requests.log

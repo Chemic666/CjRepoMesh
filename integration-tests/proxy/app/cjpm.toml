@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "proxy_registry_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh proxy cache end-to-end fixture"
+
+[dependencies]
+meshdep = "2.0.0"
