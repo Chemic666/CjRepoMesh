@@ -18,6 +18,7 @@ CjRepoMesh 是面向仓颉与 cjpm 的原生多仓依赖和企业私有仓基础
 - 发布令牌校验、服务端 SHA-256 复核和重复版本冲突保护；
 - Proxy Cache MISS/HIT、上游状态透传、缓存前 SHA-256 校验；
 - 上游离线后的缓存构建，以及损坏上游制品拒绝；
+- 并发发布原子化与并发 Proxy 首次填充合并，避免索引/制品损坏和重复上游请求；
 - 按指定包/版本主动 Mirror，重复执行幂等且不访问上游；
 - 带令牌的 CjRepo-to-CjRepo 增量 Sync，源仓离线后目标仓可独立构建；
 - Windows 一条命令完成构建、后台启动和健康检查，支持安全停止与持久化重启；
@@ -33,4 +34,4 @@ integration-tests\sync\run.ps1
 integration-tests\deployment\run.ps1
 ```
 
-Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、并发写保护、Proxy TTL、批量 Mirror 清单、断点续传和 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。
+Windows 一键部署入口见 `deployment/windows/start.ps1`。当前未完成 organization 支持、读鉴权、按包细粒度锁、Proxy TTL、批量 Mirror 清单、断点续传和 Docker/Linux 部署验证，不应把本阶段描述为完整参赛版本。详细进度见 [参赛与获奖就绪度](docs/award-readiness.md) 和 [官方验收矩阵](docs/competition-requirements-matrix.md)。

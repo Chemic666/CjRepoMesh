@@ -9,6 +9,7 @@ $projectRoot = [IO.Path]::GetFullPath((Join-Path $testRoot "..\.."))
 $serverRoot = Join-Path $projectRoot "server"
 $serverExe = Join-Path $serverRoot "target\release\bin\main.exe"
 $packageRoot = Join-Path $projectRoot "integration-tests\multirepo\packages\meshdep-v2-low"
+$concurrentPackageRoot = Join-Path $projectRoot "integration-tests\multirepo\packages\meshdep-v1-high"
 $appRoot = Join-Path $testRoot "app"
 $storage = Join-Path $testRoot "storage"
 
@@ -42,14 +43,16 @@ Remove-TestOutput (Join-Path $appRoot "cache")
 Remove-TestOutput (Join-Path $appRoot "target")
 Remove-TestOutput (Join-Path $appRoot "cjpm.lock")
 
-Push-Location $packageRoot
-try {
-    & $Cjpm bundle
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to bundle hosted registry fixture"
+foreach ($fixtureRoot in @($packageRoot, $concurrentPackageRoot)) {
+    Push-Location $fixtureRoot
+    try {
+        & $Cjpm bundle
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to bundle hosted registry fixture: $fixtureRoot"
+        }
+    } finally {
+        Pop-Location
     }
-} finally {
-    Pop-Location
 }
 
 $artifactSource = Join-Path $packageRoot "target\meshdep-2.0.0.cjp"
@@ -199,6 +202,72 @@ try {
         throw "End-to-end cjpm build failed:`n$runOutput"
     }
     Write-Host "PASS enhanced cjpm resolves and runs a package from CjRepo Server"
+
+    $concurrentMetadata = [IO.File]::ReadAllBytes((Join-Path $concurrentPackageRoot "target\meta-data.json"))
+    $concurrentArtifactPath = Join-Path $concurrentPackageRoot "target\meshdep-1.0.0.cjp"
+    $concurrentArtifact = [IO.File]::ReadAllBytes($concurrentArtifactPath)
+    $concurrentFrame = [IO.MemoryStream]::new()
+    try {
+        $concurrentFrame.WriteByte(1)
+        $concurrentFrame.Write([BitConverter]::GetBytes([int]$concurrentMetadata.Length))
+        $concurrentFrame.Write($concurrentMetadata)
+        $concurrentFrame.WriteByte(1)
+        $concurrentFrame.Write([BitConverter]::GetBytes([int]$concurrentArtifact.Length))
+        $concurrentFrame.Write($concurrentArtifact)
+        $concurrentBody = $concurrentFrame.ToArray()
+    } finally {
+        $concurrentFrame.Dispose()
+    }
+
+    $client = [Net.Http.HttpClient]::new()
+    $requests = @()
+    $responses = @()
+    try {
+        $tasks = @()
+        foreach ($requestNumber in 1..2) {
+            $request = [Net.Http.HttpRequestMessage]::new(
+                [Net.Http.HttpMethod]::Post, "http://127.0.0.1:39200/pkg/meshdep")
+            $null = $request.Headers.TryAddWithoutValidation("Authorization", "publish-token")
+            $request.Content = [Net.Http.ByteArrayContent]::new($concurrentBody)
+            $requests += $request
+            $tasks += $client.SendAsync($request)
+        }
+        [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]$tasks)
+        $statuses = @()
+        foreach ($task in $tasks) {
+            $response = $task.Result
+            $responses += $response
+            $statuses += [int]$response.StatusCode
+        }
+        $statuses = @($statuses | Sort-Object)
+        if ($statuses.Count -ne 2 -or $statuses[0] -ne 200 -or $statuses[1] -ne 409) {
+            throw "Concurrent publish expected one 200 and one 409, got $($statuses -join ', ')"
+        }
+    } finally {
+        foreach ($response in $responses) { $response.Dispose() }
+        foreach ($request in $requests) { $request.Dispose() }
+        $client.Dispose()
+    }
+
+    $concurrentIndexResponse = Invoke-WebRequest -UseBasicParsing `
+        -Uri "http://127.0.0.1:39200/index/me/sh/meshdep"
+    $concurrentIndexText = if ($concurrentIndexResponse.Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($concurrentIndexResponse.Content)
+    } else {
+        [string]$concurrentIndexResponse.Content
+    }
+    $indexLines = @($concurrentIndexText -split "`r?`n" | Where-Object { $_.Trim() })
+    $versions = @($indexLines | ForEach-Object { ($_ | ConvertFrom-Json).version } | Sort-Object)
+    if ($versions.Count -ne 2 -or $versions[0] -ne "1.0.0" -or $versions[1] -ne "2.0.0") {
+        throw "Concurrent publish corrupted or duplicated the package index: $($versions -join ', ')"
+    }
+    $storedConcurrentArtifact = Join-Path $storage `
+        "artifacts\default\meshdep\1.0.0\meshdep-1.0.0.cjp"
+    if ((Get-FileHash -Algorithm SHA256 $storedConcurrentArtifact).Hash -ne
+        (Get-FileHash -Algorithm SHA256 $concurrentArtifactPath).Hash) {
+        throw "Concurrent publish stored a corrupt artifact"
+    }
+    Write-Host "PASS concurrent duplicate publish is atomic: one success, one conflict, intact index"
     Write-Host "All hosted registry integration tests passed."
 } finally {
     if ($null -ne $serverProcess) {

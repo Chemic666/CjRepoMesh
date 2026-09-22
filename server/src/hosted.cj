@@ -7,6 +7,7 @@ import std.collection.*
 import std.fs.*
 import std.io.*
 import std.regex.*
+import std.sync.*
 import stdx.net.http.*
 import stdx.crypto.digest.*
 import stdx.encoding.hex.*
@@ -85,30 +86,43 @@ class PublishHandler <: HttpRequestHandler {
                 .join(name)
                 .join(version)
             let artifactPath = artifactDir.join("${name}-${version}.cjp")
-            if (exists(artifactPath)) {
-                respondError(context, 409, "artifact with the same name and version already exists")
-                return
-            }
-
             let firstLevel = name[..2]
             let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
             let indexDir = Path(storage).join("index").join("default").join(firstLevel).join(secondLevel)
             let indexPath = indexDir.join(name)
 
-            if (!exists(artifactDir)) {
-                Directory.create(artifactDir, recursive: true)
-            }
-            if (!exists(indexDir)) {
-                Directory.create(indexDir, recursive: true)
-            }
+            let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
+            var duplicate = false
+            synchronized(STORAGE_WRITE_MUTEX) {
+                // Recheck while holding the lock so concurrent publishes cannot
+                // both pass the duplicate test or interleave index records.
+                if (exists(artifactPath)) {
+                    duplicate = true
+                } else {
+                    if (!exists(artifactDir)) {
+                        Directory.create(artifactDir, recursive: true)
+                    }
+                    if (!exists(indexDir)) {
+                        Directory.create(indexDir, recursive: true)
+                    }
 
-            File.writeTo(artifactPath, payload.artifact)
-            try {
-                let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
-                File.appendTo(indexPath, "${indexLine}\n".toArray())
-            } catch (e: Exception) {
-                removeIfExists(artifactPath)
-                throw e
+                    writeFileAtomically(artifactPath, payload.artifact)
+                    try {
+                        let previousIndex = if (exists(indexPath)) {
+                            String.fromUtf8(File.readFrom(indexPath))
+                        } else {
+                            ""
+                        }
+                        writeFileAtomically(indexPath, "${previousIndex}${indexLine}\n".toArray())
+                    } catch (e: Exception) {
+                        removeIfExists(artifactPath)
+                        throw e
+                    }
+                }
+            }
+            if (duplicate) {
+                respondError(context, 409, "artifact with the same name and version already exists")
+                return
             }
 
             context.responseBuilder

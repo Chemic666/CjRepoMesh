@@ -5,6 +5,7 @@ package cjrepo
 
 import std.collection.*
 import std.fs.*
+import std.sync.*
 import stdx.net.http.*
 import stdx.crypto.digest.*
 import stdx.encoding.hex.*
@@ -42,42 +43,51 @@ class ProxyIndexHandler <: HttpRequestHandler {
         let requestPath = "/index/${relative}"
         println("[proxy] path=${requestPath} cache=MISS upstream=${upstream}")
         try {
-            let (status, body) = fetchUpstream(upstream, upstreamToken, requestPath)
-            if (status != 200) {
-                proxyResponse(context, status, body)
-                return
-            }
-
-            let segments = relative.split("/", removeEmpty: true)
-            let expectedName = segments[segments.size - 1]
-            let normalized = ArrayList<String>()
-            for (line in String.fromUtf8(body).lines()) {
-                if (line.trimAscii().isEmpty()) {
-                    continue
-                }
-                let value = JsonValue.fromStr(line)
-                let object = value.asObject()
-                if (jsonString(object, "name") != expectedName ||
-                    !jsonString(object, "organization").isEmpty() ||
-                    jsonString(object, "version").isEmpty() ||
-                    jsonString(object, "sha256sum").isEmpty()) {
-                    throw Exception("upstream returned an invalid package index")
-                }
-                normalized.add(value.toJsonString().replace("\r", "").replace("\n", ""))
-            }
-            if (normalized.isEmpty()) {
-                throw Exception("upstream returned an empty package index")
-            }
-
             let cachePath = Path(storage).join("index").join("default").join(relative)
-            ensureParent(cachePath)
-            var cacheText = ""
-            for (line in normalized) {
-                cacheText += "${line}\n"
+            var responseStatus: UInt16 = 200
+            var responseBody = "".toArray()
+            var cacheResult = "MISS"
+            synchronized(STORAGE_WRITE_MUTEX) {
+                if (exists(cachePath)) {
+                    responseBody = File.readFrom(cachePath)
+                    cacheResult = "HIT_AFTER_WAIT"
+                } else {
+                    let (upstreamStatus, upstreamBody) = fetchUpstream(upstream, upstreamToken, requestPath)
+                    responseStatus = upstreamStatus
+                    responseBody = upstreamBody
+                    if (upstreamStatus == 200) {
+                        let segments = relative.split("/", removeEmpty: true)
+                        let expectedName = segments[segments.size - 1]
+                        let normalized = ArrayList<String>()
+                        for (line in String.fromUtf8(upstreamBody).lines()) {
+                            if (line.trimAscii().isEmpty()) {
+                                continue
+                            }
+                            let value = JsonValue.fromStr(line)
+                            let object = value.asObject()
+                            if (jsonString(object, "name") != expectedName ||
+                                !jsonString(object, "organization").isEmpty() ||
+                                jsonString(object, "version").isEmpty() ||
+                                jsonString(object, "sha256sum").isEmpty()) {
+                                throw Exception("upstream returned an invalid package index")
+                            }
+                            normalized.add(value.toJsonString().replace("\r", "").replace("\n", ""))
+                        }
+                        if (normalized.isEmpty()) {
+                            throw Exception("upstream returned an empty package index")
+                        }
+                        var cacheText = ""
+                        for (line in normalized) {
+                            cacheText += "${line}\n"
+                        }
+                        responseBody = cacheText.toArray()
+                        ensureParent(cachePath)
+                        writeFileAtomically(cachePath, responseBody)
+                    }
+                }
             }
-            let cacheBody = cacheText.toArray()
-            File.writeTo(cachePath, cacheBody)
-            proxyResponse(context, 200, cacheBody)
+            println("[proxy] path=${requestPath} fill=${cacheResult}")
+            proxyResponse(context, responseStatus, responseBody)
         } catch (e: Exception) {
             respondError(context, 502, "proxy index fetch failed: ${e.message}")
         }
@@ -103,29 +113,38 @@ class ProxyArtifactHandler <: HttpRequestHandler {
         let requestPath = "/pkg/${name}/${version}"
         println("[proxy] path=${requestPath} cache=MISS upstream=${upstream}")
         try {
-            let (status, body) = fetchUpstream(upstream, upstreamToken, requestPath)
-            if (status != 200) {
-                proxyResponse(context, status, body)
-                return
-            }
-
-            let expectedChecksum = checksumFromCachedIndex(storage, name, version)
-            let sha256 = SHA256()
-            sha256.write(body)
-            let actualChecksum = toHexString(sha256.finish())
-            if (actualChecksum != expectedChecksum) {
-                throw Exception("upstream artifact SHA-256 does not match its cached index")
-            }
-
             let cachePath = Path(storage)
                 .join("artifacts")
                 .join("default")
                 .join(name)
                 .join(version)
                 .join("${name}-${version}.cjp")
-            ensureParent(cachePath)
-            File.writeTo(cachePath, body)
-            proxyResponse(context, 200, body)
+            var responseStatus: UInt16 = 200
+            var responseBody = "".toArray()
+            var cacheResult = "MISS"
+            synchronized(STORAGE_WRITE_MUTEX) {
+                if (exists(cachePath)) {
+                    responseBody = File.readFrom(cachePath)
+                    cacheResult = "HIT_AFTER_WAIT"
+                } else {
+                    let (upstreamStatus, upstreamBody) = fetchUpstream(upstream, upstreamToken, requestPath)
+                    responseStatus = upstreamStatus
+                    responseBody = upstreamBody
+                    if (upstreamStatus == 200) {
+                        let expectedChecksum = checksumFromCachedIndex(storage, name, version)
+                        let sha256 = SHA256()
+                        sha256.write(upstreamBody)
+                        let actualChecksum = toHexString(sha256.finish())
+                        if (actualChecksum != expectedChecksum) {
+                            throw Exception("upstream artifact SHA-256 does not match its cached index")
+                        }
+                        ensureParent(cachePath)
+                        writeFileAtomically(cachePath, upstreamBody)
+                    }
+                }
+            }
+            println("[proxy] path=${requestPath} fill=${cacheResult}")
+            proxyResponse(context, responseStatus, responseBody)
         } catch (e: Exception) {
             respondError(context, 502, "proxy artifact fetch failed: ${e.message}")
         }

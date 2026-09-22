@@ -67,6 +67,31 @@ function Invoke-App {
     }
 }
 
+function Invoke-ConcurrentGet([string]$Uri, [int]$Count) {
+    $client = [Net.Http.HttpClient]::new()
+    $responses = @()
+    try {
+        $tasks = @()
+        foreach ($requestNumber in 1..$Count) {
+            $tasks += $client.GetAsync($Uri)
+        }
+        [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]$tasks)
+        foreach ($task in $tasks) {
+            $response = $task.Result
+            $responses += $response
+            if ([int]$response.StatusCode -ne 200) {
+                throw "Concurrent GET failed for ${Uri}: $($response.StatusCode)"
+            }
+            $null = $response.Content.ReadAsByteArrayAsync().Result
+        }
+    } finally {
+        foreach ($response in $responses) {
+            $response.Dispose()
+        }
+        $client.Dispose()
+    }
+}
+
 foreach ($fixture in @("meshdep-v1-low", "meshdep-v2-low")) {
     Push-Location (Join-Path $fixtureRoot "packages\$fixture")
     try {
@@ -128,6 +153,15 @@ try {
     if (-not $ready) {
         throw "CjRepo Proxy did not become ready"
     }
+
+    Invoke-ConcurrentGet "http://127.0.0.1:39300/index/me/sh/meshdep" 8
+    Invoke-ConcurrentGet "http://127.0.0.1:39300/pkg/meshdep/2.0.0" 8
+    $concurrentRequests = @(Get-Content -LiteralPath $upstreamLog)
+    if (($concurrentRequests | Where-Object { $_ -eq "GET /index/me/sh/meshdep" }).Count -ne 1 -or
+        ($concurrentRequests | Where-Object { $_ -eq "GET /pkg/meshdep/2.0.0" }).Count -ne 1) {
+        throw "Concurrent cache fill was not collapsed: $($concurrentRequests -join ', ')"
+    }
+    Write-Host "PASS concurrent proxy requests produce one verified upstream fill"
 
     Invoke-App
     $indexCache = Join-Path $storage "index\default\me\sh\meshdep"

@@ -34,7 +34,7 @@ GET /index/<前两字符>/<随后字符>/<包名>
 GET /pkg/<包名>/<版本>
 ```
 
-服务端会拒绝包含危险路径片段的请求；不存在的索引或制品返回 404。
+服务端会拒绝包含危险路径片段的请求；不存在的索引或制品返回 404。发布制品和索引均采用临时文件原子替换，并在进程级存储锁内复查重复版本；相同版本并发发布只允许一个成功。
 
 ## Proxy Repository
 
@@ -45,7 +45,7 @@ $env:CJREPO_UPSTREAM = "https://upstream.example.com"
 $env:CJREPO_UPSTREAM_TOKEN = "optional-upstream-token"
 ```
 
-Cache MISS 会从上游获取并落盘；制品必须与已缓存索引中的 SHA-256 一致才会写入。Cache HIT 不访问上游，因此缓存完整时支持离线构建。上游非 200 状态会原样透传，网络异常或完整性错误返回 502。
+Cache MISS 会从上游获取并原子落盘；制品必须与已缓存索引中的 SHA-256 一致才会写入。并发首次请求在存储锁内复查缓存，因此只由一个请求访问上游，其余请求等待后直接命中。Cache HIT 不访问上游，因此缓存完整时支持离线构建。上游非 200 状态会原样透传，网络异常或完整性错误返回 502。
 
 ## Mirror
 
@@ -69,4 +69,4 @@ main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 
 同步会从 Source 获取索引与制品、验证 SHA-256，再通过目标仓发布协议写入。目标版本已经存在时，409 被解释为幂等 `SKIP`。
 
-当前限制：仅支持默认 organization；读取端尚未鉴权；并发发布和并发缓存填充尚未加锁；Proxy 尚无 TTL；Mirror/Sync 当前以显式包和版本为粒度，尚无批量清单、调度与断点续传；尚未提供 Docker 部署。
+当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Proxy 尚无 TTL；Mirror/Sync 当前以显式包和版本为粒度，尚无批量清单、调度与断点续传；尚未提供 Docker 部署。
