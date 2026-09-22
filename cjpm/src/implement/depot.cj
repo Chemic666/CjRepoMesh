@@ -9,7 +9,9 @@ package cjpm.implement
 import std.net.*
 import std.io.*
 import std.fs.*
+import std.env.*
 import std.collection.*
+import std.regex.*
 import stdx.net.http.*
 import stdx.net.tls.common.*
 import stdx.net.tls.*
@@ -31,24 +33,60 @@ let tcpSocketConnector = {
 }
 
 public class Depot {
+    public var registryName: String = REPO_HOME_NAME
     public var baseUrl: String = ""
     public var token: String = ""
     public var localRepo: String = ""
+    public var lastResponseStatus: UInt16 = 0
     public var global: GlobalRepoConfig = GlobalRepoConfig()
 
-    public func loadConfiguration(isError!: Bool = true): Bool {
+    public func loadConfiguration(repositoryName!: String = REPO_HOME_NAME, isError!: Bool = true): Bool {
         let alertLevel =  if (isError) { "Error" } else { "Warning" }
-        if (!FINAL_CJPM_CONFIG_INFO.repository.contains(REPO_HOME_NAME)) {
-            eprintln("${alertLevel}: get data of [repository.home] failed, please check if cangjie-repo.toml is set up correctly")
+        if (!FINAL_CJPM_CONFIG_INFO.repository.contains(repositoryName)) {
+            eprintln("${alertLevel}: get data of [repository.${repositoryName}] failed, please check if cangjie-repo.toml is set up correctly")
+            return false
+        }
+        if (repositoryName == REPO_CACHE_NAME ||
+            !Regex("^[a-zA-Z][-_a-zA-Z0-9.]*$").matches(repositoryName)) {
+            eprintln("${alertLevel}: invalid repository name '${repositoryName}'")
             return false
         }
 
-        this.baseUrl = FINAL_CJPM_CONFIG_INFO.repository[REPO_HOME_NAME].registry
-        this.token = FINAL_CJPM_CONFIG_INFO.repository[REPO_HOME_NAME].token
-        this.localRepo = Path(FINAL_CJPM_CONFIG_INFO.repository[REPO_CACHE_NAME].path).join("repository").toString()
+        let repositoryInfo = FINAL_CJPM_CONFIG_INFO.repository[repositoryName]
+        if (!repositoryInfo.enabled) {
+            eprintln("${alertLevel}: repository '${repositoryName}' is disabled")
+            return false
+        }
+        if (!repositoryInfo.token.isEmpty() && !repositoryInfo.tokenEnv.isEmpty()) {
+            eprintln("${alertLevel}: only one of 'token' or 'token-env' can be set in [repository.${repositoryName}]")
+            return false
+        }
+
+        this.registryName = repositoryName
+        this.baseUrl = repositoryInfo.registry
+        if (!repositoryInfo.tokenEnv.isEmpty()) {
+            if (let Some(token) <- getVariable(repositoryInfo.tokenEnv)) {
+                this.token = token
+            } else {
+                eprintln("${alertLevel}: environment variable '${repositoryInfo.tokenEnv}' configured by " +
+                    "[repository.${repositoryName}].token-env is not set")
+                return false
+            }
+        } else {
+            this.token = repositoryInfo.token
+        }
+        let repositoryRoot = Path(FINAL_CJPM_CONFIG_INFO.repository[REPO_CACHE_NAME].path).join("repository")
+        let registryNames = FINAL_CJPM_CONFIG_INFO.getRegistryNames()
+        this.localRepo = if (registryNames.size == 1 && repositoryName == REPO_HOME_NAME) {
+            // Preserve the exact cache layout for existing single-registry users.
+            repositoryRoot.toString()
+        } else {
+            // Registry identity is required to prevent same-name artifacts from colliding.
+            repositoryRoot.join("registries").join(repositoryName).toString()
+        }
 
         if (baseUrl.isEmpty()) {
-            eprintln("${alertLevel}: get registry of [repository.home] failed, please check if cangjie-repo.toml is set up correctly")
+            eprintln("${alertLevel}: get registry of [repository.${repositoryName}] failed, please check if cangjie-repo.toml is set up correctly")
             return false
         }
 
@@ -57,9 +95,9 @@ public class Depot {
         return true
     }
 
-    public static func new(): Option<Depot> {
+    public static func new(repositoryName!: String = REPO_HOME_NAME): Option<Depot> {
         let instance: Depot = Depot()
-        if (instance.loadConfiguration()) {
+        if (instance.loadConfiguration(repositoryName: repositoryName)) {
             return Option<Depot>.Some(instance)
         }
         return Option<Depot>.None
@@ -147,7 +185,11 @@ public class Depot {
             build()
 
         // building https request
-        let request = HttpRequestBuilder().method("GET").url(downloadUrl).build()
+        let requestBuilder = HttpRequestBuilder().method("GET").url(downloadUrl)
+        if (!token.isEmpty()) {
+            requestBuilder.header("Authorization", token)
+        }
+        let request = requestBuilder.build()
         let resp = client.send(request)
 
         // verify response code
@@ -229,6 +271,7 @@ public class Depot {
 
     // update local index for one module with output
     public func updateIndexWithOutput(name: String, org: String): (Bool, String) {
+        this.lastResponseStatus = 0
         let firstLevel = name[..2]
         let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
         var indexUrl = baseUrl + "/index/${firstLevel}/${secondLevel}/${name}"
@@ -251,8 +294,13 @@ public class Depot {
             build()
 
         // building https request
-        let request = HttpRequestBuilder().method("GET").url(indexUrl).build()
+        let requestBuilder = HttpRequestBuilder().method("GET").url(indexUrl)
+        if (!token.isEmpty()) {
+            requestBuilder.header("Authorization", token)
+        }
+        let request = requestBuilder.build()
         let resp = client.send(request)
+        this.lastResponseStatus = resp.status
 
         // verify response code
         var (flag, errLog) = (true, "")
@@ -349,5 +397,70 @@ public class Depot {
             return indexPath
         }
         return ""
+    }
+}
+
+// Ordered repository set used by dependency resolution. Version selection remains
+// in DepRecord/DepAnalysisEngine; this class only owns repository identity/order.
+public class RepositoryRouter {
+    public let depots: ArrayList<Depot> = ArrayList<Depot>()
+
+    public static func new(): Option<RepositoryRouter> {
+        let instance = RepositoryRouter()
+        let repositoryNames = FINAL_CJPM_CONFIG_INFO.getRegistryNames()
+        for (repositoryName in repositoryNames) {
+            let depot = Depot.new(repositoryName: repositoryName) ?? return None
+            instance.depots.add(depot)
+        }
+        if (instance.depots.isEmpty()) {
+            eprintln("Error: no enabled repository with a non-empty registry is configured")
+            return None
+        }
+        for (route in FINAL_CJPM_CONFIG_INFO.routes) {
+            if (route.namespace.isEmpty() || route.registry.isEmpty()) {
+                eprintln("Error: repository route requires non-empty 'namespace' and 'registry'")
+                return None
+            }
+            if (!repositoryNames.contains(route.registry)) {
+                eprintln("Error: repository route '${route.namespace}' references unavailable registry " +
+                    "'${route.registry}'")
+                return None
+            }
+        }
+        return Some(instance)
+    }
+
+    public func primary(): Depot {
+        return this.depots[0]
+    }
+
+    public func getDepots(fullName: String): ArrayList<Depot> {
+        for (route in FINAL_CJPM_CONFIG_INFO.routes) {
+            if (!route.matches(fullName)) {
+                continue
+            }
+            let routed = ArrayList<Depot>()
+            for (depot in this.depots) {
+                if (depot.registryName == route.registry) {
+                    routed.add(depot)
+                    break
+                }
+            }
+            if (!route.exclusive) {
+                for (depot in this.depots) {
+                    if (depot.registryName != route.registry) {
+                        routed.add(depot)
+                    }
+                }
+            }
+            return routed
+        }
+        return this.depots
+    }
+
+    // Authentication, authorization and malformed requests must never be hidden
+    // by another registry. Missing content and server outages may try the next one.
+    public static func canContinueAfter(status: UInt16): Bool {
+        return status == 404 || status >= 500
     }
 }

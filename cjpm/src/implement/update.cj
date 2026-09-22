@@ -14,8 +14,6 @@ import cjpm.config.*
 
 let UPDATE_GLOBAL_CONFIG = GlobalConfig()
 let UPDATE_ANALYSIS_ENGINE = DepAnalysisEngine()
-let UPDATE_INDEX_LIST = ArrayList<(String, String)>()
-var UPDATE_DEPOT = Depot()
 
 // Command update implement.
 public func doUpdate(): Bool {
@@ -217,16 +215,22 @@ func checkGitLocalDep(name: String, curInfo: DepInfo, newInfo: DepInfo): Bool {
 }
 
 func updateIndex(): Bool {
-    if (!UPDATE_DEPOT.loadConfiguration(isError: false)) {
-        return true
+    let repositoryRouter = RepositoryRouter.new() ?? return true
+    for (depot in repositoryRouter.depots) {
+        updateDepotIndex(depot)
     }
-    let indexDir = Path(UPDATE_DEPOT.localRepo).join("index").toString()
+    return true
+}
+
+func updateDepotIndex(depot: Depot): Unit {
+    let indexList = ArrayList<(String, String)>()
+    let indexDir = Path(depot.localRepo).join("index").toString()
     if (!directoryExists(indexDir)) {
-        return true
+        return
     }
 
     for (orgDir in getDirectoryList(indexDir)) {
-        updateIndexForOrg(orgDir, orgDir.name)
+        updateIndexForOrg(orgDir, orgDir.name, indexList)
     }
 
     var downloadTasks = ArrayList<Future<Bool>>()
@@ -235,13 +239,14 @@ func updateIndex(): Bool {
     let downloadSem = Semaphore(actualSize)
     let downloadErrorLogs: ConcurrentLinkedQueue<String> = ConcurrentLinkedQueue<String>()
 
-    for ((org, name) in UPDATE_INDEX_LIST) {
+    for ((org, name) in indexList) {
         downloadSem.acquire()
         downloadTasks.add(
             spawn {
                 =>
                 try {
-                    let (flag, output) = UPDATE_DEPOT.updateIndexWithOutput(name, if (org == DEFAULT_ORGANIZATION) { "" } else { org })
+                    let (flag, output) = depot.updateIndexWithOutput(name,
+                        if (org == DEFAULT_ORGANIZATION) { "" } else { org })
                     if (!flag) {
                         downloadErrorLogs.add(output)
                     }
@@ -264,7 +269,6 @@ func updateIndex(): Bool {
     if (!downloadFlag) {
         logDownloadErrors(downloadErrorLogs)
     }
-    return true
 }
 
 func logDownloadErrors(downloadErrorLogs: ConcurrentLinkedQueue<String>): Unit {
@@ -293,7 +297,7 @@ func logDownloadErrors(downloadErrorLogs: ConcurrentLinkedQueue<String>): Unit {
     }
 }
 
-func updateIndexForOrg(dir: FileInfo, org: String): Unit {
+func updateIndexForOrg(dir: FileInfo, org: String, indexList: ArrayList<(String, String)>): Unit {
     for (level1Dir in getDirectoryList(dir.path.toString())) {
         // directory of level1, size of name should be 2
         if (level1Dir.name.size != 2) {
@@ -307,7 +311,7 @@ func updateIndexForOrg(dir: FileInfo, org: String): Unit {
             for (indexFile in getFileList(level2Dir.path.toString())) {
                 // files of index
                 if (indexFile.name.startsWith(level1Dir.name + level2Dir.name)) {
-                    UPDATE_INDEX_LIST.add((org, indexFile.name))
+                    indexList.add((org, indexFile.name))
                 }
             }
         }

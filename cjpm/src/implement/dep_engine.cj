@@ -67,8 +67,12 @@ public class DepAnalysisEngine {
     // records for information from central repository
     // depot for central repository
     public var depot: Depot = Depot()
+    // ordered repositories used to collect version candidates
+    public var repositoryRouter: RepositoryRouter = RepositoryRouter()
     // records of index for each version of each module
     public let indexMap: HashMap<String, HashMap<String, ArtifactIndex>> = HashMap<String, HashMap<String, ArtifactIndex>>()
+    // records the repository selected for each module version
+    public let sourceDepotMap: HashMap<String, HashMap<String, Depot>> = HashMap<String, HashMap<String, Depot>>()
 
     // record repo-dep from cjpm.lock
     public func recordLock(locked: HashMap<String, DepInfo>): Unit {
@@ -87,13 +91,15 @@ public class DepAnalysisEngine {
             return true
         }
 
-        this.depot = Depot.new() ?? return false
+        this.repositoryRouter = RepositoryRouter.new() ?? return false
+        this.depot = this.repositoryRouter.primary()
 
         // update index for replaced modules
         for ((fullName, replaceModule) in this.replaceMap) {
             if (let Some(version) <- replaceModule.version) {
                 try {
-                    let _ = DepRecord(fullName, version, OutputType.Unknown(""), this.depot, this.indexMap)
+                    let _ = DepRecord(fullName, version, OutputType.Unknown(""), this.repositoryRouter,
+                        this.indexMap, this.sourceDepotMap)
                 } catch (ne: NoneValueException) {
                     // cannot find index or no available version for requirement
                     eprintln("Error: ${ne.message}")
@@ -138,7 +144,8 @@ public class DepAnalysisEngine {
 
             let versionStr = repoDep.version ?? return false // always exist
             try {
-                let depRecord = DepRecord(name, versionStr, repoDep.outputType ?? OutputType.Unknown(""), this.depot, this.indexMap)
+                let depRecord = DepRecord(name, versionStr, repoDep.outputType ?? OutputType.Unknown(""),
+                    this.repositoryRouter, this.indexMap, this.sourceDepotMap)
                 if (depRecordMap.contains(name)) {
                     conflictDepMap[name].add(repoDep)
                     if (!depRecordMap[name].combineRecords(depRecord)) {
@@ -290,7 +297,8 @@ public class DepAnalysisEngine {
     func pushNewDep(targetModuleName: String, fixedVersion: String, depName: String, indexDep: IndexDep): Bool {
         try {
             this.currentState.depRecordMap.add(depName,
-                DepRecord(depName, indexDep.require, indexDep.outputType, this.depot, this.indexMap))
+                DepRecord(depName, indexDep.require, indexDep.outputType, this.repositoryRouter,
+                    this.indexMap, this.sourceDepotMap))
         } catch (e: CryptoException | TlsException) {
             throw e
         } catch (e: Exception) {
@@ -429,7 +437,8 @@ public class DepAnalysisEngine {
                 this.currentState.fixedVersionMap.add(name, version)
                 try {
                     this.currentState.depRecordMap.add(name,
-                        DepRecord(name, version, replaceInfo.outputType ?? OutputType.Unknown(""), this.depot, this.indexMap))
+                        DepRecord(name, version, replaceInfo.outputType ?? OutputType.Unknown(""),
+                            this.repositoryRouter, this.indexMap, this.sourceDepotMap))
                 } catch (ne: NoneValueException) {
                     // cannot find index or no available version for requirement
                     eprintln("Error: ${ne.message}")
@@ -445,13 +454,19 @@ public class DepAnalysisEngine {
             downloadTasks.add(
                 spawn {
                     =>
+                    if (!this.sourceDepotMap.contains(fullName) ||
+                        !this.sourceDepotMap[fullName].contains(version)) {
+                        eprintln("Error: repository source for '${fullName}-${version}' is missing")
+                        return false
+                    }
+                    let sourceDepot = this.sourceDepotMap[fullName][version]
                     // download artifact
-                    let sourcePath = Path(this.depot.localRepo).join("source").
+                    let sourcePath = Path(sourceDepot.localRepo).join("source").
                         join(if (org.isEmpty()) { "default" } else { org }).
                         join("${name}-${version}").toString()
                     if (!directoryExists(sourcePath)) {
                         try {
-                            let (flag, output) = this.depot.download(name, org, version)
+                            let (flag, output) = sourceDepot.download(name, org, version)
                             if (!flag) {
                                 eprintln("Error: ${output}")
                                 return false
@@ -563,37 +578,80 @@ public class DepRecord {
 
     // initialize with exception
     public init(name: String, require: String, outputType: OutputType,
-        depot: Depot, indexMap: HashMap<String, HashMap<String, ArtifactIndex>>) {
+        repositoryRouter: RepositoryRouter,
+        indexMap: HashMap<String, HashMap<String, ArtifactIndex>>,
+        sourceDepotMap: HashMap<String, HashMap<String, Depot>>) {
         this.fullName = name
         this.outputType = if (outputType.isValid) { outputType } else { OutputType.Unknown("") }
         (this.org, this.name) = splitFullName(this.fullName)
         this.requires.add(RequireVersion(this.fullName, require))
 
-        // try to get available versions based on index
-        var newDownloadFlag = false
-        var indexPath = depot.getIndex(this.name, this.org)
-        if (indexPath.isEmpty()) {
-            // no local index, try to update
-            if (!depot.updateIndex(this.name, this.org)) {
-                // failed to update with error log in updateIndex
-                throw NoneValueException("cannot get index for '${this.fullName}'")
+        // Collect indexes independently, then merge version candidates. The
+        // existing resolver still chooses the final compatible version.
+        let availableSet = HashSet<String>()
+        let combinedIndexMap = HashMap<String, ArtifactIndex>()
+        let sourceMapForModule = HashMap<String, Depot>()
+        let candidateDepots = repositoryRouter.getDepots(this.fullName)
+        for (depot in candidateDepots) {
+            let repositoryIndexMap = HashMap<String, HashMap<String, ArtifactIndex>>()
+            let repositoryAvailableSet = HashSet<String>()
+            var downloaded = false
+            var indexPath = depot.getIndex(this.name, this.org)
+            if (indexPath.isEmpty()) {
+                let (updated, output) = depot.updateIndexWithOutput(this.name, this.org)
+                if (!updated) {
+                    if (candidateDepots.size > 1 &&
+                        RepositoryRouter.canContinueAfter(depot.lastResponseStatus)) {
+                        if (depot.lastResponseStatus >= 500) {
+                            eprintln("Warning: repository '${depot.registryName}' failed while loading " +
+                                "'${this.fullName}', trying the next repository: ${output}")
+                        }
+                        continue
+                    }
+                    eprintln("Error: ${output}")
+                    throw NoneValueException("cannot get index for '${this.fullName}'")
+                }
+                indexPath = depot.getIndex(this.name, this.org)
+                downloaded = true
             }
-            indexPath = depot.getIndex(this.name, this.org)
-            newDownloadFlag = true
+
+            getAvailableSet(indexPath, repositoryIndexMap, repositoryAvailableSet, downloaded)
+            if (repositoryAvailableSet.isEmpty() &&
+                (!fileExists(indexPath) ||
+                (DateTime.now().toUnixTimeStamp().toHours() -
+                    FileInfo(indexPath).lastModificationTime.toUnixTimeStamp().toHours() >= 24))) {
+                let (updated, output) = depot.updateIndexWithOutput(this.name, this.org)
+                if (!updated) {
+                    if (candidateDepots.size > 1 &&
+                        RepositoryRouter.canContinueAfter(depot.lastResponseStatus)) {
+                        if (depot.lastResponseStatus >= 500) {
+                            eprintln("Warning: repository '${depot.registryName}' failed while refreshing " +
+                                "'${this.fullName}', trying the next repository: ${output}")
+                        }
+                        continue
+                    }
+                    eprintln("Error: ${output}")
+                    throw NoneValueException("cannot get index for '${this.fullName}', and local index is invalid")
+                }
+                getAvailableSet(indexPath, repositoryIndexMap, repositoryAvailableSet, true)
+            }
+
+            if (repositoryIndexMap.contains(this.fullName)) {
+                for ((version, index) in repositoryIndexMap[this.fullName]) {
+                    // Repositories are already ordered by priority. The first
+                    // source wins only when the exact same version is duplicated.
+                    if (!combinedIndexMap.contains(version)) {
+                        combinedIndexMap.add(version, index)
+                        sourceMapForModule.add(version, depot)
+                    }
+                }
+            }
+            availableSet.add(all: repositoryAvailableSet)
         }
 
-        // get available set
-        let availableSet = HashSet<String>()
-        getAvailableSet(indexPath, indexMap, availableSet, newDownloadFlag)
-
-        if (availableSet.isEmpty() && // cannot match any available version for the first time
-            (!fileExists(indexPath) || // index is not newest, and is deleted because it is broken
-            (DateTime.now().toUnixTimeStamp().toHours() - FileInfo(indexPath).lastModificationTime.toUnixTimeStamp().toHours() >= 24))) { // index is too old
-            if (!depot.updateIndex(this.name, this.org)) {
-                // failed to update with error log in updateIndex
-                throw NoneValueException("cannot get index for '${this.fullName}', and local index is invalid")
-            }
-            getAvailableSet(indexPath, indexMap, availableSet, true)
+        if (!combinedIndexMap.isEmpty()) {
+            indexMap.add(this.fullName, combinedIndexMap)
+            sourceDepotMap.add(this.fullName, sourceMapForModule)
         }
 
         // no available version for first requirement

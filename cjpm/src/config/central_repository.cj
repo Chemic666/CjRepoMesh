@@ -10,6 +10,7 @@ import std.env.*
 import std.fs.*
 import std.collection.*
 import std.convert.*
+import std.sort.*
 import stdx.serialization.serialization.*
 import cjpm.toml.*
 import cjpm.toml.Decoder as DecoderToml
@@ -18,12 +19,50 @@ public let REPO_CONFIG_FILE_NAME = "cangjie-repo.toml"
 public let REPO_CACHE_NAME = "cache"
 public let REPO_HOME_NAME = "home"
 public let GLOBAL_STRICT_TLS = "strict-tls"
+public let REPO_TOKEN_ENV = "token-env"
+public let REPO_PRIORITY = "priority"
+public let REPO_ENABLED = "enabled"
+public let REPO_ROUTE = "route"
+
+public class RepositoryRoute <: Serializable<RepositoryRoute> {
+    public RepositoryRoute(
+        public var namespace!: String = "",
+        public var registry!: String = "",
+        public var exclusive!: Bool = false
+    ) {}
+
+    public func serialize(): DataModel {
+        return DataModelStruct()
+    }
+
+    public static func deserialize(dm: DataModel): RepositoryRoute {
+        let dms = match (dm) {
+            case data: DataModelStruct => data
+            case _ => throw Exception("repository route is not a table")
+        }
+        return RepositoryRoute(
+            namespace: String.deserialize((dms.get("namespace") as DataModelString) ?? DataModelString("")),
+            registry: String.deserialize((dms.get("registry") as DataModelString) ?? DataModelString("")),
+            exclusive: Bool.deserialize((dms.get("exclusive") as DataModelBool) ?? DataModelBool(false))
+        )
+    }
+
+    public func matches(fullName: String): Bool {
+        if (this.namespace.endsWith("::*")) {
+            return fullName.startsWith(this.namespace.removeSuffix("*"))
+        }
+        return fullName == this.namespace
+    }
+}
 
 public class RepositoryInfo <: Serializable<RepositoryInfo> {
     public RepositoryInfo(
         public var path!: String = "",
         public var registry!: String = "",
-        public var token!: String = ""
+        public var token!: String = "",
+        public var tokenEnv!: String = "",
+        public var priority!: Int64 = 0,
+        public var enabled!: Bool = true
     ) {}
 
     public func serialize(): DataModel {
@@ -39,6 +78,9 @@ public class RepositoryInfo <: Serializable<RepositoryInfo> {
         result.path = String.deserialize((dms.get("path") as DataModelString) ?? DataModelString(""))
         result.registry = String.deserialize((dms.get("registry") as DataModelString) ?? DataModelString(""))
         result.token = String.deserialize((dms.get("token") as DataModelString) ?? DataModelString(""))
+        result.tokenEnv = String.deserialize((dms.get(REPO_TOKEN_ENV) as DataModelString) ?? DataModelString(""))
+        result.priority = Int64.deserialize((dms.get(REPO_PRIORITY) as DataModelInt) ?? DataModelInt(0))
+        result.enabled = Bool.deserialize((dms.get(REPO_ENABLED) as DataModelBool) ?? DataModelBool(true))
         return result
     }
 }
@@ -63,6 +105,7 @@ public class GlobalRepoConfig <: Serializable<GlobalRepoConfig> {
 
 public class SettingsConfig <: Serializable<SettingsConfig> {
     public var repository: HashMap<String, RepositoryInfo> = HashMap<String, RepositoryInfo>()
+    public var routes: ArrayList<RepositoryRoute> = ArrayList<RepositoryRoute>()
     public var global: GlobalRepoConfig = GlobalRepoConfig()
     public var isValid: Bool = true
 
@@ -70,6 +113,32 @@ public class SettingsConfig <: Serializable<SettingsConfig> {
         this.repository.add(REPO_CACHE_NAME, RepositoryInfo())
         this.repository[REPO_CACHE_NAME].path = Path(DEFAULT_CONFIG_LOCATION).join(".cjpm").toString()
         this.repository.add(REPO_HOME_NAME, RepositoryInfo())
+    }
+
+    // Return enabled registries in deterministic priority order.
+    // The cache entry is configuration for local storage, not a remote registry.
+    public func getRegistryNames(): Array<String> {
+        let names = ArrayList<String>()
+        for ((name, info) in this.repository) {
+            if (name == REPO_CACHE_NAME || !info.enabled || info.registry.isEmpty()) {
+                continue
+            }
+            names.add(name)
+        }
+
+        let result = names.toArray()
+        sort(result, by: { left: String, right: String =>
+            let leftPriority = this.repository[left].priority
+            let rightPriority = this.repository[right].priority
+            if (leftPriority > rightPriority) {
+                return Ordering.LT
+            }
+            if (leftPriority < rightPriority) {
+                return Ordering.GT
+            }
+            return left.compare(right)
+        }, stable: true)
+        return result
     }
 
     public func serialize(): DataModel {
@@ -84,6 +153,7 @@ public class SettingsConfig <: Serializable<SettingsConfig> {
         var result = SettingsConfig()
         result.global = GlobalRepoConfig.deserialize((dms.get("global") as DataModelStruct) ?? DataModelStruct())
         result.repository = HashMap<String, RepositoryInfo>.deserialize((dms.get("repository") as DataModelStruct) ?? DataModelStruct())
+        result.routes = ArrayList<RepositoryRoute>.deserialize((dms.get(REPO_ROUTE) as DataModelSeq) ?? DataModelSeq())
 
         if (!result.repository.contains(REPO_CACHE_NAME)) {
             result.repository.add(REPO_CACHE_NAME, RepositoryInfo())
