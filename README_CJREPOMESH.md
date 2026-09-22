@@ -167,10 +167,18 @@ Sync 从 Source 取得索引和制品、验证 SHA-256，再通过目标仓发�
 
 ## 验证
 
-一条命令顺序执行五组端到端测试：
+Windows 一条命令顺序执行四组共享核心测试与一组平台部署测试：
 
 ```powershell
 .\integration-tests\run-all.ps1
+```
+
+Linux / WSL 使用相同的核心夹具和断言：
+
+```bash
+source /path/to/cangjie/envsetup.sh
+export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
+./integration-tests/run-linux.sh
 ```
 
 | 测试组 | 主要覆盖 |
@@ -181,7 +189,7 @@ Sync 从 Source 取得索引和制品、验证 SHA-256，再通过目标仓发�
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-最近一次 Windows 完整运行记录为 5/5 组 PASS，详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md)。此外，增强版 cjpm、CjRepo Server、双仓版本选择和离线来源解释已通过 [Linux 原生验证](docs/linux-verification.md)，Docker Compose 已通过真实发布、容器重建持久化和 9 项安全诊断，见 [Docker 验证记录](docs/docker-verification.md)。最终提交前仍需基于最终提交号重新运行全量回归。
+最近一次 Windows 完整运行记录为 5/5 组 PASS；Linux 共享核心入口在提交 `3fee985` 上为 4/4 组 PASS。详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md) 与 [Linux 原生验证](docs/linux-verification.md)。Docker Compose 已通过真实发布、容器重建持久化和 9 项安全诊断，见 [Docker 验证记录](docs/docker-verification.md)。最终提交前仍需基于最终提交号重新运行 Windows、Linux 和 Docker 回归。
 
 性能测试单独运行，避免把性能波动混入功能回归：
 
@@ -209,7 +217,7 @@ Sync 从 Source 取得索引和制品、验证 SHA-256，再通过目标仓发�
 cjpm/                 官方 cjpm 上的多仓增强
 server/               仓颉原生 CjRepo Server
 deployment/windows/   一键部署、诊断和停止
-integration-tests/    五组端到端验证
+integration-tests/    跨平台四组核心验证与 Windows 部署验证
 benchmark/            可重复 Proxy 基准与原始样本
 docs/                 架构、验收、报告、演示和提交材料
 ```
@@ -221,7 +229,7 @@ docs/                 架构、验收、报告、演示和提交材料
 - 服务端只支持默认 organization，读取端尚未鉴权；
 - 当前使用进程级存储锁，尚未细化为按包锁；
 - Mirror/Sync 尚无调度和断点续传；
-- Linux 原生构建、关键多仓闭环和 Docker Compose 部署已验证；Linux 全量统一回归尚未完成；
+- Linux 原生构建与四组共享核心回归已验证；Windows 一键部署和 Docker Compose 分别保留平台专属验证入口；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - `cjpm-provenance.json` 是独立审计文件，不是官方 lockfile 新格式。
 

@@ -1,8 +1,8 @@
 # CjRepoMesh Linux 原生验证记录
 
-> 执行日期：2026-09-22  
-> 参赛源码提交：`b7fc9a2`  
-> 结论：Linux 原生构建、服务启动和关键多仓闭环通过；后续 Docker 验证亦已通过
+> 首次执行：2026-09-22；全量核心回归：2026-09-23
+> 原生构建基线：`b7fc9a2`；统一回归提交：`3fee985`
+> 结论：Linux 原生构建、服务启动和四组共享核心端到端回归通过；Docker 验证另行记录
 
 ## 环境
 
@@ -35,6 +35,33 @@ SDK 压缩包 SHA-256 与官方下载页公布值一致：
 | 多仓候选聚合 | PASS | high 仓提供 1.0.0，low 仓提供 1.0.0/2.0.0，应用实际输出 `low-2.0.0` |
 | 离线来源解释 | PASS | 记录版本 2.0.0、仓库 `low`、Registry URL 和 SHA-256 |
 
+## 四组共享核心回归
+
+提交 `3fee985` 新增 Python 标准库编排层，Windows 与 Linux 共用同一套夹具、断言、安全边界和清理逻辑；PowerShell 与 Bash 仅为平台入口。执行命令：
+
+```bash
+source /home/chemic/apps/cangjie-1.1.3/envsetup.sh
+export CANGJIE_STDX_PATH=/home/chemic/apps/stdx-1.1.3.1/linux_x86_64_cjnative/static/stdx
+cd /home/chemic/work/CjRepoMesh-src
+./integration-tests/run-linux.sh
+```
+
+运行器在统一入口中实际调用一次 `cjpm build` 编译 CjRepo Server，并依次执行：
+
+| 测试组 | 结果 | 耗时 |
+| --- | --- | ---: |
+| Multi-repository cjpm | PASS | 57.51s |
+| Hosted repository | PASS | 6.53s |
+| Proxy repository | PASS | 7.46s |
+| Repository sync | PASS | 3.68s |
+| **合计** | **4/4 PASS** | **75.21s** |
+
+覆盖内容与 Windows 核心四组一致，包括版本/来源冲突、Replace、Explain、Doctor、Provenance、401 阻断、独占 Namespace、Hosted 并发发布、Proxy 并发填充/TTL/离线/损坏拒绝，以及 Mirror/Sync 鉴权、幂等、部分失败和源仓离线构建。
+
+额外以错误的 `CJREPO_PORT`、存储、上游、Token 和 TTL 污染调用环境，再用 `--skip-server-build` 运行 Hosted、Proxy、Sync，结果 3/3 PASS，耗时 28.71s。这证明运行器会隔离调用者残留的仓库环境变量；该次补充运行不替代上面的真实服务端编译。
+
+测试完成后使用 `ss` 与 `pgrep` 复核固定测试端口和测试进程，未发现残留。运行器自身还会在每组结束时确认端口关闭，并在成功或失败路径统一清理夹具产物、应用缓存、锁文件、Provenance、请求日志和临时存储。
+
 关键来源记录为：
 
 ```text
@@ -62,7 +89,7 @@ cd ../../server
 
 ## 边界
 
-- 本记录聚焦 WSL 2 中的 Linux 原生编译和关键运行链路；Docker Compose 的独立结果见 `docs/docker-verification.md`；
-- Linux 下尚未提供与 `integration-tests/run-all.ps1` 等价的全量统一入口；
-- 五组完整端到端回归仍以 Windows 验证报告为准；
+- Linux 入口覆盖四组可跨平台核心测试；Windows 一键部署是平台专属第五组，Docker Compose 的独立结果见 `docs/docker-verification.md`；
+- 本次使用 WSL 构建副本执行，但所有源代码修改均来自 Windows 主仓库；
+- Windows 五组尚未在提交 `3fee985` 上重跑，最终提交前必须分别执行 Windows、Linux 和 Docker 回归；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT。

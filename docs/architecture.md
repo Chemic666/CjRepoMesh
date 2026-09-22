@@ -147,20 +147,21 @@ storage/
 | Proxy | `server/src/proxy.cj` | 按需缓存、TTL、离线命中与上游错误处理 |
 | Storage | `server/src/storage.cj` | 文件布局、原子写与并发保护 |
 | Mirror / Sync | `server/src/main.cj`、`server/src/sync.cj` | 主动镜像和 CjRepo-to-CjRepo 增量复制 |
-| 自动验证 | `integration-tests/run-all.ps1` | 五组端到端测试的统一入口 |
+| 自动验证 | `integration-tests/run.py`、`run-linux.sh`、`run-all.ps1` | Windows/Linux 共用四组核心语义；Windows 另加部署组 |
 
 ## 7. 已知边界
 
 - 当前服务端只支持默认 organization，读取端尚未鉴权；
 - 存储锁是进程级全局锁，尚未细化到包级；
 - Mirror/Sync 已支持显式批量清单，但尚无调度和断点续传；
-- Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与关键多仓闭环、Docker Compose 真实发布和容器重建持久化均已验证；
+- Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与四组共享核心回归、Docker Compose 真实发布和容器重建持久化均已验证；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT，因此不能宣称通过全部官方回归；
 - `cjpm-provenance.json` 是 CjRepoMesh 的审计文件，不冒充官方 lockfile 格式。
 
 ## 8. 证据入口
 
-- 总体全量验证：`integration-tests/run-all.ps1`
+- Windows 全量验证：`integration-tests/run-all.ps1`
+- Linux 共享核心验证：`integration-tests/run-linux.sh`
 - 最近一次全量结果：`docs/verification-report.md`
 - Linux 原生验证：`docs/linux-verification.md`
 - Docker Compose 验证：`docs/docker-verification.md`

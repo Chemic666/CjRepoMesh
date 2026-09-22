@@ -180,7 +180,8 @@ registry + organization + package + version
 - [x] Proxy 索引 TTL 到期后刷新，版本化制品不重复下载；
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
-- [ ] 私有中心仓 organization、读鉴权、按包细粒度锁和 Docker/Linux 部署验证；
+- [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；
+- [ ] 私有中心仓 organization、读鉴权和按包细粒度锁；
 - [ ] Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：

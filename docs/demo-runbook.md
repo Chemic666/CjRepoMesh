@@ -149,7 +149,7 @@ meshdep 2.0.0
 展示 `docs/verification-report.md`：最终提交应为五组全部 PASS。然后只说真实边界：
 
 - Windows、Linux 原生关键链路和 Docker Compose 路径均已验证；
-- Linux 全量统一回归仍需在最终提交上执行；
+- Linux 四组共享核心回归已通过，仍需在最终提交号上与 Windows、Docker 一并重跑；
 - 默认 organization、无读鉴权；
 - 尚无调度和断点续传。
 

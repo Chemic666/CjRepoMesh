@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-22  
 > 被测代码基线：`b0ce10a`
-> 结论：Windows 五组端到端测试通过；Linux 原生关键链路与 Docker Compose 部署另行通过
+> 结论：Windows 五组历史基线通过；Linux 四组共享核心回归在提交 `3fee985` 上通过；Docker Compose 部署另行通过
 
 ## 环境
 
@@ -53,11 +53,21 @@
 
 安全测试会故意执行应当失败的命令，例如错误令牌、缺失替换版本或损坏制品。测试脚本只有在这些命令按预期失败且安全断言成立时才记为 PASS；统一入口以断言异常为失败边界，不把预期失败命令遗留的进程码误判为整组失败。
 
+## Linux 共享核心回归
+
+2026-09-23 在 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 和 Python 3.10.12 环境中，对提交 `3fee985` 执行：
+
+```bash
+./integration-tests/run-linux.sh
+```
+
+结果为 4/4 PASS，总耗时 75.21s：Multi-repository 57.51s、Hosted 6.53s、Proxy 7.46s、Repository sync 3.68s。该入口与 Windows 共用 Python 夹具、断言和安全清理逻辑，并实际调用一次服务端构建。端口与进程残留复核通过。详细证据见 `docs/linux-verification.md`。
+
 ## 未覆盖范围
 
-- Linux 原生 cjpm/Server 构建、服务启动、双仓版本选择和离线来源解释已通过，详见 `docs/linux-verification.md`；
+- Linux 原生 cjpm/Server 构建、四组共享核心回归和离线来源解释已通过，详见 `docs/linux-verification.md`；
 - Docker Compose 一键启动、真实发布、容器重建持久化和最小权限诊断已通过，详见 `docs/docker-verification.md`；
-- 未执行 Linux 全量统一入口；
+- Windows 五组尚未在提交 `3fee985` 上重跑；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
