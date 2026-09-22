@@ -34,3 +34,5 @@ integration-tests/deployment/downloaded.cjp
 deployment/windows/data/
 deployment/windows/logs/
 deployment/windows/run/
+benchmark/proxy/storage/
+benchmark/proxy/*.log
