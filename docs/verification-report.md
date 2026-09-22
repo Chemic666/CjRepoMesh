@@ -1,7 +1,7 @@
 # CjRepoMesh 全量验证报告
 
 > 执行日期：2026-09-22  
-> 被测代码基线：`e81277d` 及本次统一验证入口  
+> 被测代码基线：`b0ce10a`
 > 结论：五组端到端测试通过
 
 ## 环境
@@ -27,12 +27,12 @@
 
 | 测试组 | 结果 | 耗时 |
 | --- | --- | ---: |
-| Multi-repository cjpm | PASS | 70.16s |
-| Hosted repository | PASS | 27.44s |
-| Proxy repository | PASS | 23.87s |
-| Repository sync | PASS | 18.06s |
-| Windows deployment | PASS | 6.13s |
-| **合计** | **5/5 PASS** | **145.72s** |
+| Multi-repository cjpm | PASS | 102.14s |
+| Hosted repository | PASS | 34.60s |
+| Proxy repository | PASS | 34.29s |
+| Repository sync | PASS | 32.00s |
+| Windows deployment | PASS | 7.99s |
+| **合计** | **5/5 PASS** | **211.07s** |
 
 ## 已验证证据
 
@@ -46,7 +46,7 @@
 - 旧 `repository.home` 单仓配置兼容；
 - Hosted 发布鉴权、SHA-256、重复版本、下载和并发原子写；
 - Proxy 并发首次填充合并、MISS/HIT、TTL、离线命中和损坏拒绝；
-- 主动 Mirror 校验与幂等、带令牌 Sync、源仓离线后的目标仓构建；
+- 批量 Mirror 清单逐项校验、幂等、部分失败汇总，带令牌 Sync，以及源仓离线后的目标仓构建；
 - Windows 一条命令部署、健康检查、发布、持久化重启与安全停止。
 
 ## 结果解释
@@ -60,4 +60,3 @@
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
 - 性能数据见独立的 `benchmark/results/proxy-benchmark.md`，不由本功能回归推导。
-
