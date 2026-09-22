@@ -1,0 +1,30 @@
+services:
+  cjrepo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cjrepomesh:local
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - "127.0.0.1:${CJREPO_HOST_PORT:-8080}:8080"
+    environment:
+      CJREPO_ADDRESS: 0.0.0.0
+      CJREPO_PORT: 8080
+      CJREPO_STORAGE: /var/lib/cjrepo
+      CJREPO_PUBLISH_TOKEN: "${CJREPO_PUBLISH_TOKEN}"
+      CJREPO_UPSTREAM: "${CJREPO_UPSTREAM:-}"
+      CJREPO_UPSTREAM_TOKEN: "${CJREPO_UPSTREAM_TOKEN:-}"
+      CJREPO_PROXY_TTL_SECONDS: "${CJREPO_PROXY_TTL_SECONDS:-86400}"
+    volumes:
+      - cjrepo-data:/var/lib/cjrepo
+
+volumes:
+  cjrepo-data:

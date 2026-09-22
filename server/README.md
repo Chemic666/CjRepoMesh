@@ -10,7 +10,7 @@
 cjpm run
 ```
 
-默认监听 `127.0.0.1:8080`，可通过 `CJREPO_PORT` 修改端口。存储目录默认为当前目录下的 `storage`，可通过 `CJREPO_STORAGE` 修改。设置 `CJREPO_PUBLISH_TOKEN` 后，发布请求必须携带相同的 `Authorization` 值。
+默认监听 `127.0.0.1:8080`，可通过 `CJREPO_ADDRESS` 和 `CJREPO_PORT` 修改地址与端口。容器部署使用 `CJREPO_ADDRESS=0.0.0.0`，直接运行时仍默认只接受本机连接。存储目录默认为当前目录下的 `storage`，可通过 `CJREPO_STORAGE` 修改。设置 `CJREPO_PUBLISH_TOKEN` 后，发布请求必须携带相同的 `Authorization` 值。
 
 健康检查：
 

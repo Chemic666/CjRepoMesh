@@ -16,6 +16,10 @@ private func configuredPort(): UInt16 {
     return 8080
 }
 
+private func configuredAddress(): String {
+    return getVariable("CJREPO_ADDRESS") ?? "127.0.0.1"
+}
+
 private func configuredStorage(): String {
     return getVariable("CJREPO_STORAGE") ?? Path(".").join("storage").toString()
 }
@@ -148,13 +152,14 @@ main(): Int64 {
             .body("{\"status\":\"ok\",\"service\":\"cjrepo\"}")
     })
 
+    let address = configuredAddress()
     let server = ServerBuilder()
-        .addr("127.0.0.1")
+        .addr(address)
         .port(configuredPort())
         .distributor(distributor)
         .build()
 
-    println("CjRepo Server listening on http://127.0.0.1:${server.port}")
+    println("CjRepo Server listening on http://${address}:${server.port}")
     println("CjRepo storage: ${configuredStorage()}")
     if (!configuredUpstream().isEmpty()) {
         println("CjRepo proxy upstream: ${configuredUpstream()}")

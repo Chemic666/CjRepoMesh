@@ -34,5 +34,7 @@ integration-tests/deployment/downloaded.cjp
 deployment/windows/data/
 deployment/windows/logs/
 deployment/windows/run/
+deployment/docker/.build-context/
+deployment/docker/.env
 benchmark/proxy/storage/
 benchmark/proxy/*.log
