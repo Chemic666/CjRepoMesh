@@ -119,3 +119,9 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 2026-09-23 在现有 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 环境中重新编译 cjpm，得到二进制 SHA-256 `d2858f2f749b6f1e27b82afe9f01cce9ae95f76c466bd68423843fd2f5a57aa5`。修复后多仓单组 **PASS，83.28s**；`./integration-tests/run-linux.sh` 实际重新编译服务端，四组 **4/4 PASS，总耗时 101.47s**：Multi-repository 83.44s、Hosted 6.51s、Proxy 7.65s、Repository sync 3.85s。单并发双拒绝测试确认两个仓均收到制品请求、命令及时失败且未写成功来源记录。完整回归及随后的单仓差分结束后，测试临时目录和固定端口未见残留。
 
 修复后增强版与已有官方原版 cjpm 的旧 `repository.home` 行为差分再次 **7/7 PASS**。随后用本地已有官方 `http_status_matrix` LLT 夹具分别对原版、修复后的增强版逐条核对，均为 **16/16 PASS**。Windows 原生五组、Docker Compose 和完整 Maple HLT/LLT 未重跑，不把历史结果计为本次通过。
+
+## 独占命名空间故障矩阵
+
+提交 `2bb1884` 把 `company::*` 独占路由的缺包测试扩为 HTTP **404、401、403、500** 四种故障。每次测试都清空应用缓存和公共仓请求日志，私有仓返回对应状态时要求构建失败、错误保留状态码，且放有 `company::auth 9.0.0` 的公共仓请求数仍为 **0**。这直接覆盖了认证失败、权限拒绝和服务故障不会越过独占路由；普通非独占仓的 404/5xx 回退仍由既有测试验证。
+
+2026-09-23 在 WSL 2 / Ubuntu 22.04.5、上述修复后的 cjpm 二进制上，多仓单组 **PASS，85.83s**；随后执行包含服务端真实编译的 Linux 四组完整回归，**4/4 PASS，总耗时 103.30s**：Multi-repository 85.12s、Hosted 6.69s、Proxy 7.75s、Repository sync 3.73s。本次只扩展测试逻辑，未修改 cjpm 产品源码；Windows 原生五组、Docker Compose 与完整 Maple 套件仍未重跑。

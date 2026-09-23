@@ -28,7 +28,7 @@
 | 0:00–0:35 | 架构图；Router 聚合允许仓库的候选版本，原 cjpm 求解器选择版本；Hosted/Proxy/Mirror/Sync 构成私有仓闭环。 | [架构说明](architecture.md) |
 | 0:35–1:20 | Docker Compose 一条命令启动、`/health`、Doctor 9 项。启动等待可剪辑，明确标注剪辑；不展示 Token。 | [Docker 验证](docker-verification.md) |
 | 1:20–2:25 | 高优先级仓只有 1.0.0、低优先级仓有 2.0.0，最终选择 2.0.0；同版本再按仓优先级选源；跨仓传递约束与 SHA-256 来源核对。 | [Linux 四组回归](verification-report.md)、[跨仓测试](../integration-tests/lib/suites.py) |
-| 2:25–3:20 | `company::*` 独占路由；公共仓故意放 9.0.0，最终只用私有 1.0.0，公共仓请求数为 0；私有 404 不越界回退，另以认证屏障场景证明 401 不回退。 | [路由配置](../integration-tests/multirepo/app-namespace/cangjie-repo.toml)、[安全断言](../integration-tests/lib/suites.py) |
+| 2:25–3:20 | `company::*` 独占路由；公共仓故意放 9.0.0，最终只用私有 1.0.0；私有仓遇到 404/401/403/500 时，公共仓请求数仍为 0。 | [路由配置](../integration-tests/multirepo/app-namespace/cangjie-repo.toml)、[安全断言](../integration-tests/lib/suites.py) |
 | 3:20–4:05 | Explain/Doctor/Recorded：选择原因、连接/认证诊断、离线来源及 SHA-256；区分独立审计文件与官方 lockfile。 | [验证报告](verification-report.md) |
 | 4:05–5:05 | Proxy 并发首次填充、TTL、离线命中和损坏拒绝；展示本机冷/热基准并读出适用边界。 | [Proxy 测试](../integration-tests/lib/suites.py)、[基准报告](../benchmark/results/proxy-benchmark.md) |
 | 5:05–6:05 | 清单批量 Mirror/Sync、逐项 SHA-256、幂等 SKIP、部分失败汇总与源仓离线后目标仓构建。 | [清单](../integration-tests/sync/mirror-manifest.txt)、[验证报告](verification-report.md) |
