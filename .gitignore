@@ -40,3 +40,5 @@ deployment/docker/.build-context/
 deployment/docker/.env
 benchmark/proxy/storage/
 benchmark/proxy/*.log
+tools/node_modules/
+.codex-slides/
