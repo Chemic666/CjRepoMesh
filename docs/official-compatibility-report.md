@@ -1,8 +1,8 @@
 # 官方 cjpm 兼容性差分记录
 
 > 执行日期：2026-09-23
-> 项目测试入口：`ee513df`；cjpm 产品源码自 `b10ced9` 未变化
-> 结论：本机可执行的单仓差分 3/3 通过；官方仓库 HTTP 状态 LLT 夹具在原版、增强版上各 16/16 断言通过。完整 Maple HLT/LLT 尚未运行。
+> 项目测试入口：`a49b5e1`；cjpm 产品源码自 `b10ced9` 未变化
+> 结论：本机可执行的单仓差分 7/7 通过，含传递依赖版本约束、冲突与锁文件转换；官方仓库 HTTP 状态 LLT 夹具在原版、增强版上各 16/16 断言通过。完整 Maple HLT/LLT 尚未运行。
 
 ## 对照基线与环境
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 官方 cjpm 源码 | `Cangjie/cangjie_tools` 提交 `2978007`，即项目修改前的基线 |
 | 官方测试源码 | `Cangjie/cangjie_test` 提交 `1dfa37619f920884e119d7f51266869c8f0fd81e` |
-| 增强版 cjpm 源码 | 本仓库 `b10ced9`；至 `ee513df` 仅新增测试与文档，未改 cjpm 源码 |
+| 增强版 cjpm 源码 | 本仓库 `b10ced9`；后续仅新增测试与文档，未改 cjpm 源码 |
 | 运行系统 | WSL 2 / Ubuntu 22.04.5 x86_64 |
 | 编译器 / stdx | Cangjie 1.1.3 cjnative / stdx 1.1.3.1 |
 | Python | 3.10.12 |
@@ -21,15 +21,19 @@
 
 ## 单仓行为差分
 
-入口为 `integration-tests/compatibility/run.py`，使用现有 `integration-tests/multirepo/app-legacy` 与本地 `low` 测试仓。每个版本的应用在独立临时目录中运行；应用配置均使用旧 `[repository.home]`，不会启用多仓配置。脚本实际执行原版和增强版各一次 `cjpm run` 与 `cjpm tree --no-tests`，并比较完整 `cjpm.lock` 文本与旧索引缓存路径。
+入口为 `integration-tests/compatibility/run.py`，使用 `integration-tests/multirepo/app-legacy` 和本地测试仓。每个版本的应用在独立临时目录中运行；应用配置均使用旧 `[repository.home]`，不会启用多仓配置。脚本执行原版和增强版的 `cjpm run`、`cjpm tree --no-tests`，锁文件转换场景还执行 `cjpm update`。比较锁文件全部有效条目、依赖树与旧索引缓存路径。cjpm 的 TOML 映射输出顺序不固定，因此锁文件比较忽略条目顺序，不声称逐字节一致。
 
 | 场景 | 原版与增强版共同结果 | 差分 |
 | --- | --- | --- |
-| 固定版本 `meshdep = "2.0.0"` | 运行输出包含 `low-2.0.0`；锁文件记录 2.0.0 | 锁文件完全一致；规范化依赖树一致；旧缓存布局一致 |
-| 范围 `[1.0.0, 3.0.0)` | 从 1.0.0/2.0.0 中选择 2.0.0，运行输出包含 `low-2.0.0` | 锁文件完全一致；规范化依赖树一致；旧缓存布局一致 |
-| 混合双依赖 | 同一旧仓同时解析范围内 `meshdep` 和 `company::auth 1.0.0`，输出包含 `low-2.0.0`、`private-1.0.0` | 两个依赖的完整锁文件一致；规范化依赖树一致；旧缓存布局一致 |
+| 固定版本 `meshdep = "2.0.0"` | 运行输出包含 `low-2.0.0`；锁文件记录 2.0.0 | 锁文件有效条目、依赖树、旧缓存布局一致 |
+| 范围 `[1.0.0, 3.0.0)` | 从 1.0.0/2.0.0 中选择 2.0.0 | 同上 |
+| 混合双依赖 | 同一旧仓解析 `meshdep` 和 `company::auth 1.0.0` | 同上 |
+| 传递约束收敛 | 根项目固定 `meshdep 1.0.0`，要求 `meshbridge [1.0.0, 3.0.0)`；桥接包 2.0.0 要求 `meshdep 2.0.0`，1.0.0 要求 `meshdep 1.0.0` | 两版均选 `meshbridge 1.0.0` 与 `meshdep 1.0.0`；运行、锁文件、依赖树一致。不单凭结果断言求解器内部回溯路径 |
+| 传递依赖最新版 | 根项目对两个包均给出 `[1.0.0, 3.0.0)` | 两版均选桥接包与底层包 2.0.0；运行、锁文件、依赖树一致 |
+| 不可解传递冲突 | 根项目固定 `meshdep 2.0.0` 与 `meshbridge 1.0.0`，后者要求 `meshdep 1.0.0` | 两版均以非零退出码拒绝，诊断包含冲突包和两个版本 |
+| 锁文件转换 | 先固定 `meshdep 1.0.0`，放宽依赖范围后运行，再执行 `cjpm update` | 两版均先保持 1.0.0，更新后选择 2.0.0；各阶段锁文件与最终依赖树一致 |
 
-结果：**3/3 PASS**。每个应用的 `meshdep` 索引均保存在旧路径 `cache/repository/index/default/me/sh/meshdep`，没有创建 `cache/repository/registries`。这直接支持“单仓版本选择、直接依赖图和 `repository.home` 行为在这些夹具下保持一致”；它不证明所有传递依赖组合都一致。
+结果：**7/7 PASS**。每个应用的 `meshdep` 索引均保存在旧路径 `cache/repository/index/default/me/sh/meshdep`，没有创建 `cache/repository/registries`。这支持“旧 `repository.home` 下，已覆盖的直接依赖、传递依赖冲突与锁文件行为保持一致”；仍不证明所有传递依赖组合都一致。
 
 ## 官方 LLT 仓库状态夹具
 
@@ -58,5 +62,5 @@ python3 integration-tests/compatibility/run.py \
 ## 尚未覆盖
 
 - `maple` 运行器在当前 WSL `PATH` 中不可用，因此没有运行完整官方 HLT/LLT；本报告只声称上述一个官方 LLT 夹具的 16 条断言。
-- 单仓差分目前覆盖单个或两个直接依赖；多包传递依赖冲突、锁定旧版本后的回溯、其他官方夹具仍待扩展。
+- 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。

@@ -85,3 +85,7 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 项诊断全部 PASS。启动输出没有回显发布 Token，`.env` ACL 已关闭继承且仅当前 Windows 用户有允许规则。测试创建的 Compose 容器已停止并移除，命名数据卷保留；用户原先运行的独立 `cjrepomesh:local` 容器未被更改。
 
 同轮完成官方原版与增强版的单仓差分 3/3，以及一个官方 LLT 夹具在两版上各 16/16 断言，结果见 `docs/official-compatibility-report.md`。完整 Maple HLT/LLT 仍未运行。
+
+## 后续兼容性扩展
+
+在未改动 cjpm 产品源码的前提下，单仓原版/增强版差分扩至 **7/7 PASS**：新增两版桥接包的传递约束下选择相容版本、共同选择最新版、不可解冲突拒绝，以及固定版本放宽后保留旧锁定版本、执行 `cjpm update` 再选择新版本。锁文件比较覆盖全部有效条目，但忽略 cjpm TOML 映射输出的不固定顺序；运行结果、依赖树和旧缓存布局也接受检查。详细条件与边界见 `docs/official-compatibility-report.md`。

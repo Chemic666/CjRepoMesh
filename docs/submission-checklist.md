@@ -32,7 +32,7 @@
 - [ ] Windows 一键部署在干净数据目录重新验证；
 - [x] WSL 2 / Ubuntu 22.04 Linux 原生基线已记录在 `docs/linux-verification.md`；
 - [x] Windows 五组与 Linux 四组共享核心入口已在提交 `8e33119` 上分别 5/5、4/4 通过；`de2da77` 后仍需最终重跑；
-- [x] 当前代码上 Linux 四组 4/4、Docker 9/9，原版/增强版单仓差分 3/3、官方 HTTP 状态 LLT 夹具两版各 16/16；
+- [x] 当前产品代码上 Linux 四组 4/4、Docker 9/9，原版/增强版单仓差分 7/7、官方 HTTP 状态 LLT 夹具两版各 16/16；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；

@@ -61,7 +61,7 @@ export CJREPOMESH_SERVER=/path/to/cjrepo
 
 ## 官方原版兼容性差分
 
-在 Linux 上准备同一源码基线的官方原版 cjpm 后，可比较旧单仓配置的版本、锁文件、依赖树与缓存，并运行本地官方 HTTP 状态 LLT 夹具：
+在 Linux 上准备同一源码基线的官方原版 cjpm 后，可比较旧单仓配置的直接与传递依赖版本、冲突、锁文件转换、依赖树与缓存，并运行本地官方 HTTP 状态 LLT 夹具：
 
 ```bash
 python3 integration-tests/compatibility/run.py \
