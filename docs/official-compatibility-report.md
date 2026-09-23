@@ -83,5 +83,6 @@ python3 integration-tests/compatibility/run.py \
 ## 尚未覆盖
 
 - 官方 Maple 框架已跑通上述十一个选定的 cjpm LLT 用例，另有一个稳定化制品异常矩阵通过；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原始制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
+- 当前本地官方测试快照的 CJNATIVE cjpm LLT 有 773 个 `.info`，HLT cjpm 有 157 个 `.info`；这些数量是文件计数，不等于可直接运行或已通过数。部分 HLT 发布用例配置了外部中心仓地址与测试凭据，并会执行 `cjpm publish`；未获外部仓写入授权前不运行，也不把其中的凭据复制到报告或演示材料。
 - 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。
