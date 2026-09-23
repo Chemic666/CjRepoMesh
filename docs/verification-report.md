@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：最新测试内容的 Linux 四组完整回归 4/4、Docker 诊断 9/9，包含菱形依赖图。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
+> 结论：最新测试内容的 Linux 四组完整回归 4/4、Docker 诊断 9/9，包含菱形依赖图；官方 Maple 框架的一个 cjpm LLT 用例在原版与增强版上各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
 
 ## 环境
 
@@ -102,7 +102,7 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 
 本机 `Microsoft-Windows-CodeIntegrity/Operational` 于 2026-09-23 09:00:25 记录事件 3077：`cjpm.exe` 调用 `D:\Apps\Cangjie\bin\cjc.exe` 时被代码完整性策略拦截；`Get-AuthenticodeSignature` 对该 `cjc.exe` 返回 `NotSigned`。这定位了 Windows 当前阻断点，不是项目断言失败。当前不修改或绕过系统安全策略；Windows 原生五组需在经授权、工具链可运行的独立环境复测。
 
-官方测试框架方面，已有 WSL SDK 与 `cangjie_test` 源码，但未准备 `cangjie_test_framework`、`pexpect` 和 `fasteners`。在用户准备相关依赖后，先运行官方 cjpm 相关 HLT/LLT，再评估整套 HLT/LLT；运行范围必须分别报告，不把子集通过表述成整套通过。
+官方测试框架方面，此处记录的是当时环境。后续已取得 `cangjie_test_framework` 并运行一个 cjpm LLT 用例；`pexpect` 和 `fasteners` 仍未安装。先运行更多 cjpm 相关 HLT/LLT，再评估整套 HLT/LLT；运行范围必须分别报告，不把子集通过表述成整套通过。
 
 ## 401/403 安全回退补充复核
 
@@ -153,3 +153,7 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 2026-09-23 在提交 `e5be054` 上，直接从 Windows 工作区的 WSL 挂载路径执行 `integration-tests/run-linux.sh`。入口使用已有增强版 Linux cjpm，**实际重新编译当前工作区的 CjRepo Server**，随后四组 **4/4 PASS，总耗时 184.08s**：Multi-repository 151.12s、Hosted 12.87s、Proxy 10.72s、Repository sync 5.97s。多仓组包含新增的菱形相容选源、三包来源和 SHA-256 核对、菱形冲突拒绝；其他既有故障与安全断言也通过。运行后固定测试端口和 `integration-tests/.tmp` 无残留。本轮未重编译 cjpm；从 `0f0e076` 至 `e5be054`，`cjpm/`、`server/` 与 `deployment/` 的产品源码无差异。
 
 随后运行标准 `deployment/docker/up.ps1 → doctor.ps1 → down.ps1`，**9/9 PASS**。打包脚本使用已有 WSL 服务端产物 SHA-256 `5cedbde24bf02f71d0a68da50808af9b639d6b04da4d10af9034a88c53ac44de`，不是上述刚在 Windows 挂载路径重编译的产物；这两个产物的摘要不同，不能宣称字节相同。标准启动流程未回显 Token，Compose 容器与网络已移除，命名数据卷保留，原独立容器 `magical_bartik` 仍为 healthy。本轮 Docker 只复核一键启动和 9 项诊断，未重跑历史真实发布及持久化重建场景。Windows 原生五组与完整 Maple HLT/LLT 仍未解决。
+
+## 官方 Maple 单用例复核
+
+2026-09-23 取得官方 `cangjie_test_framework` 提交 `e92721e2000c00c19701d4df2ac9e42e7921fe5c`，通过新入口 `integration-tests/compatibility/maple_smoke.py` 对官方 `http_status_matrix.info` 在原版与增强版 cjpm 上分别运行。测试只在临时副本中规范 Windows 检出的 CRLF；原始官方仓保持干净。Maple 判定原版 **1/1 PASS（46.40s）**、增强版 **1/1 PASS（45.43s）**，原始日志留在外层 `test-runs/maple-smoke/run-1790167730-685700f0/`；39137 端口和项目临时目录已清理。该结果加强了先前同一夹具 16 条状态断言的证据，但仍只覆盖一个官方 LLT 用例。`pexpect`、`fasteners` 和完整 HLT/LLT 仍未就绪。

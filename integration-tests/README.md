@@ -72,6 +72,22 @@ python3 integration-tests/compatibility/run.py \
 
 原版构建与测试范围、实际结果见 `docs/official-compatibility-report.md`。本入口不代替完整 Maple HLT/LLT。
 
+## 官方 Maple 框架单用例对照
+
+准备独立检出的官方 `cangjie_test_framework`、`cangjie_test`，以及同一源码基线的原版与增强版 Linux cjpm。加载 SDK 与 stdx 后运行：
+
+```bash
+python3 integration-tests/compatibility/maple_smoke.py \
+  --framework /path/to/cangjie_test_framework \
+  --fixture /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/repository/coverage/http_status_matrix \
+  --test-config /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/test.cfg \
+  --official-cjpm /path/to/official/cjpm \
+  --enhanced-cjpm /path/to/enhanced/cjpm \
+  --results-dir /path/to/test-results
+```
+
+入口仅在临时副本中把官方用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；原始官方仓不变。Maple 对同一官方 `http_status_matrix` 用例分别运行两版 cjpm，要求每版 `1/1 PASS`，结果日志保存在唯一的 `--results-dir/run-*` 中。该入口是一个官方 LLT 用例的烟测，不代表完整 HLT/LLT。
+
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
 ```powershell
