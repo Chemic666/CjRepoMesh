@@ -38,19 +38,24 @@ def run_command(
     cwd: Path,
     env: Mapping[str, str] | None = None,
     expect_success: bool = True,
+    timeout: float | None = None,
 ) -> CommandResult:
     printable = " ".join(str(item) for item in command)
-    completed = subprocess.run(
-        [str(item) for item in command],
-        cwd=cwd,
-        env=None if env is None else dict(env),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            [str(item) for item in command],
+            cwd=cwd,
+            env=None if env is None else dict(env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise TestFailure(f"Command timed out after {timeout}s: {printable}") from error
     result = CommandResult(completed.returncode, completed.stdout)
     if expect_success and result.returncode != 0:
         raise TestFailure(

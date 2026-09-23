@@ -454,58 +454,64 @@ public class DepAnalysisEngine {
             downloadTasks.add(
                 spawn {
                     =>
-                    if (!this.sourceDepotMap.contains(fullName) ||
-                        !this.sourceDepotMap[fullName].contains(version)) {
-                        eprintln("Error: repository source for '${fullName}-${version}' is missing")
-                        return false
-                    }
-                    let sourceDepot = this.sourceDepotMap[fullName][version]
-                    // download artifact
-                    let sourcePath = Path(sourceDepot.localRepo).join("source").
-                        join(if (org.isEmpty()) { "default" } else { org }).
-                        join("${name}-${version}").toString()
-                    if (!directoryExists(sourcePath)) {
-                        try {
-                            let (flag, output) = sourceDepot.download(name, org, version)
-                            if (!flag) {
-                                eprintln("Error: ${output}")
-                                return false
-                            }
-                        } catch (e: CryptoException | TlsException) {
-                            eprintln("Error: ${e.message}")
-                            eprintln("Error: please ensure that openssl has been correctly installed and configured according to the \"Usage Instruction\" section of the documentation")
-                            return false
-                        } catch (e: Exception) {
-                            eprintln("Error: ${e.message}")
-                            if (e.message.contains("HttpEngine1#connect")) {
-                                eprintln("Error: unable to connect to https server.")
-                            }
+                    try {
+                        if (!this.sourceDepotMap.contains(fullName) ||
+                            !this.sourceDepotMap[fullName].contains(version)) {
+                            eprintln("Error: repository source for '${fullName}-${version}' is missing")
                             return false
                         }
-                    }
+                        let sourceDepot = this.sourceDepotMap[fullName][version]
+                        // download artifact
+                        let sourcePath = Path(sourceDepot.localRepo).join("source").
+                            join(if (org.isEmpty()) { "default" } else { org }).
+                            join("${name}-${version}").toString()
+                        if (!directoryExists(sourcePath)) {
+                            try {
+                                let (flag, output) = sourceDepot.download(name, org, version)
+                                if (!flag) {
+                                    eprintln("Error: ${output}")
+                                    return false
+                                }
+                            } catch (e: CryptoException | TlsException) {
+                                eprintln("Error: ${e.message}")
+                                eprintln("Error: please ensure that openssl has been correctly installed and configured according to the \"Usage Instruction\" section of the documentation")
+                                return false
+                            } catch (e: Exception) {
+                                eprintln("Error: ${e.message}")
+                                if (e.message.contains("HttpEngine1#connect")) {
+                                    eprintln("Error: unable to connect to https server.")
+                                }
+                                return false
+                            }
+                        }
 
-                    // save final module
-                    let finalDep = FinalDepModule()
-                    finalDep.name = fullName
-                    finalDep.sourcePath = sourcePath
-                    finalDep.rootModulePath = this.rootModulePath
-                    finalDep.sourceInfo.version = version
-                    if (this.currentState.depRecordMap[fullName].outputType.isValid) {
-                        finalDep.sourceInfo.outputType = this.currentState.depRecordMap[fullName].outputType
-                    }
-                    synchronized(downloadMtx) {
-                        this.finalDepMap.add(fullName, finalDep)
-                    }
+                        // save final module
+                        let finalDep = FinalDepModule()
+                        finalDep.name = fullName
+                        finalDep.sourcePath = sourcePath
+                        finalDep.rootModulePath = this.rootModulePath
+                        finalDep.sourceInfo.version = version
+                        if (this.currentState.depRecordMap[fullName].outputType.isValid) {
+                            finalDep.sourceInfo.outputType = this.currentState.depRecordMap[fullName].outputType
+                        }
+                        synchronized(downloadMtx) {
+                            this.finalDepMap.add(fullName, finalDep)
+                        }
 
-                    downloadSem.release()
-                    return true
+                        return true
+                    } finally {
+                        downloadSem.release()
+                    }
                 }
             )
         }
 
         var downloadFlag = true
         for (task in downloadTasks) {
-            downloadFlag &&= task.get()
+            let taskPassed = task.get()
+            if (!taskPassed) {
+                downloadFlag = false
+            }
         }
 
         if (downloadFlag && !writeRepositoryProvenance(this.rootModulePath, this.currentState.fixedVersionMap,

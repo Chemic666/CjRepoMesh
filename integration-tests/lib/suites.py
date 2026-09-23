@@ -178,6 +178,7 @@ def _transitive_app(
 ) -> Path:
     app = context.temp_root / name
     shutil.copytree(context.multirepo_root / "app", app)
+    context.reset_app(app)
     manifest = app / "cjpm.toml"
     text = manifest.read_text(encoding="utf-8")
     original_requirement = 'meshdep = "[1.0.0, 3.0.0)"'
@@ -419,6 +420,55 @@ def run_multirepo(context: TestContext) -> None:
         ):
             assert_contains(result.output, expected)
         context.pass_message(f"repo doctor identifies {status} authentication barrier")
+
+    pinned_app = context.multirepo_root / "app-pinned"
+    for status, mode in ((401, "artifact-unauthorized"), (403, "artifact-forbidden")):
+        context.reset_app(pinned_app)
+        barrier_log = context.multirepo_root / f"{mode}.requests.log"
+        remove_within(barrier_log, (context.tests_root,))
+        remove_within(low_log, (context.tests_root,))
+        result = _run_with_repositories(
+            context, "app-pinned", ((39141, mode), low), ("run",), expect_success=False
+        )
+        assert_contains(result.output, f"status {status}")
+        if "GET /pkg/meshdep/1.0.0" not in _read_lines(barrier_log):
+            raise TestFailure(f"{status} artifact barrier was not reached")
+        if any(line.startswith("GET /pkg/") for line in _read_lines(low_log)):
+            raise TestFailure(f"{status} artifact barrier fell back to a lower-priority artifact")
+        if (pinned_app / "cjpm-provenance.json").exists():
+            raise TestFailure(f"{status} artifact failure wrote a successful provenance record")
+        context.pass_message(f"{status} artifact denial preserves the chosen repository source")
+
+    denied_app = _transitive_app(
+        context, "transitive-artifact-denied", mesh_requirement="2.0.0",
+        bridge_requirement="2.0.0",
+    )
+    denied_modes = (
+        (39141, "artifact-forbidden-transitive-high"),
+        (39142, "artifact-forbidden-transitive-low"),
+    )
+    with ManagedProcesses() as processes:
+        for port, mode in denied_modes:
+            remove_within(
+                context.multirepo_root / f"{mode}.requests.log", (context.tests_root,)
+            )
+            processes.start(_mock_command(context, port, mode), cwd=context.multirepo_root)
+            wait_for_port(port)
+        result = run_command(
+            (context.cjpm, "build", "-j", "1"), cwd=denied_app, env=context.env,
+            expect_success=False, timeout=30,
+        )
+    assert_contains(result.output, "status 403")
+    for _port, mode in denied_modes:
+        requests = _read_lines(context.multirepo_root / f"{mode}.requests.log")
+        if not any(line.startswith("GET /pkg/") for line in requests):
+            raise TestFailure(
+                f"Single-job download did not reach artifact denial in {mode}: "
+                f"requests={requests!r}\n{result.output}"
+            )
+    if (denied_app / "cjpm-provenance.json").exists():
+        raise TestFailure("Failed parallel artifact downloads wrote a successful provenance record")
+    context.pass_message("failed artifact downloads release single-job concurrency permits")
 
     token_app = context.multirepo_root / "app-token"
     context.reset_app(token_app)

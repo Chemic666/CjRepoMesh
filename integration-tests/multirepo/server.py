@@ -12,7 +12,7 @@ LOG = ROOT / f"{REPOSITORY}.requests.log"
 
 
 def fixtures():
-    if REPOSITORY in ("high", "token"):
+    if REPOSITORY in ("high", "token", "artifact-unauthorized", "artifact-forbidden"):
         return [ROOT / "packages" / "meshdep-v1-high"]
     if REPOSITORY in ("low", "corrupt"):
         return [
@@ -32,12 +32,12 @@ def fixtures():
             ROOT / "packages" / "meshbridge-v1",
             ROOT / "packages" / "meshbridge-v2",
         ]
-    if REPOSITORY == "transitive-high":
+    if REPOSITORY in ("transitive-high", "artifact-forbidden-transitive-high"):
         return [
             ROOT / "packages" / "meshdep-v1-high",
             ROOT / "packages" / "meshbridge-v2",
         ]
-    if REPOSITORY == "transitive-low":
+    if REPOSITORY in ("transitive-low", "artifact-forbidden-transitive-low"):
         return [
             ROOT / "packages" / "meshdep-v1-low",
             ROOT / "packages" / "meshdep-v2-low",
@@ -93,6 +93,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(200, payload.encode("utf-8"), "application/json")
                 return
         if len(parts) == 3 and parts[0] == "pkg":
+            artifact_status = {
+                "artifact-unauthorized": 401,
+                "artifact-forbidden": 403,
+                "artifact-forbidden-transitive-high": 403,
+                "artifact-forbidden-transitive-low": 403,
+            }.get(REPOSITORY)
+            if artifact_status is not None:
+                payload = json.dumps({"errors": [{"message": REPOSITORY}]}).encode("utf-8")
+                self.send_bytes(artifact_status, payload, "application/json")
+                return
             name = parts[1]
             version = parts[2]
             for item in fixtures():
