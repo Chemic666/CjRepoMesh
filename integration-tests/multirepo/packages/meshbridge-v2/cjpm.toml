@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "meshbridge"
+version = "2.0.0"
+output-type = "static"
+description = "Transitive compatibility fixture requiring meshdep 2.0.0"
+
+[dependencies]
+meshdep = "2.0.0"

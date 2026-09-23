@@ -28,11 +28,35 @@ from lib.harness import (  # noqa: E402
 
 PORT = 39142
 OFFICIAL_FIXTURE_PORT = 39137
-MARKER = "low-2.0.0"
 
 
 def normalized_output(output: str) -> str:
     return "\n".join(line.rstrip() for line in output.splitlines() if line.strip())
+
+
+def canonical_lock(contents: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Ignore unordered TOML map emission, but compare every nonblank lock entry."""
+    sections: dict[str, list[str]] = {"": []}
+    current = ""
+    for raw_line in contents.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line
+            if current in sections:
+                raise TestFailure(f"Duplicate cjpm.lock section: {current}")
+            sections[current] = []
+        else:
+            sections[current].append(line)
+    if sections.get("") != ["version = 0"] or "[requires]" not in sections:
+        raise TestFailure("Unexpected cjpm.lock format in compatibility fixture")
+    return tuple(sorted((name, tuple(sorted(entries))) for name, entries in sections.items()))
+
+
+def assert_same_lock(label: str, official: str, enhanced: str) -> None:
+    if canonical_lock(official) != canonical_lock(enhanced):
+        assert_same_text(label, official, enhanced)
 
 
 def assert_same_text(label: str, original: str, enhanced: str) -> None:
@@ -51,7 +75,12 @@ def assert_same_text(label: str, original: str, enhanced: str) -> None:
 
 
 def prepare_app(
-    source: Path, destination: Path, *, requirement: str, include_company_auth: bool
+    source: Path,
+    destination: Path,
+    *,
+    requirement: str,
+    include_company_auth: bool = False,
+    bridge_requirement: str | None = None,
 ) -> None:
     destination.mkdir(parents=True)
     (destination / "src").mkdir()
@@ -64,6 +93,13 @@ def prepare_app(
             "println(registryMarker())",
             "println(registryMarker())\n    println(authRegistryMarker())",
         )
+    if bridge_requirement:
+        source_text = source_text.replace(
+            "import meshdep.*", "import meshdep.*\nimport meshbridge.*"
+        ).replace(
+            "println(registryMarker())",
+            "println(registryMarker())\n    println(bridgeMarker())",
+        )
     (destination / "src" / "main.cj").write_text(source_text, encoding="utf-8")
     manifest = (source / "cjpm.toml").read_text(encoding="utf-8")
     if 'meshdep = "2.0.0"' not in manifest:
@@ -71,6 +107,8 @@ def prepare_app(
     manifest = manifest.replace('meshdep = "2.0.0"', f'meshdep = "{requirement}"')
     if include_company_auth:
         manifest += '\n"company::auth" = "1.0.0"\n'
+    if bridge_requirement:
+        manifest += f'\nmeshbridge = "{bridge_requirement}"\n'
     (destination / "cjpm.toml").write_text(manifest, encoding="utf-8")
 
 
@@ -83,6 +121,9 @@ def compare_case(
     name: str,
     requirement: str,
     include_company_auth: bool = False,
+    bridge_requirement: str | None = None,
+    expected_mesh_version: str = "2.0.0",
+    expected_bridge_version: str | None = None,
     env: dict[str, str],
 ) -> None:
     official_app = work_root / name / "official"
@@ -92,21 +133,31 @@ def compare_case(
             source, app,
             requirement=requirement,
             include_company_auth=include_company_auth,
+            bridge_requirement=bridge_requirement,
         )
 
     official_run = run_command((official, "run"), cwd=official_app, env=env)
     enhanced_run = run_command((enhanced, "run"), cwd=enhanced_app, env=env)
-    assert_contains(official_run.output, MARKER, label="official run output")
-    assert_contains(enhanced_run.output, MARKER, label="enhanced run output")
+    expected_marker = f"low-{expected_mesh_version}"
+    assert_contains(official_run.output, expected_marker, label="official run output")
+    assert_contains(enhanced_run.output, expected_marker, label="enhanced run output")
     if include_company_auth:
         assert_contains(official_run.output, "private-1.0.0", label="official run output")
         assert_contains(enhanced_run.output, "private-1.0.0", label="enhanced run output")
+    if bridge_requirement:
+        if not expected_bridge_version:
+            raise TestFailure(f"{name} did not specify an expected bridge version")
+        bridge_marker = f"bridge-{expected_bridge_version}-{expected_marker}"
+        assert_contains(official_run.output, bridge_marker, label="official run output")
+        assert_contains(enhanced_run.output, bridge_marker, label="enhanced run output")
 
     official_lock = (official_app / "cjpm.lock").read_text(encoding="utf-8")
     enhanced_lock = (enhanced_app / "cjpm.lock").read_text(encoding="utf-8")
-    assert_same_text(f"{name} cjpm.lock", official_lock, enhanced_lock)
-    if 'version = "2.0.0"' not in official_lock:
-        raise TestFailure(f"{name} lockfile did not select meshdep 2.0.0")
+    assert_same_lock(f"{name} cjpm.lock", official_lock, enhanced_lock)
+    if f'meshdep = {{version = "{expected_mesh_version}"}}' not in official_lock:
+        raise TestFailure(f"{name} lockfile did not select meshdep {expected_mesh_version}")
+    if expected_bridge_version and f'meshbridge = {{version = "{expected_bridge_version}"}}' not in official_lock:
+        raise TestFailure(f"{name} lockfile did not select meshbridge {expected_bridge_version}")
 
     official_tree = run_command((official, "tree", "--no-tests"), cwd=official_app, env=env)
     enhanced_tree = run_command((enhanced, "tree", "--no-tests"), cwd=enhanced_app, env=env)
@@ -118,6 +169,8 @@ def compare_case(
     assert_contains(official_tree.output, "meshdep", label="official dependency tree")
     if include_company_auth:
         assert_contains(official_tree.output, "auth", label="official dependency tree")
+    if bridge_requirement:
+        assert_contains(official_tree.output, "meshbridge", label="official dependency tree")
 
     for app in (official_app, enhanced_app):
         cache = app / "cache" / "repository"
@@ -125,7 +178,77 @@ def compare_case(
             raise TestFailure(f"Legacy index cache layout is missing: {app}")
         if (cache / "registries").exists():
             raise TestFailure(f"Legacy app unexpectedly used a multi-registry cache: {app}")
+        if bridge_requirement and not (cache / "index" / "default" / "me" / "sh" / "meshbridge").is_file():
+            raise TestFailure(f"Legacy bridge index cache layout is missing: {app}")
     print(f"PASS {name}: selected version, lockfile, dependency tree, legacy cache", flush=True)
+
+
+def compare_transitive_conflict(
+    official: Path, enhanced: Path, source: Path, work_root: Path, *, env: dict[str, str]
+) -> None:
+    results = []
+    for label, executable in (("official", official), ("enhanced", enhanced)):
+        app = work_root / "transitive-conflict" / label
+        prepare_app(source, app, requirement="2.0.0", bridge_requirement="1.0.0")
+        result = run_command((executable, "run"), cwd=app, env=env, expect_success=False)
+        for expected in ("meshdep", "1.0.0", "2.0.0"):
+            assert_contains(result.output, expected, label=f"{label} conflict diagnostic")
+        results.append(result)
+    if results[0].returncode != results[1].returncode:
+        raise TestFailure("Transitive conflict exit codes differ between official and enhanced cjpm")
+    print("PASS transitive-conflict: both resolvers reject incompatible requirements", flush=True)
+
+
+def compare_lock_transition(
+    official: Path, enhanced: Path, source: Path, work_root: Path, *, env: dict[str, str]
+) -> None:
+    apps = {}
+    for label in ("official", "enhanced"):
+        app = work_root / "lock-transition" / label
+        prepare_app(source, app, requirement="1.0.0")
+        apps[label] = app
+    stages = (("initial", "run"), ("widened", "run"), ("updated", "update"))
+    for stage, command in stages:
+        if stage == "widened":
+            for app in apps.values():
+                manifest = app / "cjpm.toml"
+                manifest.write_text(
+                    manifest.read_text(encoding="utf-8").replace(
+                        'meshdep = "1.0.0"', 'meshdep = "[1.0.0, 3.0.0)"'
+                    ),
+                    encoding="utf-8",
+                )
+        outputs = {}
+        for label, executable in (("official", official), ("enhanced", enhanced)):
+            result = run_command((executable, command), cwd=apps[label], env=env)
+            outputs[label] = result.output
+        locks = {
+            label: (app / "cjpm.lock").read_text(encoding="utf-8")
+            for label, app in apps.items()
+        }
+        assert_same_lock(f"{stage} cjpm.lock", locks["official"], locks["enhanced"])
+        expected_version = "2.0.0" if stage == "updated" else "1.0.0"
+        for label, lock in locks.items():
+            if f'meshdep = {{version = "{expected_version}"}}' not in lock:
+                raise TestFailure(f"{stage} {label} lockfile did not select meshdep {expected_version}")
+        if stage == "initial":
+            assert_contains(outputs["official"], "low-1.0.0", label="initial official run")
+            assert_contains(outputs["enhanced"], "low-1.0.0", label="initial enhanced run")
+        elif stage == "widened":
+            assert_contains(outputs["official"], "low-1.0.0", label="widened official run")
+            assert_contains(outputs["enhanced"], "low-1.0.0", label="widened enhanced run")
+        else:
+            for label, executable in (("official", official), ("enhanced", enhanced)):
+                result = run_command((executable, "run"), cwd=apps[label], env=env)
+                assert_contains(result.output, "low-2.0.0", label=f"updated {label} run")
+            trees = {
+                label: normalized_output(
+                    run_command((executable, "tree", "--no-tests"), cwd=apps[label], env=env).output
+                )
+                for label, executable in (("official", official), ("enhanced", enhanced))
+            }
+            assert_same_text("updated dependency tree", trees["official"], trees["enhanced"])
+    print("PASS lock-transition: pinned, widened, and updated lockfiles match", flush=True)
 
 
 def run_official_fixture(
@@ -200,11 +323,21 @@ def main() -> int:
         if key.startswith("CJREPO_") or key.startswith("CJREPOMESH_"):
             env.pop(key)
 
-    packages = ("meshdep-v1-low", "meshdep-v2-low", "company-auth-v1-private")
-    generated = [fixture_root / "packages" / package / "target" for package in packages]
+    base_packages = ("meshdep-v1-low", "meshdep-v2-low", "company-auth-v1-private")
+    bridge_packages = ("meshbridge-v1", "meshbridge-v2")
+    generated = [
+        fixture_root / "packages" / package / "target"
+        for package in (*base_packages, *bridge_packages)
+    ]
+    generated.extend(
+        fixture_root / "packages" / package / output
+        for package in bridge_packages
+        for output in ("cache", "cjpm.lock", "cjpm-provenance.json")
+    )
     request_logs = (
         fixture_root / "low.requests.log",
         fixture_root / "legacy-mixed.requests.log",
+        fixture_root / "legacy-transitive.requests.log",
     )
     owns_generated = False
     try:
@@ -217,7 +350,7 @@ def main() -> int:
                 )
             owns_generated = True
             assert_ports_available((PORT,))
-            for package in packages:
+            for package in base_packages:
                 run_command((enhanced, "bundle"), cwd=fixture_root / "packages" / package, env=env)
             with ManagedProcesses() as processes:
                 low_server = processes.start(
@@ -225,6 +358,8 @@ def main() -> int:
                     cwd=fixture_root,
                 )
                 wait_for_port(PORT)
+                for package in bridge_packages:
+                    run_command((enhanced, "bundle"), cwd=fixture_root / "packages" / package, env=env)
                 source = fixture_root / "app-legacy"
                 compare_case(
                     official, enhanced, source, work_root,
@@ -236,7 +371,7 @@ def main() -> int:
                 )
                 processes.stop(low_server)
                 wait_for_ports_closed((PORT,))
-                processes.start(
+                mixed_server = processes.start(
                     (sys.executable, fixture_root / "server.py", str(PORT), "legacy-mixed"),
                     cwd=fixture_root,
                 )
@@ -246,8 +381,31 @@ def main() -> int:
                     name="mixed", requirement="[1.0.0, 3.0.0)",
                     include_company_auth=True, env=env,
                 )
+                processes.stop(mixed_server)
+                wait_for_ports_closed((PORT,))
+                processes.start(
+                    (sys.executable, fixture_root / "server.py", str(PORT), "legacy-transitive"),
+                    cwd=fixture_root,
+                )
+                wait_for_port(PORT)
+                compare_case(
+                    official, enhanced, source, work_root,
+                    name="transitive-constraint", requirement="1.0.0",
+                    bridge_requirement="[1.0.0, 3.0.0)",
+                    expected_mesh_version="1.0.0", expected_bridge_version="1.0.0",
+                    env=env,
+                )
+                compare_case(
+                    official, enhanced, source, work_root,
+                    name="transitive-latest", requirement="[1.0.0, 3.0.0)",
+                    bridge_requirement="[1.0.0, 3.0.0)",
+                    expected_mesh_version="2.0.0", expected_bridge_version="2.0.0",
+                    env=env,
+                )
+                compare_transitive_conflict(official, enhanced, source, work_root, env=env)
+                compare_lock_transition(official, enhanced, source, work_root, env=env)
             wait_for_ports_closed((PORT,))
-            print("All 3 official-versus-enhanced legacy cases passed.", flush=True)
+            print("All 7 official-versus-enhanced legacy cases passed.", flush=True)
         if args.official_fixture:
             fixture = args.official_fixture.resolve()
             if not (fixture / "http_status_matrix.info").is_file():
