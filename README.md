@@ -1,6 +1,6 @@
 > **CjRepoMesh competition branch**
 >
-> This branch extends the official Cangjie toolchain with native cjpm multi-registry resolution and a lightweight private repository for competition topic #6. Start with the [CjRepoMesh overview](README_CJREPOMESH.md), [architecture](docs/architecture.md), and [one-command verification](integration-tests/README.md). The official upstream README is preserved below.
+> This branch extends the official Cangjie toolchain with native cjpm multi-registry resolution and a lightweight private repository for competition topic #6. Start with the [CjRepoMesh overview](README_CJREPOMESH.md), [architecture](docs/architecture.md), and [one-command verification](integration-tests/README.md). The official upstream README follows below, with empty placeholder links removed.
 
 # Cangjie Language Command Line Toolchain
 
@@ -132,7 +132,7 @@ This project is licensed under [Apache-2.0 with Runtime Library Exception](./LIC
 | JSON for Modern C++  | MIT License         | Cangjie Language Server for message parsing and encapsulation.  | LSPServer, cjlint      | Integrated into the Cangjie binary release |
 | SQLite               | Public Domain       | Cangjie Language Server uses the database to store index data.  | LSPServer      | Integrated into the Cangjie binary release |
 
-For build methods, refer to the [Openharmony SDK Integration Build Guide](). For additional software dependencies, see [Environment Preparation](). For details on third-party dependencies, see the [Third-Party Open Source Software Documentation](./third_party/README.md)
+For build methods and environment preparation, refer to the OpenHarmony SDK integration guide linked above. For details on third-party dependencies, see the [Third-Party Open Source Software Documentation](./third_party/README.md).
 
 ## Contribution
 
