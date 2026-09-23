@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 核心回归基线：`8e33119`；后续安全修复：`de2da77`
-> 结论：Windows 五组端到端测试与 Linux 四组共享核心回归在 `8e33119` 上通过；后续测试/凭据安全修复完成静态检查，仍需最终全量重跑
+> 结论：历史 Windows 五组与 Linux 四组在 `8e33119` 上通过；本轮 `b10ced9` 的 Linux 四组与 Docker 诊断通过，Windows 构建被系统 Application Control 阻断
 
 ## 环境
 
@@ -75,3 +75,13 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
 - 性能数据见独立的 `benchmark/results/proxy-benchmark.md`，不由本功能回归推导。
+
+## 本轮最新提交复核
+
+在 `b10ced9` 上运行 Windows `integration-tests/run-all.ps1 -SkipServerBuild`：第一组打包夹具时，系统 Application Control 拦截 `cjc -v`，统一入口停止，故本轮 Windows 结果记为 **环境阻断**，不能沿用上表的历史 5/5 作为当前提交结果。未调整 Windows 安全策略。
+
+同一代码在 WSL 2 / Ubuntu 22.04.5 上执行 `./integration-tests/run-linux.sh`，服务端实际编译通过，四组为 **4/4 PASS**，总耗时 **510.22s**：Multi-repository 395.10s、Hosted 34.97s、Proxy 55.37s、Repository sync 24.71s。测试结束后没有留下固定测试端口和临时数据。本轮较历史 Linux 77.25s 明显变慢；两次结果均为实测值，不据此推导性能变化。
+
+Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 项诊断全部 PASS。启动输出没有回显发布 Token，`.env` ACL 已关闭继承且仅当前 Windows 用户有允许规则。测试创建的 Compose 容器已停止并移除，命名数据卷保留；用户原先运行的独立 `cjrepomesh:local` 容器未被更改。
+
+同轮完成官方原版与增强版的单仓差分 3/3，以及一个官方 LLT 夹具在两版上各 16/16 断言，结果见 `docs/official-compatibility-report.md`。完整 Maple HLT/LLT 仍未运行。
