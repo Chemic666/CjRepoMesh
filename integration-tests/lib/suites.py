@@ -72,6 +72,7 @@ class TestContext:
             "meshdep-v2-low",
             "meshbridge-v1",
             "meshbridge-v2",
+            "meshleaf-v1",
             "company-auth-v1-private",
             "company-auth-v9-public",
         ):
@@ -174,7 +175,8 @@ def _run_with_repositories(
 
 
 def _transitive_app(
-    context: TestContext, name: str, *, mesh_requirement: str, bridge_requirement: str
+    context: TestContext, name: str, *, mesh_requirement: str, bridge_requirement: str,
+    leaf_requirement: str | None = None,
 ) -> Path:
     app = context.temp_root / name
     shutil.copytree(context.multirepo_root / "app", app)
@@ -185,7 +187,10 @@ def _transitive_app(
     if original_requirement not in text:
         raise TestFailure("Multi-repository fixture lost its expected meshdep requirement")
     text = text.replace(original_requirement, f'meshdep = "{mesh_requirement}"')
-    manifest.write_text(text + f'\nmeshbridge = "{bridge_requirement}"\n', encoding="utf-8")
+    added_requirements = f'\nmeshbridge = "{bridge_requirement}"\n'
+    if leaf_requirement is not None:
+        added_requirements += f'meshleaf = "{leaf_requirement}"\n'
+    manifest.write_text(text + added_requirements, encoding="utf-8")
     source = app / "src" / "main.cj"
     text = source.read_text(encoding="utf-8")
     if "import meshdep.*" not in text or "println(registryMarker())" not in text:
@@ -193,28 +198,39 @@ def _transitive_app(
     text = text.replace("import meshdep.*", "import meshdep.*\nimport meshbridge.*").replace(
         "println(registryMarker())", "println(registryMarker())\n    println(bridgeMarker())"
     )
+    if leaf_requirement is not None:
+        text = text.replace("import meshbridge.*", "import meshbridge.*\nimport meshleaf.*").replace(
+            "println(bridgeMarker())", "println(bridgeMarker())\n    println(leafMarker())"
+        )
     source.write_text(text, encoding="utf-8")
     return app
 
 
 def _assert_transitive_sources(
     context: TestContext, app: Path, *, mesh_version: str, mesh_repository: str,
-    bridge_version: str, bridge_repository: str
+    bridge_version: str, bridge_repository: str, leaf_repository: str | None = None,
 ) -> None:
     provenance = json.loads((app / "cjpm-provenance.json").read_text(encoding="utf-8"))
     selected = {item["package"]: item for item in provenance["packages"]}
     assert_equal(provenance["formatVersion"], 1, label="transitive provenance format")
-    assert_equal(set(selected), {"meshdep", "meshbridge"}, label="transitive provenance packages")
+    expected_packages = {"meshdep", "meshbridge"}
+    if leaf_repository is not None:
+        expected_packages.add("meshleaf")
+    assert_equal(set(selected), expected_packages, label="transitive provenance packages")
     artifact_fixtures = {
         ("meshdep", "1.0.0", "high"): "meshdep-v1-high",
         ("meshdep", "2.0.0", "low"): "meshdep-v2-low",
         ("meshbridge", "1.0.0", "low"): "meshbridge-v1",
         ("meshbridge", "2.0.0", "high"): "meshbridge-v2",
+        ("meshleaf", "1.0.0", "high"): "meshleaf-v1",
     }
-    for package, version, repository in (
+    expected_sources = [
         ("meshdep", mesh_version, mesh_repository),
         ("meshbridge", bridge_version, bridge_repository),
-    ):
+    ]
+    if leaf_repository is not None:
+        expected_sources.append(("meshleaf", "1.0.0", leaf_repository))
+    for package, version, repository in expected_sources:
         assert_equal(selected[package]["version"], version, label=f"{package} version")
         assert_equal(selected[package]["repository"], repository, label=f"{package} repository")
         port = 39141 if repository == "high" else 39142
@@ -255,6 +271,30 @@ def _run_multirepo_transitive(context: TestContext) -> None:
         )
         context.pass_message(f"cross-repository {name}: resolved versions and audited sources")
 
+    diamond = _transitive_app(
+        context, "transitive-diamond", mesh_requirement="[1.0.0, 3.0.0)",
+        bridge_requirement="1.0.0", leaf_requirement="1.0.0",
+    )
+    result = _run_with_repositories(context, diamond, (high, low), ("run",))
+    for marker in ("high-1.0.0", "bridge-1.0.0-high-1.0.0", "leaf-1.0.0-high-1.0.0"):
+        assert_contains(result.output, marker, label="diamond runtime marker")
+    _assert_transitive_sources(
+        context, diamond, mesh_version="1.0.0", mesh_repository="high",
+        bridge_version="1.0.0", bridge_repository="low", leaf_repository="high",
+    )
+    context.pass_message("cross-repository diamond converges on one audited meshdep source")
+
+    diamond_conflict = _transitive_app(
+        context, "transitive-diamond-conflict", mesh_requirement="[1.0.0, 3.0.0)",
+        bridge_requirement="2.0.0", leaf_requirement="1.0.0",
+    )
+    result = _run_with_repositories(
+        context, diamond_conflict, (high, low), ("run",), expect_success=False,
+    )
+    for expected in ("meshdep", "1.0.0", "2.0.0"):
+        assert_contains(result.output, expected, label="diamond conflict diagnostic")
+    context.pass_message("cross-repository diamond conflict fails explicitly")
+
     conflict = _transitive_app(
         context, "transitive-conflict", mesh_requirement="2.0.0", bridge_requirement="1.0.0"
     )
@@ -283,6 +323,7 @@ def run_multirepo(context: TestContext) -> None:
         wait_for_port(39142)
         context.bundle("meshbridge-v1")
         context.bundle("meshbridge-v2")
+        context.bundle("meshleaf-v1")
     wait_for_ports_closed((39142,))
     _run_multirepo_transitive(context)
 

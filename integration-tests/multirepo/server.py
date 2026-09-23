@@ -38,6 +38,7 @@ def fixtures():
         return [
             ROOT / "packages" / "meshdep-v1-high",
             ROOT / "packages" / "meshbridge-v2",
+            ROOT / "packages" / "meshleaf-v1",
         ]
     if REPOSITORY in ("transitive-low", "artifact-forbidden-transitive-low"):
         return [

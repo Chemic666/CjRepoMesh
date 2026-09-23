@@ -1,0 +1,8 @@
+[repository.cache]
+path = "./cache"
+
+[repository.home]
+registry = "http://127.0.0.1:39142"
+
+[global]
+strict-tls = false

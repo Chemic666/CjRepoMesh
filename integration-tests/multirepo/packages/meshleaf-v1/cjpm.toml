@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "meshleaf"
+version = "1.0.0"
+output-type = "static"
+description = "Diamond dependency fixture requiring meshdep 1.0.0"
+
+[dependencies]
+meshdep = "1.0.0"

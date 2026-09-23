@@ -23,6 +23,12 @@ Two `meshbridge` versions add a cross-repository transitive-dependency matrix:
   required `meshdep` 2.0.0 from `low`.
 - Pinning `meshbridge` 1.0.0 alongside `meshdep` 2.0.0 fails explicitly.
 
-Successful cases check runtime markers plus both selected versions, repository
-names, and SHA-256 values in `cjpm-provenance.json`. The fixtures are bundled
+`meshleaf` adds a diamond graph: the application imports `meshbridge` from
+`low` and `meshleaf` from `high`, and both require the same `meshdep` 1.0.0.
+The successful run checks all three runtime markers and all three provenance
+entries, including SHA-256. Selecting `meshbridge` 2.0.0 against `meshleaf`
+1.0.0 instead must report their incompatible `meshdep` requirements.
+
+Successful cases check runtime markers plus every selected version, repository
+name, and SHA-256 value in `cjpm-provenance.json`. The fixtures are bundled
 against the local mock registry; the runner removes their build/cache outputs.
