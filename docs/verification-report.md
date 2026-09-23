@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 核心回归基线：`8e33119`；后续安全修复：`de2da77`
-> 结论：历史 Windows 五组与 Linux 四组在 `8e33119` 上通过；本轮 `b10ced9` 的 Linux 四组与 Docker 诊断通过，Windows 构建被系统 Application Control 阻断
+> 结论：历史 Windows 五组在 `8e33119` 上通过；最新 Linux 四组在 `a663cbf` 上通过，Docker 诊断在产品代码 `b10ced9` 上通过；Windows 当前构建被系统 Application Control 阻断
 
 ## 环境
 
@@ -89,3 +89,17 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 ## 后续兼容性扩展
 
 在未改动 cjpm 产品源码的前提下，单仓原版/增强版差分扩至 **7/7 PASS**：新增两版桥接包的传递约束下选择相容版本、共同选择最新版、不可解冲突拒绝，以及固定版本放宽后保留旧锁定版本、执行 `cjpm update` 再选择新版本。锁文件比较覆盖全部有效条目，但忽略 cjpm TOML 映射输出的不固定顺序；运行结果、依赖树和旧缓存布局也接受检查。详细条件与边界见 `docs/official-compatibility-report.md`。
+
+## 跨仓传递依赖专项复核
+
+在测试提交 `a663cbf` 上，WSL 2 / Ubuntu 22.04.5 运行 `./integration-tests/run-linux.sh --suite multirepo --skip-server-build`，单组 **PASS，78.69s**。新增的两个桥接包分布于优先级不同的仓库：根项目约束为 1.0.0 时，桥接包选自低优先级仓、底层包选自高优先级仓；根项目允许 2.0.0 时，桥接包选自高优先级仓、底层包选自低优先级仓。两种成功路径均检查运行输出、最终版本、来源仓，并将审计文件里的 SHA-256 与实际制品逐一比对；固定互不相容的两个版本则明确失败。整组既有多仓场景也继续通过。测试后无固定端口或临时数据残留。
+
+本次是 cjpm 多仓**单组专项复核**，并显式复用已有服务端二进制；不记为最新提交上的 Linux 四组全量回归，也不改变上述 Windows 环境阻断结论。
+
+随后同一测试提交 `a663cbf` 在 WSL 2 / Ubuntu 22.04.5 执行 `./integration-tests/run-linux.sh`，真实编译服务端，**Linux 四组 4/4 PASS，总耗时 96.13s**：Multi-repository 78.50s、Hosted 6.48s、Proxy 7.43s、Repository sync 3.69s。全量测试结束后，固定测试端口、服务进程和 `integration-tests/.tmp` 均无残留。产品 cjpm 源码未变；与先前 510.22s 的运行条件和系统负载不一定相同，不能据此推断性能提升。
+
+## 未闭合验证环境的处置
+
+本机 `Microsoft-Windows-CodeIntegrity/Operational` 于 2026-09-23 09:00:25 记录事件 3077：`cjpm.exe` 调用 `D:\Apps\Cangjie\bin\cjc.exe` 时被代码完整性策略拦截；`Get-AuthenticodeSignature` 对该 `cjc.exe` 返回 `NotSigned`。这定位了 Windows 当前阻断点，不是项目断言失败。当前不修改或绕过系统安全策略；Windows 原生五组需在经授权、工具链可运行的独立环境复测。
+
+官方测试框架方面，已有 WSL SDK 与 `cangjie_test` 源码，但未准备 `cangjie_test_framework`、`pexpect` 和 `fasteners`。在用户准备相关依赖后，先运行官方 cjpm 相关 HLT/LLT，再评估整套 HLT/LLT；运行范围必须分别报告，不把子集通过表述成整套通过。

@@ -61,6 +61,6 @@ python3 integration-tests/compatibility/run.py \
 
 ## 尚未覆盖
 
-- `maple` 运行器在当前 WSL `PATH` 中不可用，因此没有运行完整官方 HLT/LLT；本报告只声称上述一个官方 LLT 夹具的 16 条断言。
+- 当前 WSL 没有官方 `cangjie_test_framework/main.py`，Python 环境也没有 `pexpect`、`fasteners`；没有运行完整官方 HLT/LLT。本报告只声称上述一个官方 LLT 夹具的 16 条断言。Maple 是官方 Python 测试框架，不以是否存在名为 `maple` 的可执行文件作为唯一判断。
 - 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。

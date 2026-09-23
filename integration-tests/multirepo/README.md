@@ -13,3 +13,16 @@ The suite also proves that cjpm's existing `[replace]` semantics remain in
 force after multi-registry routing: a broad dependency is forced to 1.0.0,
 the selected replacement follows repository priority and 404 fallback, and a
 replacement version absent from every repository fails explicitly.
+
+Two `meshbridge` versions add a cross-repository transitive-dependency matrix:
+
+- A root requirement for `meshdep` 1.0.0 selects `meshbridge` 1.0.0 from `low`
+  and `meshdep` 1.0.0 from `high`, even though `high` offers an incompatible
+  `meshbridge` 2.0.0.
+- Broad root requirements select `meshbridge` 2.0.0 from `high` and its
+  required `meshdep` 2.0.0 from `low`.
+- Pinning `meshbridge` 1.0.0 alongside `meshdep` 2.0.0 fails explicitly.
+
+Successful cases check runtime markers plus both selected versions, repository
+names, and SHA-256 values in `cjpm-provenance.json`. The fixtures are bundled
+against the local mock registry; the runner removes their build/cache outputs.
