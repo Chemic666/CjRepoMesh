@@ -111,3 +111,11 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 2026-09-23 将同样的可执行测试逻辑同步到 WSL 2 / Ubuntu 22.04.5 测试副本，在已有 Cangjie 1.1.3/stdx 1.1.3.1 环境中运行多仓单组，**PASS，81.87s**。之后执行 `./integration-tests/run-linux.sh`，实际重新编译服务端，四组 **4/4 PASS，总耗时 98.52s**：Multi-repository 80.72s、Hosted 6.57s、Proxy 7.53s、Repository sync 3.68s。提交相较执行时的测试逻辑仅增加一行解释性注释。测试后 `integration-tests/.tmp` 已清理，固定测试端口未见监听。
 
 本轮未重跑 Windows 原生五组、Docker Compose 或完整 Maple HLT/LLT；其状态仍按上述各节记录。
+
+## 制品拒绝与并发下载失败修复
+
+提交 `efb7e24` 新增“索引正常、制品返回 401/403”的故障注入：增强版 cjpm 必须保留已选来源、拒绝构建，不能从低优先级仓偷偷取同版本制品，也不能写出成功的 `cjpm-provenance.json`。另以两个跨仓传递包、`cjpm build -j 1` 和双 403 制品拒绝测试并发清理。修复前该命令超过测试的 30 秒上限；定位为下载任务失败时提前返回而未释放并发许可。首次加入 `finally` 后不再超时，但结果汇总的短路求值没有等待全部已启动任务。最终修复同时保证许可始终释放，并逐个等待所有下载任务。
+
+2026-09-23 在现有 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 环境中重新编译 cjpm，得到二进制 SHA-256 `d2858f2f749b6f1e27b82afe9f01cce9ae95f76c466bd68423843fd2f5a57aa5`。修复后多仓单组 **PASS，83.28s**；`./integration-tests/run-linux.sh` 实际重新编译服务端，四组 **4/4 PASS，总耗时 101.47s**：Multi-repository 83.44s、Hosted 6.51s、Proxy 7.65s、Repository sync 3.85s。单并发双拒绝测试确认两个仓均收到制品请求、命令及时失败且未写成功来源记录。完整回归及随后的单仓差分结束后，测试临时目录和固定端口未见残留。
+
+修复后增强版与已有官方原版 cjpm 的旧 `repository.home` 行为差分再次 **7/7 PASS**。随后用本地已有官方 `http_status_matrix` LLT 夹具分别对原版、修复后的增强版逐条核对，均为 **16/16 PASS**。Windows 原生五组、Docker Compose 和完整 Maple HLT/LLT 未重跑，不把历史结果计为本次通过。

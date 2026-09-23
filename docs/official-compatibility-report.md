@@ -1,8 +1,8 @@
 # 官方 cjpm 兼容性差分记录
 
 > 执行日期：2026-09-23
-> 项目测试入口：`a49b5e1`；cjpm 产品源码自 `b10ced9` 未变化
-> 结论：本机可执行的单仓差分 7/7 通过，含传递依赖版本约束、冲突与锁文件转换；官方仓库 HTTP 状态 LLT 夹具在原版、增强版上各 16/16 断言通过。完整 Maple HLT/LLT 尚未运行。
+> 项目测试入口：`a49b5e1`；本轮并发下载失败修复：`efb7e24`
+> 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过，含传递依赖版本约束、冲突与锁文件转换；官方 HTTP 状态 LLT 夹具在两版上各 16/16 通过。完整 Maple HLT/LLT 尚未运行。
 
 ## 对照基线与环境
 
@@ -10,12 +10,12 @@
 | --- | --- |
 | 官方 cjpm 源码 | `Cangjie/cangjie_tools` 提交 `2978007`，即项目修改前的基线 |
 | 官方测试源码 | `Cangjie/cangjie_test` 提交 `1dfa37619f920884e119d7f51266869c8f0fd81e` |
-| 增强版 cjpm 源码 | 本仓库 `b10ced9`；后续仅新增测试与文档，未改 cjpm 源码 |
+| 增强版 cjpm 源码 | 本仓库 `efb7e24`；在 `b10ced9` 基础上修复下载失败时并发许可泄漏与任务等待短路 |
 | 运行系统 | WSL 2 / Ubuntu 22.04.5 x86_64 |
 | 编译器 / stdx | Cangjie 1.1.3 cjnative / stdx 1.1.3.1 |
 | Python | 3.10.12 |
 | 官方 cjpm 二进制 SHA-256 | `2f624cbe5493fcc686611e22eef7eb30e317c1ec589c18980dd88892875d9646` |
-| 增强版 cjpm 二进制 SHA-256 | `99a50281b529849a8a509640d6e39dcf891ea90ba3dbfe4011f9b62a5781d8e9` |
+| 增强版 cjpm 二进制 SHA-256 | `d2858f2f749b6f1e27b82afe9f01cce9ae95f76c466bd68423843fd2f5a57aa5` |
 
 原版以本地 Git 提交单独检出，并在 WSL 使用已有 SDK、stdx 和 libuv 执行官方 `cjpm/build/build.py build -t release --target native`，输出 `Successfully build libfswatcher!` 与 `Successfully build cjpm!`。未下载、安装或解压依赖。两版 `cjpm -v` 均为 `1.3.0-alpha.05`。
 
@@ -33,7 +33,7 @@
 | 不可解传递冲突 | 根项目固定 `meshdep 2.0.0` 与 `meshbridge 1.0.0`，后者要求 `meshdep 1.0.0` | 两版均以非零退出码拒绝，诊断包含冲突包和两个版本 |
 | 锁文件转换 | 先固定 `meshdep 1.0.0`，放宽依赖范围后运行，再执行 `cjpm update` | 两版均先保持 1.0.0，更新后选择 2.0.0；各阶段锁文件与最终依赖树一致 |
 
-结果：**7/7 PASS**。每个应用的 `meshdep` 索引均保存在旧路径 `cache/repository/index/default/me/sh/meshdep`，没有创建 `cache/repository/registries`。这支持“旧 `repository.home` 下，已覆盖的直接依赖、传递依赖冲突与锁文件行为保持一致”；仍不证明所有传递依赖组合都一致。
+修复后的增强版 cjpm 在 2026-09-23 重新执行，结果：**7/7 PASS**。每个应用的 `meshdep` 索引均保存在旧路径 `cache/repository/index/default/me/sh/meshdep`，没有创建 `cache/repository/registries`。这支持“旧 `repository.home` 下，已覆盖的直接依赖、传递依赖冲突与锁文件行为保持一致”；仍不证明所有传递依赖组合都一致。
 
 ## 官方 LLT 仓库状态夹具
 
@@ -45,6 +45,8 @@
 | CjRepoMesh 增强版 cjpm | PASS | PASS | PASS | 16/16 PASS |
 
 官方测试仓在 Windows 上检出为 CRLF。运行器仅在临时副本中把 `.sh`、`.toml`、`.cj` 转成 LF，使官方脚本的行尾 `sed` 匹配生效；未修改官方测试仓。临时服务进程、39137/39142 端口和测试数据已清理。
+
+2026-09-23 使用本地已有官方夹具，对修复后的增强版二进制（SHA-256 `d2858f2f749b6f1e27b82afe9f01cce9ae95f76c466bd68423843fd2f5a57aa5`）与上述官方原版再次逐条核对，结果仍分别为 **16/16 PASS**。这是一个官方 LLT 夹具，不代表完整 Maple HLT/LLT。
 
 ## 复现命令
 
