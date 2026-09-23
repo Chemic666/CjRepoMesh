@@ -34,6 +34,7 @@
 - [x] Windows 五组与 Linux 四组共享核心入口已在提交 `8e33119` 上分别 5/5、4/4 通过；Windows 仍需最终重跑；
 - [x] 当前测试提交 `a663cbf` 上 Linux 四组 4/4；当前产品代码上 Docker 9/9，原版/增强版单仓差分 7/7、官方 HTTP 状态 LLT 夹具两版各 16/16；
 - [x] 跨仓传递依赖的相容版本选源、不可解冲突和来源 SHA-256 实值核对在 `a663cbf` 的 Linux 多仓单组复核中通过；
+- [x] 401/403 认证屏障均有真实故障注入；解析阶段证明不触达低优先级仓，Doctor 显示禁止回退；新增测试后 Linux 四组 4/4，见 `docs/verification-report.md`；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；

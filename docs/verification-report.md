@@ -103,3 +103,11 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 本机 `Microsoft-Windows-CodeIntegrity/Operational` 于 2026-09-23 09:00:25 记录事件 3077：`cjpm.exe` 调用 `D:\Apps\Cangjie\bin\cjc.exe` 时被代码完整性策略拦截；`Get-AuthenticodeSignature` 对该 `cjc.exe` 返回 `NotSigned`。这定位了 Windows 当前阻断点，不是项目断言失败。当前不修改或绕过系统安全策略；Windows 原生五组需在经授权、工具链可运行的独立环境复测。
 
 官方测试框架方面，已有 WSL SDK 与 `cangjie_test` 源码，但未准备 `cangjie_test_framework`、`pexpect` 和 `fasteners`。在用户准备相关依赖后，先运行官方 cjpm 相关 HLT/LLT，再评估整套 HLT/LLT；运行范围必须分别报告，不把子集通过表述成整套通过。
+
+## 401/403 安全回退补充复核
+
+测试实现提交 `5f33e24` 为多仓模拟仓新增 HTTP 403 故障注入，并把已有 401 测试扩展为两种状态分别验证：依赖解析必须失败、错误中保留对应状态码、低优先级仓的请求日志必须为空；`repo doctor` 必须显示 `Fallback BLOCKED` 与 `Overall: FAIL`。Doctor 会独立探测允许的各仓以给出诊断，因此“低优先级仓零请求”只用于约束依赖解析，不错误套用到 Doctor。
+
+2026-09-23 将同样的可执行测试逻辑同步到 WSL 2 / Ubuntu 22.04.5 测试副本，在已有 Cangjie 1.1.3/stdx 1.1.3.1 环境中运行多仓单组，**PASS，81.87s**。之后执行 `./integration-tests/run-linux.sh`，实际重新编译服务端，四组 **4/4 PASS，总耗时 98.52s**：Multi-repository 80.72s、Hosted 6.57s、Proxy 7.53s、Repository sync 3.68s。提交相较执行时的测试逻辑仅增加一行解释性注释。测试后 `integration-tests/.tmp` 已清理，固定测试端口未见监听。
+
+本轮未重跑 Windows 原生五组、Docker Compose 或完整 Maple HLT/LLT；其状态仍按上述各节记录。
