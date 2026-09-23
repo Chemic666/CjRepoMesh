@@ -189,7 +189,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-最近在提交 `e5be054` 上复核：Linux 共享核心入口 4/4 PASS（含菱形依赖图），Docker 安全诊断 9/9 PASS；Windows 入口在打包夹具时被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7 通过（含传递依赖约束、冲突与锁文件转换）；官方仓库 HTTP 状态夹具在两版上各 16/16 断言通过，并由 Maple 框架将该单用例在两版上各判定为 1/1 PASS。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+最近在 `e5be054` 上复核 Linux 共享核心入口 4/4 PASS（含菱形依赖图）及 Docker 安全诊断 9/9 PASS；修复旧诊断后又以新编译的增强版 cjpm 跑通 Linux 四组 4/4（复用服务端构建）。Windows 入口在打包夹具时被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7 通过（含传递依赖约束、冲突与锁文件转换）；官方仓库 HTTP 状态夹具在两版上各 16/16 断言通过。官方 Maple 框架对 HTTP 状态、三个配置及缺少中心仓这五个选定 LLT 用例在两版上各判定为 1/1 + 3/3 + 1/1 PASS，完整 HLT/LLT 尚未运行。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
 本次完整回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。另备有 [8 页可编辑技术答辩稿（重设计版）](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)，视频路线仍待录制。
 

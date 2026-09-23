@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：最新测试内容的 Linux 四组完整回归 4/4、Docker 诊断 9/9，包含菱形依赖图；官方 Maple 框架的一个 cjpm LLT 用例在原版与增强版上各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
+> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的五个选定 cjpm LLT 用例在原版与增强版上各 1/1 + 3/3 + 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
 
 ## 环境
 
@@ -154,6 +154,10 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 
 随后运行标准 `deployment/docker/up.ps1 → doctor.ps1 → down.ps1`，**9/9 PASS**。打包脚本使用已有 WSL 服务端产物 SHA-256 `5cedbde24bf02f71d0a68da50808af9b639d6b04da4d10af9034a88c53ac44de`，不是上述刚在 Windows 挂载路径重编译的产物；这两个产物的摘要不同，不能宣称字节相同。标准启动流程未回显 Token，Compose 容器与网络已移除，命名数据卷保留，原独立容器 `magical_bartik` 仍为 healthy。本轮 Docker 只复核一键启动和 9 项诊断，未重跑历史真实发布及持久化重建场景。Windows 原生五组与完整 Maple HLT/LLT 仍未解决。
 
-## 官方 Maple 单用例复核
+## 官方 Maple 选定用例复核
 
-2026-09-23 取得官方 `cangjie_test_framework` 提交 `e92721e2000c00c19701d4df2ac9e42e7921fe5c`，通过新入口 `integration-tests/compatibility/maple_smoke.py` 对官方 `http_status_matrix.info` 在原版与增强版 cjpm 上分别运行。测试只在临时副本中规范 Windows 检出的 CRLF；原始官方仓保持干净。Maple 判定原版 **1/1 PASS（46.40s）**、增强版 **1/1 PASS（45.43s）**，原始日志留在外层 `test-runs/maple-smoke/run-1790167730-685700f0/`；39137 端口和项目临时目录已清理。该结果加强了先前同一夹具 16 条状态断言的证据，但仍只覆盖一个官方 LLT 用例。`pexpect`、`fasteners` 和完整 HLT/LLT 仍未就绪。
+2026-09-23 取得官方 `cangjie_test_framework` 提交 `e92721e2000c00c19701d4df2ac9e42e7921fe5c`，通过 `integration-tests/compatibility/maple_smoke.py` 对官方 `http_status_matrix.info` 和三个配置用例在原版与增强版 cjpm 上分别运行，首次均 **1/1 + 3/3 PASS**。测试只在 HTTP 用例的临时副本中规范 Windows 检出的 CRLF；官方 Git 跟踪文件不变。
+
+再扩展官方 `central_repository_missing.info` 后，发现增强版改变了旧缺仓提示，虽然同样拒绝安装，仍使官方断言失败。`cjpm/src/implement/depot.cj` 已针对纯旧 `home`/`cache` 空 registry 配置恢复旧提示。重新编译的增强版二进制 SHA-256 为 `6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a`，原版 SHA-256 为 `2f624cbe5493fcc686611e22eef7eb30e317c1ec589c18980dd88892875d9646`。新一轮 Maple 判定原版 HTTP **1/1 PASS（46.33s）**、配置 **3/3 PASS（4.11s）**、缺仓 **1/1 PASS（1.39s）**；增强版 HTTP **1/1 PASS（45.86s）**、配置 **3/3 PASS（4.03s）**、缺仓 **1/1 PASS（1.25s）**。原始日志在外层 `test-runs/maple-smoke/run-1790168948-56463991/`。HTTP 的 1/1 是单个 `.info` 用例，不能与夹具内部 16 条断言相加为 17 个官方用例；完整 HLT/LLT 仍未运行。WSL Python 环境仍缺 `pexpect` 和 `fasteners`。
+
+同一新编译 cjpm 又从 Windows 工作区的 WSL 挂载路径运行 Linux 共享核心入口，复用已有服务端二进制，四组 **4/4 PASS，总耗时 161.42s**：Multi-repository 136.29s、Hosted 5.82s、Proxy 10.66s、Repository sync 5.43s。官方原版单仓差分 **7/7 PASS**，HTTP 状态夹具逐条断言两版各 **16/16 PASS**。本轮没有重跑 Docker、Windows 原生五组或完整 Maple HLT/LLT；Docker 9/9 仍引用前述 `e5be054` 验证。

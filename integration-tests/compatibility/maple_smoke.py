@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the same upstream Maple cjpm LLT case against two cjpm binaries."""
+"""Run selected upstream Maple cjpm LLT suites against two cjpm binaries."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from pathlib import Path
 
 FIXTURE_NAME = "http_status_matrix"
 FIXTURE_PORT = 39137
-PASS_SUMMARY = "Total: 1, PASS: 1, FAIL: 0"
 
 
 def file_sha256(path: Path) -> str:
@@ -62,8 +61,9 @@ def normalized_fixture(source: Path, destination: Path) -> Path:
 
 
 def run_case(
-    label: str, executable: Path, framework_main: Path, test_config: Path,
-    fixture_info: Path, staging: Path, results: Path,
+    label: str, suite_name: str, executable: Path, framework_main: Path,
+    test_config: Path, target: Path, expected_count: int,
+    staging: Path, results: Path,
 ) -> None:
     if not port_available():
         raise RuntimeError(f"Port {FIXTURE_PORT} is in use before {label} run")
@@ -72,14 +72,14 @@ def run_case(
         if key.startswith("CJREPO_") or key.startswith("CJREPOMESH_"):
             env.pop(key)
     env["PATH"] = f"{executable.parent}{os.pathsep}{env.get('PATH', '')}"
-    output_dir = results / label
+    output_dir = results / f"{label}-{suite_name}"
     output_dir.mkdir()
     command = (
         sys.executable, str(framework_main),
         f"--test_cfg={test_config}",
-        f"--temp_dir={staging / (label + '-temp')}",
+        f"--temp_dir={staging / (label + '-' + suite_name + '-temp')}",
         f"--log_dir={output_dir / 'maple-log'}",
-        "--fail_exit", "-p", "FAIL", str(fixture_info),
+        "--fail_exit", "-p", "FAIL", str(target),
     )
     started = time.monotonic()
     try:
@@ -92,13 +92,14 @@ def run_case(
         wait_for_port_release()
     output = completed.stdout
     (output_dir / "runner.log").write_text(output, encoding="utf-8")
-    if completed.returncode != 0 or PASS_SUMMARY not in output:
+    pass_summary = f"Total: {expected_count}, PASS: {expected_count}, FAIL: 0"
+    if completed.returncode != 0 or pass_summary not in output:
         raise RuntimeError(
-            f"{label} Maple LLT failed (exit {completed.returncode}); "
+            f"{label} {suite_name} Maple LLT failed (exit {completed.returncode}); "
             f"inspect {output_dir / 'runner.log'}"
         )
     print(
-        f"PASS {label}: Maple {FIXTURE_NAME} 1/1, "
+        f"PASS {label}: Maple {suite_name} {expected_count}/{expected_count}, "
         f"{time.monotonic() - started:.2f}s; cjpm SHA-256 {file_sha256(executable)}",
         flush=True,
     )
@@ -108,6 +109,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--framework", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
+    parser.add_argument("--config-suite", type=Path, required=True)
+    parser.add_argument("--missing-repository-case", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
     parser.add_argument("--official-cjpm", type=Path, required=True)
     parser.add_argument("--enhanced-cjpm", type=Path, required=True)
@@ -117,6 +120,14 @@ def main() -> int:
     fixture = args.fixture.expanduser().resolve()
     require_file(fixture / f"{FIXTURE_NAME}.info", "official LLT case")
     require_file(fixture / "run_matrix.sh", "official LLT script")
+    config_suite = args.config_suite.expanduser().resolve()
+    if not config_suite.is_dir() or len(tuple(config_suite.rglob("*.info"))) != 3:
+        raise ValueError(f"Expected the three official cjpm config LLT cases: {config_suite}")
+    missing_repository_case = require_file(
+        args.missing_repository_case, "official missing-repository LLT case",
+    )
+    if missing_repository_case.name != "central_repository_missing.info":
+        raise ValueError(f"Unexpected missing-repository case: {missing_repository_case}")
     config = require_file(args.test_config, "official test configuration")
     official = require_file(args.official_cjpm, "official cjpm")
     enhanced = require_file(args.enhanced_cjpm, "enhanced cjpm")
@@ -139,15 +150,24 @@ def main() -> int:
             shutil.copy2(config, copied_config)
             for label, executable in (("official", official), ("enhanced", enhanced)):
                 run_case(
-                    label, executable, framework_main, copied_config,
-                    fixture_info, staging, results,
+                    label, FIXTURE_NAME, executable, framework_main,
+                    copied_config, fixture_info, 1, staging, results,
+                )
+                # Directory-mode Maple resolves testlist beside test.cfg.
+                run_case(
+                    label, "config", executable, framework_main,
+                    config, config_suite, 3, staging, results,
+                )
+                run_case(
+                    label, "central_repository_missing", executable, framework_main,
+                    config, missing_repository_case, 1, staging, results,
                 )
     finally:
         try:
             temp_parent.rmdir()
         except OSError:
             pass
-    print(f"Both Maple LLT runs passed. Logs: {results}", flush=True)
+    print(f"Both Maple LLT suites passed for both binaries. Logs: {results}", flush=True)
     return 0
 
 

@@ -413,7 +413,15 @@ public class RepositoryRouter {
             instance.depots.add(depot)
         }
         if (instance.depots.isEmpty()) {
-            eprintln("Error: no enabled repository with a non-empty registry is configured")
+            // Preserve the historical single-home diagnostic used by existing
+            // cjpm callers and the upstream LLT when only home/cache exist.
+            let legacyHome = FINAL_CJPM_CONFIG_INFO.repository[REPO_HOME_NAME]
+            if (FINAL_CJPM_CONFIG_INFO.repository.size == 2 && legacyHome.enabled &&
+                legacyHome.registry.isEmpty() && FINAL_CJPM_CONFIG_INFO.routes.isEmpty()) {
+                eprintln("Error: get registry of [repository.home] failed, please check if cangjie-repo.toml is set up correctly")
+            } else {
+                eprintln("Error: no enabled repository with a non-empty registry is configured")
+            }
             return None
         }
         for (route in FINAL_CJPM_CONFIG_INFO.routes) {

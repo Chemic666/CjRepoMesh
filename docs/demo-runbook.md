@@ -8,7 +8,7 @@
 
 ## 证据边界与录制顺序
 
-截至 2026-09-23，提交 `0f0e076` 上 Linux 四组核心回归 **4/4 PASS，710.19 秒**，包含此前 `662935d` 新增的篡改制品场景；同一提交上 Docker Compose 诊断 **9/9 PASS**。历史 Windows 五组曾 **5/5 PASS**，但当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。完整 Maple HLT/LLT 也尚未运行。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-23，提交 `e5be054` 上 Linux 四组核心回归 **4/4 PASS，184.08 秒**，包含菱形依赖图与篡改制品场景；标准 Docker Compose 诊断 **9/9 PASS**。之后修复旧诊断并新编译增强版 cjpm，Linux 四组再获 **4/4 PASS，161.42 秒**（复用服务端构建）。五个选定官方 cjpm LLT 用例经 Maple 框架在原版与增强版上各 **1/1 + 3/3 + 1/1 PASS**，但完整 HLT/LLT 尚未运行。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 
@@ -40,7 +40,7 @@
 
 > 独占命名空间缺包必须失败；仓库认证失败也不能回退。可用性机制不能越过安全边界。
 
-> Linux 四组和 Docker 部署已有实测通过；Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
+> Linux 四组和 Docker 部署已有实测通过；Maple 只跑通五个选定的官方 LLT 用例。Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
 
 ## 演示画面与命令
 
@@ -59,7 +59,7 @@ Linux 核心回归从已配置的 WSL Bash 中执行，环境准备见 [Linux �
 ./integration-tests/run-linux.sh
 ```
 
-四组耗时受本机环境影响很大，最近一次为 710.19 秒；录制时要标明当次真实耗时。主视频只截取相关断言与汇总，完整输出留在无剪切录像中。可展示 `highest compatible version across repositories`、`exclusive namespace dependency-confusion protection`、跨仓传递依赖来源核对等 PASS 行；不要把报告中的旧行当作当次运行画面。Explain/Doctor/Recorded 的语义由测试夹具和报告支撑；录屏应展示实际输出，不只展示命令文字。
+四组耗时受本机环境影响很大，最近一次为 161.42 秒（复用服务端构建）；录制时要标明当次真实耗时及是否重编译服务端。主视频只截取相关断言与汇总，完整输出留在无剪切录像中。可展示 `highest compatible version across repositories`、`cross-repository diamond converges on one audited meshdep source`、`exclusive namespace dependency-confusion protection` 等 PASS 行；不要把报告中的旧行当作当次运行画面。Explain/Doctor/Recorded 的语义由测试夹具和报告支撑；录屏应展示实际输出，不只展示命令文字。
 
 Proxy 基准报告中的 Cold Median **62.76 ms**（10 轮）、Warm Median **33.102 ms**（50 轮）、Median **1.9x** 均来自 2026-09-22 本机 HTTP 微基准，不代表公网官方仓或跨机延迟。Mirror 是显式清单镜像，不宣称完整复制官方中心仓；Sync 不宣称调度或断点续传。
 
