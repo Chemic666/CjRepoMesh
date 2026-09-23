@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的三十二个选定 cjpm LLT 用例在原版与增强版上各 32/32 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
+> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
 
 ## 环境
 
@@ -173,5 +173,7 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 随后把官方 `install/local` 的十七个 `.info` 全数纳入入口。首次探索把 `HOME` 指向隔离目录却未把其 `.cjpm/bin` 加入 `PATH`，导致原版 **15/17**：两个安装后的命令调用报 `command not found`；补齐隔离路径后，原版和增强版探索分别 **17/17 PASS**。最终统一入口每版使用独立临时 `HOME`，测试期间将相应 `.cjpm/bin` 放入 `PATH`，避免写入用户日常仓颉安装目录。统一回归原版与增强版各 **28/28 PASS**（HTTP 1、配置 3、安装覆盖 5、本地安装 17、更新 2），稳定化制品矩阵另各 **1/1 PASS**。逐例日志与夹具调整摘要在外层 `test-runs/maple-smoke/run-1790174668-ce1149a9/`。两版二进制摘要未变，未改产品源码；Linux 四组、Docker、Windows 原生五组及完整 Maple HLT/LLT 未因这次入口扩展而重跑。
 
 再次纳入官方 `uninstall` 四个用例：隔离 `HOME` 的探索运行两版各 **4/4 PASS**；统一回归原版与增强版各 **32/32 PASS**（HTTP 1、配置 3、安装覆盖 5、本地安装 17、卸载 4、更新 2），稳定化制品矩阵另各 **1/1 PASS**。日志在外层 `test-runs/maple-smoke/run-1790175442-0c33ee03/`，两版二进制摘要未变。官方 `install/git` 两例被官方 `testlist` 显式排除，探索入口只提示不在清单，未强行计入通过数。本轮仍未修改产品源码或复测 Linux 四组、Docker、Windows 原生五组及完整 Maple HLT/LLT。
+
+本轮扩展官方 `update/coverage` 七个用例，其中 `local_index_refresh` 使用仅监听 `127.0.0.1:39138` 的测试服务，入口仅在临时副本规范该夹具 Windows 检出文件的 CRLF。两版统一运行各 **39/39 PASS**（前述 32 项加更新 7 项），稳定化制品矩阵另各 **1/1 PASS**。逐例日志与夹具调整摘要在外层 `test-runs/maple-smoke/run-1790176547-80305f39/`。两版二进制摘要未变，产品源码及官方测试仓跟踪文件未改；Linux 四组、Docker、Windows 原生五组和完整 Maple HLT/LLT 本轮未复测。
 
 本地官方测试快照仍有大量未覆盖用例：CJNATIVE cjpm LLT 773 个 `.info`、HLT cjpm 157 个 `.info`，上述通过数只是子集。部分 HLT 发布用例会携带测试凭据向外部中心仓执行 `cjpm publish`，本轮未运行，也未在报告中披露凭据。完整 HLT 需要先明确可用的隔离测试仓和写入授权。

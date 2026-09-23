@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 FIXTURE_NAME = "http_status_matrix"
-FIXTURE_PORTS = (39137, 39139)
+FIXTURE_PORTS = (39137, 39138, 39139)
 
 
 def file_sha256(path: Path) -> str:
@@ -52,8 +52,8 @@ def wait_for_port_release() -> None:
     raise RuntimeError(f"Official fixture ports still listening: {occupied_ports()}")
 
 
-def normalized_fixture(source: Path, destination: Path) -> Path:
-    target = destination / FIXTURE_NAME
+def normalized_fixture(source: Path, destination: Path, name: str) -> Path:
+    target = destination / name
     shutil.copytree(source, target)
     # The official fixture's end-anchored sed expressions and shell shebangs
     # require LF. Modify only the per-run copy, never the upstream checkout.
@@ -61,7 +61,7 @@ def normalized_fixture(source: Path, destination: Path) -> Path:
         if path.is_file() and path.suffix in {".sh", ".toml", ".cj"}:
             contents = path.read_bytes()
             path.write_bytes(contents.replace(b"\r\n", b"\n"))
-    return target / f"{FIXTURE_NAME}.info"
+    return target / f"{name}.info"
 
 
 def stabilized_archive_fixture(source: Path, destination: Path) -> tuple[Path, Path]:
@@ -151,6 +151,7 @@ def main() -> int:
     parser.add_argument("--install-local-suite", type=Path, required=True)
     parser.add_argument("--uninstall-suite", type=Path, required=True)
     parser.add_argument("--update-wrong-config", type=Path, required=True)
+    parser.add_argument("--update-coverage", type=Path, required=True)
     parser.add_argument("--archive-fixture", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
     parser.add_argument("--official-cjpm", type=Path, required=True)
@@ -187,6 +188,23 @@ def main() -> int:
     update_wrong_config = args.update_wrong_config.expanduser().resolve()
     if not update_wrong_config.is_dir() or len(tuple(update_wrong_config.rglob("*.info"))) != 2:
         raise ValueError(f"Expected two official cjpm update config LLT cases: {update_wrong_config}")
+    update_coverage = args.update_coverage.expanduser().resolve()
+    update_cases = (
+        "central_dependency_cached_update",
+        "central_dependency_empty_version",
+        "git_invalid_remote",
+        "update_skip_script",
+        "update_unknown_option",
+        "workspace_missing_member",
+    )
+    update_infos = {
+        name: require_file(update_coverage / name / f"{name}.info", f"official {name} LLT case")
+        for name in update_cases
+    }
+    refresh_fixture = update_coverage / "local_index_refresh"
+    require_file(refresh_fixture / "local_index_refresh.info", "official local index refresh LLT case")
+    require_file(refresh_fixture / "run_refresh.sh", "official local index refresh script")
+    require_file(refresh_fixture / "server.py", "official local index refresh server")
     archive_fixture = args.archive_fixture.expanduser().resolve()
     require_file(archive_fixture / "repository_archive_matrix.info", "official archive LLT case")
     require_file(archive_fixture / "run_archive_matrix.sh", "official archive LLT script")
@@ -208,7 +226,8 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="maple-smoke-", dir=temp_parent) as raw:
             staging = Path(raw)
-            fixture_info = normalized_fixture(fixture, staging)
+            fixture_info = normalized_fixture(fixture, staging, FIXTURE_NAME)
+            refresh_info = normalized_fixture(refresh_fixture, staging, "local_index_refresh")
             archive_info, stabilized_server = stabilized_archive_fixture(archive_fixture, staging)
             (results / "archive-fixture-adjustment.txt").write_text(
                 "repository_archive_matrix/server.py: test-copy only, gzip mtime pinned to 0\n"
@@ -244,6 +263,15 @@ def main() -> int:
                 run_case(
                     label, "update_wrong_config", executable, framework_main,
                     config, update_wrong_config, 2, staging, results,
+                )
+                for case_name, case_info in update_infos.items():
+                    run_case(
+                        label, case_name, executable, framework_main,
+                        config, case_info, 1, staging, results, isolate_home=True,
+                    )
+                run_case(
+                    label, "local_index_refresh", executable, framework_main,
+                    copied_config, refresh_info, 1, staging, results, isolate_home=True,
                 )
                 run_case(
                     label, "repository_archive_matrix_stabilized", executable,
