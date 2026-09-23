@@ -28,8 +28,8 @@
 ## C. 验证材料
 
 - [ ] `docs/verification-report.md` 使用最终提交号和最终一次真实耗时；
-- [ ] `benchmark/results/proxy-benchmark.json` 保留原始样本；
-- [ ] Benchmark Markdown 与 JSON 结果一致；
+- [x] `benchmark/results/proxy-benchmark.json` 保留 Cold 10 次、Warm 50 次原始样本；
+- [x] 已按运行脚本的 Median/P95/Average 算法复算，Benchmark Markdown 与 JSON 的统计值一致；
 - [ ] Windows 一键部署在干净数据目录重新验证；
 - [x] WSL 2 / Ubuntu 22.04 Linux 原生基线已记录在 `docs/linux-verification.md`；
 - [x] Windows 五组与 Linux 四组共享核心入口已在提交 `8e33119` 上分别 5/5、4/4 通过；Windows 仍需最终重跑；
