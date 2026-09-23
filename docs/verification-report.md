@@ -1,8 +1,8 @@
 # CjRepoMesh 全量验证报告
 
 > 执行日期：2026-09-23
-> 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `0f0e076`
-> 结论：最近验证提交 Linux 四组完整回归 4/4、Docker 诊断 9/9；Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过或专项复核当作当前全量通过。
+> 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `0f0e076`；菱形依赖专项 `add0849`
+> 结论：最近完整验证提交 Linux 四组 4/4、Docker 诊断 9/9；新增菱形依赖在 Linux 多仓单组通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过或专项复核当作当前全量通过。
 
 ## 环境
 
@@ -141,3 +141,9 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 2026-09-23 在提交 `0f0e076` 上，将 Windows 源码同步到已有 WSL 测试副本后执行 `./integration-tests/run-linux.sh`，统一入口实际重新编译服务端。四组 **4/4 PASS，总耗时 710.19s**：Multi-repository 596.43s、Hosted 46.42s、Proxy 45.70s、Repository sync 21.56s。多仓组含先前新增的篡改制品拒绝、同缓存恢复、单并发双拒绝、独占命名空间 404/401/403/500 矩阵等断言，因此这轮不再仅依赖 `662935d` 的专项单组结果。测试后固定端口无监听，`integration-tests/.tmp` 不存在。耗时与先前 103.30s 的环境条件不同，不据此推断产品性能退化。
 
 同一提交随后使用本地已有 `ubuntu:22.04` 基础镜像和 WSL 编译产物执行 `deployment/docker/up.ps1 → doctor.ps1 → down.ps1`，**9/9 PASS**。启动输出未回显 Token；本轮 Compose 容器和网络已移除，命名卷保留；用户独立容器 `magical_bartik` 仍健康。此复核没有重跑真实发布及持久化重建场景，那些证据仍以 `docs/docker-verification.md` 的历史完整流程为准。Windows 当前原生构建与完整 Maple HLT/LLT 仍未通过本轮验证。
+
+## 菱形依赖图专项复核
+
+提交 `add0849` 新增第三个跨仓夹具 `meshleaf`。根应用同时依赖 `meshbridge` 与 `meshleaf`，两条分支汇聚到同一个 `meshdep`。相容场景中，`meshbridge 1.0.0` 来自低优先级仓，`meshleaf 1.0.0` 和 `meshdep 1.0.0` 来自高优先级仓；测试核对三个运行标记，以及三条来源记录的版本、仓库地址和实际制品 SHA-256。冲突场景让 `meshbridge 2.0.0` 要求 `meshdep 2.0.0`，而 `meshleaf 1.0.0` 要求 `meshdep 1.0.0`，解析必须明确失败。
+
+2026-09-23 在 WSL 2 / Ubuntu 22.04.5 中，直接对 Windows 工作区执行 `python3 integration-tests/run.py --suite multirepo --cjpm <现有增强版 Linux 二进制> --server <现有服务端 Linux 二进制> --skip-server-build`。新增成功和冲突场景、其余既有多仓断言均 **PASS，多仓组 147.98s，入口总耗时 151.42s**。本轮复用已编译二进制，没有重编译 cjpm 或服务端；固定测试端口与 `integration-tests/.tmp` 结束后均无残留。它属于最新测试内容的多仓单组专项，不替代 `0f0e076` 的 Linux 四组、Docker 9/9，也不解决 Windows 或完整 Maple HLT/LLT 缺口。
