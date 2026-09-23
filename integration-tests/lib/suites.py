@@ -289,7 +289,6 @@ def run_multirepo(context: TestContext) -> None:
     low = (39142, "low")
     missing = (39143, "missing")
     server_error = (39143, "server-error")
-    unauthorized = (39144, "unauthorized")
     token = (39145, "token")
     private = (39146, "private")
     private_missing = (39146, "missing")
@@ -389,28 +388,37 @@ def run_multirepo(context: TestContext) -> None:
     context.pass_message("repo explain makes replacement and source priority visible")
 
     low_log = context.multirepo_root / "low.requests.log"
-    remove_within(low_log, (context.tests_root,))
     auth_app = context.multirepo_root / "app-auth-barrier"
-    context.reset_app(auth_app)
-    result = _run_with_repositories(
-        context, "app-auth-barrier", (unauthorized, low), ("run",), expect_success=False
-    )
-    if low_log.exists() and low_log.stat().st_size:
-        raise TestFailure("401 security barrier failed: lower-priority repository was accessed")
-    assert_contains(result.output, "status 401")
-    context.pass_message("401 blocks fallback")
+    for status, mode in ((401, "unauthorized"), (403, "forbidden")):
+        barrier = (39144, mode)
+        context.reset_app(auth_app)
+        remove_within(low_log, (context.tests_root,))
+        result = _run_with_repositories(
+            context, "app-auth-barrier", (barrier, low), ("run",), expect_success=False
+        )
+        if low_log.exists() and low_log.stat().st_size:
+            raise TestFailure(
+                f"{status} security barrier failed: lower-priority repository was accessed"
+            )
+        assert_contains(result.output, f"status {status}")
+        context.pass_message(f"{status} blocks fallback")
 
-    context.reset_app(auth_app)
-    result = _run_with_repositories(
-        context,
-        "app-auth-barrier",
-        (unauthorized, low),
-        ("repo", "doctor", "meshdep"),
-        expect_success=False,
-    )
-    for expected in ("Metadata API   FAIL  status=401", "Fallback       BLOCKED", "Overall: FAIL"):
-        assert_contains(result.output, expected)
-    context.pass_message("repo doctor identifies authentication barriers")
+        # Doctor diagnoses each configured candidate independently; its probes are not resolution fallback.
+        context.reset_app(auth_app)
+        result = _run_with_repositories(
+            context,
+            "app-auth-barrier",
+            (barrier, low),
+            ("repo", "doctor", "meshdep"),
+            expect_success=False,
+        )
+        for expected in (
+            f"Metadata API   FAIL  status={status}",
+            "Fallback       BLOCKED",
+            "Overall: FAIL",
+        ):
+            assert_contains(result.output, expected)
+        context.pass_message(f"repo doctor identifies {status} authentication barrier")
 
     token_app = context.multirepo_root / "app-token"
     context.reset_app(token_app)

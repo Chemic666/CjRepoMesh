@@ -47,7 +47,7 @@ def fixtures():
         return [ROOT / "packages" / "company-auth-v1-private"]
     if REPOSITORY == "public":
         return [ROOT / "packages" / "company-auth-v9-public"]
-    if REPOSITORY in ("missing", "server-error", "unauthorized"):
+    if REPOSITORY in ("missing", "server-error", "unauthorized", "forbidden"):
         return []
     raise ValueError(f"unknown repository: {REPOSITORY}")
 
@@ -75,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
             "missing": 404,
             "server-error": 500,
             "unauthorized": 401,
+            "forbidden": 403,
         }.get(REPOSITORY)
         if forced_status is not None:
             payload = json.dumps({"errors": [{"message": REPOSITORY}]}).encode("utf-8")
