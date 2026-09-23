@@ -438,6 +438,28 @@ def run_multirepo(context: TestContext) -> None:
             raise TestFailure(f"{status} artifact failure wrote a successful provenance record")
         context.pass_message(f"{status} artifact denial preserves the chosen repository source")
 
+    context.reset_app(pinned_app)
+    remove_within(low_log, (context.tests_root,))
+    result = _run_with_repositories(
+        context, "app-pinned", ((39141, "corrupt-high"), low),
+        ("run",), expect_success=False,
+    )
+    assert_contains(result.output, "package was broken while downloading")
+    if any(line.startswith("GET /pkg/") for line in _read_lines(low_log)):
+        raise TestFailure("Corrupt chosen artifact fell back to a lower-priority artifact")
+    if (pinned_app / "cjpm-provenance.json").exists():
+        raise TestFailure("Corrupt chosen artifact wrote a successful provenance record")
+    result = _run_with_repositories(context, "app-pinned", (high, low), ("run",))
+    assert_contains(result.output, "high-1.0.0")
+    provenance = json.loads((pinned_app / "cjpm-provenance.json").read_text(encoding="utf-8"))
+    mesh_source = next(item for item in provenance["packages"] if item["package"] == "meshdep")
+    assert_equal(mesh_source["repository"], "high", label="recovered artifact repository")
+    artifact = (
+        context.multirepo_root / "packages" / "meshdep-v1-high" / "target" / "meshdep-1.0.0.cjp"
+    )
+    assert_equal(mesh_source["sha256"], sha256(artifact), label="recovered artifact SHA-256")
+    context.pass_message("corrupt chosen artifact is rejected without fallback or cache poisoning")
+
     denied_app = _transitive_app(
         context, "transitive-artifact-denied", mesh_requirement="2.0.0",
         bridge_requirement="2.0.0",

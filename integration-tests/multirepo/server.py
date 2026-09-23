@@ -12,7 +12,9 @@ LOG = ROOT / f"{REPOSITORY}.requests.log"
 
 
 def fixtures():
-    if REPOSITORY in ("high", "token", "artifact-unauthorized", "artifact-forbidden"):
+    if REPOSITORY in (
+        "high", "token", "artifact-unauthorized", "artifact-forbidden", "corrupt-high"
+    ):
         return [ROOT / "packages" / "meshdep-v1-high"]
     if REPOSITORY in ("low", "corrupt"):
         return [
@@ -110,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 if info["name"] == name and info["version"] == version:
                     artifact = item / "target" / f"{name}-{version}.cjp"
                     payload = artifact.read_bytes()
-                    if REPOSITORY == "corrupt":
+                    if REPOSITORY in ("corrupt", "corrupt-high"):
                         payload = bytes([payload[0] ^ 0xFF]) + payload[1:]
                     self.send_bytes(200, payload)
                     return
