@@ -1,7 +1,7 @@
 # 官方 cjpm 兼容性差分记录
 
 > 执行日期：2026-09-23
-> 项目测试入口：`a49b5e1`；本轮并发下载失败修复：`efb7e24`
+> 项目测试入口：`a49b5e1`；并发下载失败修复：`efb7e24`；本轮旧诊断兼容修复：`0aae9ea`
 > 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过；官方 HTTP 状态 LLT 的 16 条断言在两版上分别通过，且官方 Maple 框架对 HTTP 状态、三个配置及缺少中心仓用例在两版上各 5/5 通过。完整 Maple HLT/LLT 尚未运行。
 
 ## 对照基线与环境
@@ -11,7 +11,7 @@
 | 官方 cjpm 源码 | `Cangjie/cangjie_tools` 提交 `2978007`，即项目修改前的基线 |
 | 官方测试源码 | `Cangjie/cangjie_test` 提交 `1dfa37619f920884e119d7f51266869c8f0fd81e` |
 | 官方 Maple 框架 | `Cangjie/cangjie_test_framework` 提交 `e92721e2000c00c19701d4df2ac9e42e7921fe5c` |
-| 增强版 cjpm 源码 | 本仓库 `efb7e24` 后续版本；本轮另修复仅含旧 `repository.home`/`repository.cache` 时的失败提示兼容性 |
+| 增强版 cjpm 源码 | 本仓库 `0aae9ea`；在 `efb7e24` 后另修复仅含旧 `repository.home`/`repository.cache` 时的失败提示兼容性 |
 | 运行系统 | WSL 2 / Ubuntu 22.04.5 x86_64 |
 | 编译器 / stdx | Cangjie 1.1.3 cjnative / stdx 1.1.3.1 |
 | Python | 3.10.12 |
