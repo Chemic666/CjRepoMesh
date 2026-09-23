@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 项目测试入口：`a49b5e1`；并发下载失败修复：`efb7e24`；本轮旧诊断兼容修复：`0aae9ea`
-> 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过；官方 HTTP 状态 LLT 的 16 条断言在两版上分别通过，且官方 Maple 框架对 HTTP 状态、三个配置及缺少中心仓用例在两版上各 5/5 通过。完整 Maple HLT/LLT 尚未运行。
+> 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过；官方 HTTP 状态 LLT 的 16 条断言在两版上分别通过，且官方 Maple 框架对七个选定 cjpm LLT 用例在两版上各 7/7 通过；另一个制品异常矩阵仅在稳定化测试副本上两版各 1/1 通过。完整 Maple HLT/LLT 尚未运行。
 
 ## 对照基线与环境
 
@@ -57,6 +57,14 @@
 
 首次扩展 `central_repository_missing.info` 时，原版 **PASS**，增强版 **FAIL**：二者都正确拒绝缺少中心仓的安装，但增强版改写了旧错误提示，未匹配官方断言。修复仅在配置只含默认 `home`/`cache`、`home` 启用且 registry 为空、未配置路由时恢复原版提示；其余无可用仓配置仍显示新诊断。重新编译后，官方 Maple 判定原版 HTTP 状态 **1/1 PASS（46.33s）**、配置 **3/3 PASS（4.11s）**、缺仓 **1/1 PASS（1.39s）**；增强版 HTTP 状态 **1/1 PASS（45.86s）**、配置 **3/3 PASS（4.03s）**、缺仓 **1/1 PASS（1.25s）**。两版各五个选定用例全部通过，运行日志保存在工作区外层 `test-runs/maple-smoke/run-1790168948-56463991/`。这里的 HTTP 1/1 表示一个官方 `.info` 用例，不是 16 个独立 Maple 用例；框架仓虽已就绪，WSL Python 环境仍没有 `pexpect` 和 `fasteners`，尚未启动整套测试。
 
+## 七用例扩展与制品矩阵波动
+
+又增加 `repository_cached.info` 和 `git_install_invalid_config.info`，完整入口在原版与增强版上分别 **7/7 PASS**：HTTP 状态 1/1、配置 3/3、缺仓 1/1、缓存安装 1/1、Git 无效配置 1/1。两版二进制摘要与上表一致；逐例日志在外层 `test-runs/maple-smoke/run-1790170871-2e498703/`。测试仅用临时副本规范 HTTP 夹具行尾，官方测试仓 Git 跟踪文件未变。
+
+另探索官方 `repository_archive_matrix.info`：原版首次通过，增强版首次在 `wrongpkg` 处被 SHA-256 校验拒绝，第二次原样复跑通过。该官方夹具的 `server.py` 在索引与制品请求中分别调用 `tarfile.open(..., mode="w:gz")` 动态生成同名压缩包；本地直接跨秒调用 `make_archive("wrongpkg")` 得到不同 gzip 时间戳字节和 SHA-256。因此首次失败不能直接归因为增强版回归，也不能把一次重跑通过称为稳定通过。
+
+随后只在烟测入口的临时测试副本中，将该服务脚本的 gzip mtime 固定为 0；不改归档内容、索引断言或 cjpm 的哈希校验。Maple 复核原版 **1/1 PASS（10.64s）**、增强版 **1/1 PASS（9.57s）**，与前述七个用例共同运行的日志在 `test-runs/maple-smoke/run-1790171311-a4644d17/`；其中 `archive-fixture-adjustment.txt` 记录原始和调整后服务脚本的 SHA-256。这个结果只证明稳定化夹具下的兼容性，不把它算入七个未改测试逻辑的用例，也不宣称原始夹具稳定通过。
+
 ## 复现命令
 
 在加载仓颉 SDK `envsetup.sh` 并设置 `CANGJIE_STDX_PATH` 后，从项目根目录运行：
@@ -72,6 +80,6 @@ python3 integration-tests/compatibility/run.py \
 
 ## 尚未覆盖
 
-- 官方 Maple 框架已跑通上述五个选定的 cjpm LLT 用例；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。本报告不把子集通过外推为整套通过。
+- 官方 Maple 框架已跑通上述七个选定的 cjpm LLT 用例，另有一个稳定化制品异常矩阵通过；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原样制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
 - 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。

@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 FIXTURE_NAME = "http_status_matrix"
-FIXTURE_PORT = 39137
+FIXTURE_PORTS = (39137, 39139)
 
 
 def file_sha256(path: Path) -> str:
@@ -35,17 +35,21 @@ def require_file(path: Path, label: str) -> Path:
     return path
 
 
-def port_available() -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        return probe.connect_ex(("127.0.0.1", FIXTURE_PORT)) != 0
+def occupied_ports() -> list[int]:
+    occupied = []
+    for port in FIXTURE_PORTS:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                occupied.append(port)
+    return occupied
 
 
 def wait_for_port_release() -> None:
     for _ in range(50):
-        if port_available():
+        if not occupied_ports():
             return
         time.sleep(0.1)
-    raise RuntimeError(f"Official fixture port {FIXTURE_PORT} is still listening")
+    raise RuntimeError(f"Official fixture ports still listening: {occupied_ports()}")
 
 
 def normalized_fixture(source: Path, destination: Path) -> Path:
@@ -60,13 +64,39 @@ def normalized_fixture(source: Path, destination: Path) -> Path:
     return target / f"{FIXTURE_NAME}.info"
 
 
+def stabilized_archive_fixture(source: Path, destination: Path) -> tuple[Path, Path]:
+    target = destination / "repository_archive_matrix"
+    shutil.copytree(source, target)
+    for path in target.rglob("*"):
+        if path.is_file() and path.suffix in {".sh", ".toml", ".cj"}:
+            contents = path.read_bytes()
+            path.write_bytes(contents.replace(b"\r\n", b"\n"))
+    server = target / "server.py"
+    original = server.read_text(encoding="utf-8")
+    if (original.count('tarfile.open(fileobj=output, mode="w:gz")') != 1 or
+            original.count("LICENSE_CJ = ") != 1):
+        raise ValueError("Official archive fixture changed; review stabilization before running")
+    # The upstream server regenerates an archive for index and package GETs.
+    # gzip's current-time header makes those bytes differ across a second.
+    # Pin only the per-run fixture's gzip mtime; package contents are unchanged.
+    patch = (
+        "import gzip as _fixture_gzip\n"
+        "from functools import partial as _fixture_partial\n"
+        "_fixture_gzip.GzipFile = _fixture_partial(_fixture_gzip.GzipFile, mtime=0)\n\n"
+    )
+    stabilized = original.replace("LICENSE_CJ = ", patch + "LICENSE_CJ = ", 1)
+    compile(stabilized, str(server), "exec")
+    server.write_text(stabilized, encoding="utf-8")
+    return target / "repository_archive_matrix.info", server
+
+
 def run_case(
     label: str, suite_name: str, executable: Path, framework_main: Path,
     test_config: Path, target: Path, expected_count: int,
     staging: Path, results: Path,
 ) -> None:
-    if not port_available():
-        raise RuntimeError(f"Port {FIXTURE_PORT} is in use before {label} run")
+    if occupied_ports():
+        raise RuntimeError(f"Fixture ports in use before {label} run: {occupied_ports()}")
     env = dict(os.environ)
     for key in tuple(env):
         if key.startswith("CJREPO_") or key.startswith("CJREPOMESH_"):
@@ -110,7 +140,8 @@ def main() -> int:
     parser.add_argument("--framework", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--config-suite", type=Path, required=True)
-    parser.add_argument("--missing-repository-case", type=Path, required=True)
+    parser.add_argument("--install-coverage", type=Path, required=True)
+    parser.add_argument("--archive-fixture", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
     parser.add_argument("--official-cjpm", type=Path, required=True)
     parser.add_argument("--enhanced-cjpm", type=Path, required=True)
@@ -123,18 +154,29 @@ def main() -> int:
     config_suite = args.config_suite.expanduser().resolve()
     if not config_suite.is_dir() or len(tuple(config_suite.rglob("*.info"))) != 3:
         raise ValueError(f"Expected the three official cjpm config LLT cases: {config_suite}")
-    missing_repository_case = require_file(
-        args.missing_repository_case, "official missing-repository LLT case",
+    install_coverage = args.install_coverage.expanduser().resolve()
+    if not install_coverage.is_dir():
+        raise ValueError(f"Official install coverage directory not found: {install_coverage}")
+    install_cases = (
+        "central_repository_missing",
+        "repository_cached",
+        "git_install_invalid_config",
     )
-    if missing_repository_case.name != "central_repository_missing.info":
-        raise ValueError(f"Unexpected missing-repository case: {missing_repository_case}")
+    install_infos = {
+        name: require_file(install_coverage / name / f"{name}.info", f"official {name} LLT case")
+        for name in install_cases
+    }
+    archive_fixture = args.archive_fixture.expanduser().resolve()
+    require_file(archive_fixture / "repository_archive_matrix.info", "official archive LLT case")
+    require_file(archive_fixture / "run_archive_matrix.sh", "official archive LLT script")
+    require_file(archive_fixture / "server.py", "official archive LLT server")
     config = require_file(args.test_config, "official test configuration")
     official = require_file(args.official_cjpm, "official cjpm")
     enhanced = require_file(args.enhanced_cjpm, "enhanced cjpm")
     if official == enhanced:
         raise ValueError("Official and enhanced cjpm paths must differ")
-    if not port_available():
-        raise RuntimeError(f"Port {FIXTURE_PORT} is already in use")
+    if occupied_ports():
+        raise RuntimeError(f"Fixture ports already in use: {occupied_ports()}")
 
     results_parent = args.results_dir.expanduser().resolve()
     results_parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +188,13 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="maple-smoke-", dir=temp_parent) as raw:
             staging = Path(raw)
             fixture_info = normalized_fixture(fixture, staging)
+            archive_info, stabilized_server = stabilized_archive_fixture(archive_fixture, staging)
+            (results / "archive-fixture-adjustment.txt").write_text(
+                "repository_archive_matrix/server.py: test-copy only, gzip mtime pinned to 0\n"
+                f"official server SHA-256: {file_sha256(archive_fixture / 'server.py')}\n"
+                f"stabilized server SHA-256: {file_sha256(stabilized_server)}\n",
+                encoding="utf-8",
+            )
             copied_config = staging / "test.cfg"
             shutil.copy2(config, copied_config)
             for label, executable in (("official", official), ("enhanced", enhanced)):
@@ -158,9 +207,14 @@ def main() -> int:
                     label, "config", executable, framework_main,
                     config, config_suite, 3, staging, results,
                 )
+                for case_name, case_info in install_infos.items():
+                    run_case(
+                        label, case_name, executable, framework_main,
+                        config, case_info, 1, staging, results,
+                    )
                 run_case(
-                    label, "central_repository_missing", executable, framework_main,
-                    config, missing_repository_case, 1, staging, results,
+                    label, "repository_archive_matrix_stabilized", executable,
+                    framework_main, config, archive_info, 1, staging, results,
                 )
     finally:
         try:
