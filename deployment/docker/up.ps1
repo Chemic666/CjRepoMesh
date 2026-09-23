@@ -33,9 +33,17 @@ function Protect-CredentialFile([string]$Path) {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
         return
     }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Credential file must not be a symbolic link or reparse point: $Path"
+    }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $existingAcl = Get-Acl -LiteralPath $Path
+    $owner = $existingAcl.GetOwner([Security.Principal.SecurityIdentifier])
+    if ($owner.Value -ne $identity.User.Value) {
+        throw "Credential file is not owned by the current Windows user: $Path"
+    }
     $acl = [Security.AccessControl.FileSecurity]::new()
-    $acl.SetOwner($identity.User)
     $acl.SetAccessRuleProtection($true, $false)
     $rule = [Security.AccessControl.FileSystemAccessRule]::new(
         $identity.User,
@@ -43,7 +51,15 @@ function Protect-CredentialFile([string]$Path) {
         [Security.AccessControl.AccessControlType]::Allow
     )
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($Path), $acl)
+    $applied = Get-Acl -LiteralPath $Path
+    $accessRules = @($applied.GetAccessRules($true, $false, [Security.Principal.SecurityIdentifier]))
+    if (-not $applied.AreAccessRulesProtected -or $accessRules.Count -ne 1 -or
+        $accessRules[0].IdentityReference.Value -ne $identity.User.Value -or
+        $accessRules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+        $accessRules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl) {
+        throw "Credential file permissions could not be restricted to the current Windows user: $Path"
+    }
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -54,7 +70,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker engine is not running. Start Docker Desktop and retry."
 }
 
-if ([string]::IsNullOrWhiteSpace($publishTokenValue) -and (Test-Path -LiteralPath $envPath)) {
+$hadEnvFile = Test-Path -LiteralPath $envPath
+if (-not $hadEnvFile) {
+    [IO.File]::WriteAllText($envPath, "", [Text.UTF8Encoding]::new($false))
+}
+Protect-CredentialFile $envPath
+
+if ([string]::IsNullOrWhiteSpace($publishTokenValue) -and $hadEnvFile) {
     $existingToken = Get-Content -LiteralPath $envPath |
         Where-Object { $_.StartsWith("CJREPO_PUBLISH_TOKEN=") } |
         Select-Object -First 1
