@@ -167,7 +167,7 @@ def main() -> int:
             temp_parent.rmdir()
         except OSError:
             pass
-    print(f"Both Maple LLT suites passed for both binaries. Logs: {results}", flush=True)
+    print(f"All selected Maple LLT cases passed for both binaries. Logs: {results}", flush=True)
     return 0
 
 
