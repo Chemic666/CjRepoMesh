@@ -86,6 +86,8 @@ Overall                  PASS
 - 包数据只写入 `/var/lib/cjrepo` 命名卷；
 - 默认不向局域网暴露端口。
 
+2026-09-23 在 P1 回归中再次执行 `up.ps1 → doctor.ps1 → down.ps1`，9 项仍全部 PASS，容器停止后命名卷保留。回归同时发现启动脚本会回显发布 Token；提交 `de2da77` 已改为隐藏输出、使用 `SecureString` 接收显式 Token，并将 `.env` ACL 收紧为仅当前 Windows 用户。输出脱敏与 ACL 逻辑已验证；由于 Docker Desktop 随后停止，SecureString/ACL 完整容器启动链仍需在最终回归中复验。
+
 ## 边界
 
 - 当前镜像打包流程只支持 Linux x86_64；

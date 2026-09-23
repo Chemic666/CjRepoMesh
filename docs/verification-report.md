@@ -1,8 +1,8 @@
 # CjRepoMesh 全量验证报告
 
-> 执行日期：2026-09-22  
-> 被测代码基线：`b0ce10a`
-> 结论：Windows 五组历史基线通过；Linux 四组共享核心回归在提交 `3fee985` 上通过；Docker Compose 部署另行通过
+> 执行日期：2026-09-23
+> 核心回归基线：`8e33119`；后续安全修复：`de2da77`
+> 结论：Windows 五组端到端测试与 Linux 四组共享核心回归在 `8e33119` 上通过；后续测试/凭据安全修复完成静态检查，仍需最终全量重跑
 
 ## 环境
 
@@ -12,6 +12,7 @@
 | 仓颉编译器 | Cangjie Compiler 1.1.3（cjnative） |
 | 编译目标 | `x86_64-w64-mingw32` |
 | PowerShell | 7.6.5 |
+| Python | 3.12 |
 | 增强版 cjpm | `cjpm/target/release/bin/cjpm.exe` |
 | CjRepo Server | `server/target/release/bin/main.exe` |
 
@@ -20,19 +21,21 @@
 ## 执行命令
 
 ```powershell
-.\integration-tests\run-all.ps1
+.\integration-tests\run-all.ps1 -SkipServerBuild
 ```
 
 ## 结果
 
 | 测试组 | 结果 | 耗时 |
 | --- | --- | ---: |
-| Multi-repository cjpm | PASS | 102.14s |
-| Hosted repository | PASS | 34.60s |
-| Proxy repository | PASS | 34.29s |
-| Repository sync | PASS | 32.00s |
-| Windows deployment | PASS | 7.99s |
-| **合计** | **5/5 PASS** | **211.07s** |
+| Multi-repository cjpm | PASS | 45.03s |
+| Hosted repository | PASS | 3.06s |
+| Proxy repository | PASS | 7.24s |
+| Repository sync | PASS | 4.97s |
+| Windows deployment | PASS | 4.89s |
+| **合计** | **5/5 PASS** | **65.47s** |
+
+Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLVM 组件，因此本次遵循安全边界复用现有 `main.exe`，没有尝试关闭安全功能或重复触发 Windows 编译。相同提交内容随后在 Linux 统一入口中真实执行 `cjpm build`，服务端编译成功。`-SkipServerBuild` 只跳过服务端重编译，不跳过五组运行、故障或安全断言。
 
 ## 已验证证据
 
@@ -55,19 +58,19 @@
 
 ## Linux 共享核心回归
 
-2026-09-23 在 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 和 Python 3.10.12 环境中，对提交 `3fee985` 执行：
+2026-09-23 在 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 和 Python 3.10.12 环境中，对提交 `8e33119` 执行：
 
 ```bash
 ./integration-tests/run-linux.sh
 ```
 
-结果为 4/4 PASS，总耗时 75.21s：Multi-repository 57.51s、Hosted 6.53s、Proxy 7.46s、Repository sync 3.68s。该入口与 Windows 共用 Python 夹具、断言和安全清理逻辑，并实际调用一次服务端构建。端口与进程残留复核通过。详细证据见 `docs/linux-verification.md`。
+结果为 4/4 PASS，总耗时 77.25s：Multi-repository 59.23s、Hosted 6.56s、Proxy 7.50s、Repository sync 3.94s。该入口与 Windows 共用 Python 夹具、断言和安全清理逻辑，并实际调用一次服务端构建。端口、进程与临时数据残留复核通过。详细证据见 `docs/linux-verification.md`。
 
 ## 未覆盖范围
 
 - Linux 原生 cjpm/Server 构建、四组共享核心回归和离线来源解释已通过，详见 `docs/linux-verification.md`；
 - Docker Compose 一键启动、真实发布、容器重建持久化和最小权限诊断已通过，详见 `docs/docker-verification.md`；
-- Windows 五组尚未在提交 `3fee985` 上重跑；
+- Docker 在后续修复过程中再次 9/9 通过且启动输出不再回显 Token；`de2da77` 新增的 SecureString 与 `.env` ACL 逻辑已静态/权限测试，但因 Docker Desktop 随后停止，尚未再次执行容器启动；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；

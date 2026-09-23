@@ -189,7 +189,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-最近一次 Windows 完整运行记录为 5/5 组 PASS；Linux 共享核心入口在提交 `3fee985` 上为 4/4 组 PASS。详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md) 与 [Linux 原生验证](docs/linux-verification.md)。Docker Compose 已通过真实发布、容器重建持久化和 9 项安全诊断，见 [Docker 验证记录](docs/docker-verification.md)。最终提交前仍需基于最终提交号重新运行 Windows、Linux 和 Docker 回归。
+核心回归基线 `8e33119` 上，Windows 完整入口为 5/5 组 PASS，Linux 共享核心入口为 4/4 组 PASS。后续提交 `de2da77` 修复 Windows clean-checkout 可执行文件路径，并加强 Docker Token 输出、输入和 `.env` ACL；其静态与 ACL 逻辑检查通过，但仍需在最终提交号上重跑 Windows、Linux 和 Docker。详细环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[Linux 原生验证](docs/linux-verification.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
 性能测试单独运行，避免把性能波动混入功能回归：
 

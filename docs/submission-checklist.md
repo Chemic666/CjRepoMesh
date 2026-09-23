@@ -31,7 +31,7 @@
 - [ ] Benchmark Markdown 与 JSON 结果一致；
 - [ ] Windows 一键部署在干净数据目录重新验证；
 - [x] WSL 2 / Ubuntu 22.04 Linux 原生基线已记录在 `docs/linux-verification.md`；
-- [x] Linux 四组共享核心统一入口已在提交 `3fee985` 上 4/4 通过；
+- [x] Windows 五组与 Linux 四组共享核心入口已在提交 `8e33119` 上分别 5/5、4/4 通过；`de2da77` 后仍需最终重跑；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
 - [ ] 未运行完整 Maple HLT/LLT 时继续明确标注，不写“全部官方测试通过”；
