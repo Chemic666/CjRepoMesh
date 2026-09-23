@@ -70,11 +70,13 @@ class TestContext:
             "meshdep-v1-high",
             "meshdep-v1-low",
             "meshdep-v2-low",
+            "meshbridge-v1",
+            "meshbridge-v2",
             "company-auth-v1-private",
             "company-auth-v9-public",
         ):
             root = self.multirepo_root / "packages" / package
-            generated.extend((root / "target", root / "cache", root / "cjpm.lock"))
+            generated.extend((root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json"))
         for app in (
             "app",
             "app-pinned",
@@ -148,7 +150,7 @@ def _mock_command(context: TestContext, port: int, mode: str) -> tuple[str, ...]
 
 def _run_with_repositories(
     context: TestContext,
-    app_name: str,
+    app_name: str | Path,
     repositories: Iterable[tuple[int, str]],
     arguments: tuple[str, ...],
     *,
@@ -162,12 +164,91 @@ def _run_with_repositories(
             ports.append(port)
         for port in ports:
             wait_for_port(port)
+        app = app_name if isinstance(app_name, Path) else context.multirepo_root / app_name
         return context.cjpm_command(
-            context.multirepo_root / app_name,
+            app,
             *arguments,
             expect_success=expect_success,
             extra_env=extra_env,
         )
+
+
+def _transitive_app(
+    context: TestContext, name: str, *, mesh_requirement: str, bridge_requirement: str
+) -> Path:
+    app = context.temp_root / name
+    shutil.copytree(context.multirepo_root / "app", app)
+    manifest = app / "cjpm.toml"
+    text = manifest.read_text(encoding="utf-8")
+    original_requirement = 'meshdep = "[1.0.0, 3.0.0)"'
+    if original_requirement not in text:
+        raise TestFailure("Multi-repository fixture lost its expected meshdep requirement")
+    text = text.replace(original_requirement, f'meshdep = "{mesh_requirement}"')
+    manifest.write_text(text + f'\nmeshbridge = "{bridge_requirement}"\n', encoding="utf-8")
+    source = app / "src" / "main.cj"
+    text = source.read_text(encoding="utf-8")
+    if "import meshdep.*" not in text or "println(registryMarker())" not in text:
+        raise TestFailure("Multi-repository fixture lost its expected source markers")
+    text = text.replace("import meshdep.*", "import meshdep.*\nimport meshbridge.*").replace(
+        "println(registryMarker())", "println(registryMarker())\n    println(bridgeMarker())"
+    )
+    source.write_text(text, encoding="utf-8")
+    return app
+
+
+def _assert_transitive_sources(
+    app: Path, *, mesh_version: str, mesh_repository: str,
+    bridge_version: str, bridge_repository: str
+) -> None:
+    provenance = json.loads((app / "cjpm-provenance.json").read_text(encoding="utf-8"))
+    selected = {item["package"]: item for item in provenance["packages"]}
+    for package, version, repository in (
+        ("meshdep", mesh_version, mesh_repository),
+        ("meshbridge", bridge_version, bridge_repository),
+    ):
+        if package not in selected:
+            raise TestFailure(f"Transitive provenance did not record {package}")
+        assert_equal(selected[package]["version"], version, label=f"{package} version")
+        assert_equal(selected[package]["repository"], repository, label=f"{package} repository")
+        if not selected[package].get("sha256"):
+            raise TestFailure(f"Transitive provenance did not record {package} checksum")
+
+
+def _run_multirepo_transitive(context: TestContext) -> None:
+    high = (39141, "transitive-high")
+    low = (39142, "transitive-low")
+    cases = (
+        ("transitive-constrained", "1.0.0", "[1.0.0, 3.0.0)",
+         "high-1.0.0", "bridge-1.0.0-high-1.0.0", "1.0.0", "high", "1.0.0", "low"),
+        ("transitive-latest", "[1.0.0, 3.0.0)", "[1.0.0, 3.0.0)",
+         "low-2.0.0", "bridge-2.0.0-low-2.0.0", "2.0.0", "low", "2.0.0", "high"),
+    )
+    for (
+        name, mesh_requirement, bridge_requirement, mesh_marker, bridge_marker,
+        mesh_version, mesh_repository, bridge_version, bridge_repository,
+    ) in cases:
+        app = _transitive_app(
+            context, name, mesh_requirement=mesh_requirement,
+            bridge_requirement=bridge_requirement,
+        )
+        result = _run_with_repositories(context, app, (high, low), ("run",))
+        assert_contains(result.output, mesh_marker)
+        assert_contains(result.output, bridge_marker)
+        _assert_transitive_sources(
+            app, mesh_version=mesh_version, mesh_repository=mesh_repository,
+            bridge_version=bridge_version, bridge_repository=bridge_repository,
+        )
+        context.pass_message(f"cross-repository {name}: resolved versions and audited sources")
+
+    conflict = _transitive_app(
+        context, "transitive-conflict", mesh_requirement="2.0.0", bridge_requirement="1.0.0"
+    )
+    result = _run_with_repositories(
+        context, conflict, (high, low), ("run",), expect_success=False
+    )
+    for expected in ("meshdep", "1.0.0", "2.0.0"):
+        assert_contains(result.output, expected, label="cross-repository conflict diagnostic")
+    context.pass_message("cross-repository incompatible transitive requirements fail explicitly")
 
 
 def run_multirepo(context: TestContext) -> None:
@@ -181,6 +262,14 @@ def run_multirepo(context: TestContext) -> None:
         "company-auth-v9-public",
     ):
         context.bundle(package)
+
+    with ManagedProcesses() as processes:
+        processes.start(_mock_command(context, 39142, "low"), cwd=context.multirepo_root)
+        wait_for_port(39142)
+        context.bundle("meshbridge-v1")
+        context.bundle("meshbridge-v2")
+    wait_for_ports_closed((39142,))
+    _run_multirepo_transitive(context)
 
     high = (39141, "high")
     low = (39142, "low")
