@@ -292,7 +292,6 @@ def run_multirepo(context: TestContext) -> None:
     server_error = (39143, "server-error")
     token = (39145, "token")
     private = (39146, "private")
-    private_missing = (39146, "missing")
     public = (39147, "public")
 
     app = context.multirepo_root / "app"
@@ -497,14 +496,24 @@ def run_multirepo(context: TestContext) -> None:
     if public_log.exists() and public_log.stat().st_size:
         raise TestFailure("Exclusive namespace route accessed the public repository")
 
-    context.reset_app(namespace_app)
-    remove_within(public_log, (context.tests_root,))
-    result = _run_with_repositories(
-        context, "app-namespace", (private_missing, public), ("run",), expect_success=False
-    )
-    assert_contains(result.output, "status 404")
-    if public_log.exists() and public_log.stat().st_size:
-        raise TestFailure("Exclusive namespace route fell back to the public repository")
+    for status, mode in (
+        (404, "missing"),
+        (401, "unauthorized"),
+        (403, "forbidden"),
+        (500, "server-error"),
+    ):
+        context.reset_app(namespace_app)
+        remove_within(public_log, (context.tests_root,))
+        result = _run_with_repositories(
+            context, "app-namespace", ((39146, mode), public),
+            ("run",), expect_success=False,
+        )
+        assert_contains(result.output, f"status {status}")
+        if public_log.exists() and public_log.stat().st_size:
+            raise TestFailure(
+                f"Exclusive namespace route accessed the public repository after {status}"
+            )
+        context.pass_message(f"exclusive namespace blocks public fallback after {status}")
     context.pass_message("exclusive namespace dependency-confusion protection")
 
     legacy_app = context.multirepo_root / "app-legacy"
