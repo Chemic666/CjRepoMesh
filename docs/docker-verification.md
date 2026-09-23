@@ -100,3 +100,7 @@ Overall                  PASS
 - 构建前需要已完成 WSL Linux 编译，并准备 Docker 基础镜像；
 - 读取端尚未鉴权，发布端使用 Bearer Token；
 - 本记录不等同于公网安全审计、长期压力测试或多节点高可用验证。
+
+## 最新一键部署诊断
+
+2026-09-23 在提交 `e5be054` 上执行标准 `up.ps1 → doctor.ps1 → down.ps1`，诊断 **9/9 PASS**，包括非 root、只读根文件系统、无新权限、localhost 绑定、持久化卷和健康 API。打包脚本读取已有 WSL 服务端二进制，SHA-256 为 `5cedbde24bf02f71d0a68da50808af9b639d6b04da4d10af9034a88c53ac44de`；产品源码自前次基线 `0f0e076` 未修改，本轮未将 Windows 挂载路径新编译的二进制复制入镜像。Compose 容器和网络已移除，命名卷保留，原独立容器 `magical_bartik` 仍为 healthy。未重复真实发布与持久化重建场景，也未测试显式 `-PublishToken` 分支。

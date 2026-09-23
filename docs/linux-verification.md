@@ -1,6 +1,6 @@
 # CjRepoMesh Linux 原生验证记录
 
-> 首次执行：2026-09-22；全量核心回归：2026-09-23
+> 首次执行：2026-09-22；最近全量核心回归：2026-09-23
 > 原生构建基线：`b7fc9a2`；统一回归提交：`8e33119`
 > 结论：Linux 原生构建、服务启动和四组共享核心端到端回归通过；Docker 验证另行记录
 
@@ -93,3 +93,7 @@ cd ../../server
 - 本次使用 WSL 构建副本执行，但所有源代码修改均来自 Windows 主仓库；
 - Windows 五组已在相同提交内容上重跑；最终提交前仍必须分别执行 Windows、Linux 和 Docker 回归；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT。
+
+## 最新四组复核
+
+2026-09-23 在提交 `e5be054` 上，通过 WSL 挂载路径直接运行 Windows 工作区的 `integration-tests/run-linux.sh`。已有增强版 Linux cjpm 被复用，入口实际重新编译当前工作区的 CjRepo Server。四组 **4/4 PASS，总耗时 184.08s**：多仓 151.12s、Hosted 12.87s、Proxy 10.72s、Sync 5.97s。新增菱形依赖图的相容来源和冲突拒绝均纳入多仓组。固定测试端口和 `integration-tests/.tmp` 在结束后无残留。此次没有重编译 cjpm，也没有运行 Windows 原生五组或完整 Maple HLT/LLT。

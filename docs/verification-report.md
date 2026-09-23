@@ -1,8 +1,8 @@
 # CjRepoMesh 全量验证报告
 
 > 执行日期：2026-09-23
-> 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `0f0e076`；菱形依赖专项 `add0849`
-> 结论：最近完整验证提交 Linux 四组 4/4、Docker 诊断 9/9；新增菱形依赖在 Linux 多仓单组通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过或专项复核当作当前全量通过。
+> 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
+> 结论：最新测试内容的 Linux 四组完整回归 4/4、Docker 诊断 9/9，包含菱形依赖图。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
 
 ## 环境
 
@@ -147,3 +147,9 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 提交 `add0849` 新增第三个跨仓夹具 `meshleaf`。根应用同时依赖 `meshbridge` 与 `meshleaf`，两条分支汇聚到同一个 `meshdep`。相容场景中，`meshbridge 1.0.0` 来自低优先级仓，`meshleaf 1.0.0` 和 `meshdep 1.0.0` 来自高优先级仓；测试核对三个运行标记，以及三条来源记录的版本、仓库地址和实际制品 SHA-256。冲突场景让 `meshbridge 2.0.0` 要求 `meshdep 2.0.0`，而 `meshleaf 1.0.0` 要求 `meshdep 1.0.0`，解析必须明确失败。
 
 2026-09-23 在 WSL 2 / Ubuntu 22.04.5 中，直接对 Windows 工作区执行 `python3 integration-tests/run.py --suite multirepo --cjpm <现有增强版 Linux 二进制> --server <现有服务端 Linux 二进制> --skip-server-build`。新增成功和冲突场景、其余既有多仓断言均 **PASS，多仓组 147.98s，入口总耗时 151.42s**。本轮复用已编译二进制，没有重编译 cjpm 或服务端；固定测试端口与 `integration-tests/.tmp` 结束后均无残留。它属于最新测试内容的多仓单组专项，不替代 `0f0e076` 的 Linux 四组、Docker 9/9，也不解决 Windows 或完整 Maple HLT/LLT 缺口。
+
+## 最新测试内容的完整回归
+
+2026-09-23 在提交 `e5be054` 上，直接从 Windows 工作区的 WSL 挂载路径执行 `integration-tests/run-linux.sh`。入口使用已有增强版 Linux cjpm，**实际重新编译当前工作区的 CjRepo Server**，随后四组 **4/4 PASS，总耗时 184.08s**：Multi-repository 151.12s、Hosted 12.87s、Proxy 10.72s、Repository sync 5.97s。多仓组包含新增的菱形相容选源、三包来源和 SHA-256 核对、菱形冲突拒绝；其他既有故障与安全断言也通过。运行后固定测试端口和 `integration-tests/.tmp` 无残留。本轮未重编译 cjpm；从 `0f0e076` 至 `e5be054`，`cjpm/`、`server/` 与 `deployment/` 的产品源码无差异。
+
+随后运行标准 `deployment/docker/up.ps1 → doctor.ps1 → down.ps1`，**9/9 PASS**。打包脚本使用已有 WSL 服务端产物 SHA-256 `5cedbde24bf02f71d0a68da50808af9b639d6b04da4d10af9034a88c53ac44de`，不是上述刚在 Windows 挂载路径重编译的产物；这两个产物的摘要不同，不能宣称字节相同。标准启动流程未回显 Token，Compose 容器与网络已移除，命名数据卷保留，原独立容器 `magical_bartik` 仍为 healthy。本轮 Docker 只复核一键启动和 9 项诊断，未重跑历史真实发布及持久化重建场景。Windows 原生五组与完整 Maple HLT/LLT 仍未解决。

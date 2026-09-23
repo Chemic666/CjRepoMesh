@@ -42,6 +42,7 @@
 - [x] `add0849` 菱形跨仓传递依赖的相容选源、三包 Provenance 与 SHA-256、分支冲突拒绝在 Linux 多仓单组通过；本轮未重编译服务端或重跑四组；
 - [x] `c602c12` Docker 凭据文件先收紧权限再写入、重复授权成功；默认 Token 路径 Compose 两轮 9/9，原独立容器未更改；
 - [x] 提交 `0f0e076` 上 Linux 四组 4/4、710.19s，随后 Docker 一键启动与诊断 9/9；测试端口与临时目录无残留，Compose 容器移除且原独立容器仍健康；
+- [x] 提交 `e5be054` 上 Linux 四组 4/4、184.08s（实际重编译服务端，复用已有 cjpm）；标准 Docker 启动与诊断 9/9（复用 WSL 服务端产物）；Compose 测试容器清理后原独立容器仍健康；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
