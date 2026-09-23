@@ -113,7 +113,7 @@ function base(title, number, note) {
 // 6 — measured evidence.
 {
   const s = base("证据：功能与兼容性均有实测", 6,
-    "来源：docs/verification-report.md；docs/official-compatibility-report.md；docs/docker-verification.md。\n讲述建议：65 秒。Linux 4/4 为测试提交 2bb1884 上完整四组回归，103.30 秒；后续 662935d 为多仓专项单组通过，非全量。Docker 9/9 为 c602c12 修复后两轮。官方差分 7/7；官方 HTTP LLT 夹具在原版与增强版各 16/16。不要说完整 Maple HLT/LLT 已通过。");
+    "来源：docs/verification-report.md；docs/official-compatibility-report.md；docs/docker-verification.md。\n讲述建议：65 秒。Linux 4/4 为提交 0f0e076 上完整四组回归，710.19 秒；该轮覆盖 662935d 后新增的篡改制品场景。Docker 9/9 在同一提交再次通过；c602c12 修复后此前还有两轮 9/9。官方差分 7/7；官方 HTTP LLT 夹具在原版与增强版各 16/16。不要说完整 Maple HLT/LLT 已通过。");
   txt(s, "4 / 4", 72, 200, 445, 84, 61, C.accent, true);
   txt(s, "Linux 共享核心全量回归", 72, 294, 480, 49, 25);
   txt(s, "9 / 9", 690, 200, 445, 84, 61, C.accent, true);

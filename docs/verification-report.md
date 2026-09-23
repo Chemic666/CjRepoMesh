@@ -1,8 +1,8 @@
 # CjRepoMesh 全量验证报告
 
 > 执行日期：2026-09-23
-> 历史基线：Windows 五组 `8e33119`；最新 Linux 四组测试逻辑 `2bb1884`；Docker ACL 修复 `c602c12`
-> 结论：Linux 四组最新完整回归 4/4，后续 `662935d` 的篡改制品专项多仓单组通过；Docker 凭据保护修复后 9/9；Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把专项复核当作全量复核。
+> 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `0f0e076`
+> 结论：最近验证提交 Linux 四组完整回归 4/4、Docker 诊断 9/9；Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过或专项复核当作当前全量通过。
 
 ## 环境
 
@@ -135,3 +135,9 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 ## Docker 凭据权限复核
 
 提交 `c602c12` 修复 Docker `up.ps1` 在已有受保护 `.env` 上重复授权时要求 `SeSecurityPrivilege` 的问题，同时把凭据写入移到 ACL 收紧之后。空白新文件与重复授权均经无凭据临时文件测试；实际 Compose 使用已有 `.env` 完成 `up.ps1 → doctor.ps1 → down.ps1` 两轮，Doctor 每轮 **9/9 PASS**。`.env` ACL 读回为关闭继承、仅当前用户一条 FullControl 允许规则；启动输出不含 Token。Compose 容器已移除，命名数据卷保留，原有独立容器仍健康。未下载或安装依赖；显式 SecureString Token 参数分支未单独端到端复测。
+
+## 最近基线完整复核
+
+2026-09-23 在提交 `0f0e076` 上，将 Windows 源码同步到已有 WSL 测试副本后执行 `./integration-tests/run-linux.sh`，统一入口实际重新编译服务端。四组 **4/4 PASS，总耗时 710.19s**：Multi-repository 596.43s、Hosted 46.42s、Proxy 45.70s、Repository sync 21.56s。多仓组含先前新增的篡改制品拒绝、同缓存恢复、单并发双拒绝、独占命名空间 404/401/403/500 矩阵等断言，因此这轮不再仅依赖 `662935d` 的专项单组结果。测试后固定端口无监听，`integration-tests/.tmp` 不存在。耗时与先前 103.30s 的环境条件不同，不据此推断产品性能退化。
+
+同一提交随后使用本地已有 `ubuntu:22.04` 基础镜像和 WSL 编译产物执行 `deployment/docker/up.ps1 → doctor.ps1 → down.ps1`，**9/9 PASS**。启动输出未回显 Token；本轮 Compose 容器和网络已移除，命名卷保留；用户独立容器 `magical_bartik` 仍健康。此复核没有重跑真实发布及持久化重建场景，那些证据仍以 `docs/docker-verification.md` 的历史完整流程为准。Windows 当前原生构建与完整 Maple HLT/LLT 仍未通过本轮验证。
