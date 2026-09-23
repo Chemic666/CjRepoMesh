@@ -1,170 +1,84 @@
 # CjRepoMesh 参赛演示 Runbook
 
-> 目标时长：6～8 分钟
+> 目标：6～8 分钟主视频，另留完整无剪切验证录像。
 >
-> 核心叙事：不是“又一个制品仓”，而是仓颉原生的 Repository Resolution 层与企业私有仓闭环
+> 核心叙事：仓颉原生的多仓解析层与企业私有仓闭环，而不是“又一个制品仓”。
 >
-> 原则：现场只演示已经自动验证的能力，网络、工具链或录屏异常时立即切换到保底证据
+> 状态：这是待录制脚本，不表示视频已经完成。证据以录制时的提交号和当次结果为准。
 
-## 1. 演示前一天
+## 证据边界与录制顺序
 
-1. 在最终参赛提交上运行一次 `integration-tests/run-all.ps1`，把提交号、环境和结果更新到 `docs/verification-report.md`；
-2. 单独运行 `benchmark/proxy/run.ps1`，确认报告中的数字来自最终提交；
-3. 确认 `git status --short` 为空，不携带 Token、测试缓存、日志或构建产物；
-4. 录制一份完整无剪切备份视频，再录制最终讲解版；
-5. 保存架构图、全量验证报告和 Benchmark 报告的本地副本，避免现场网络依赖；
-6. 关闭会弹通知的软件，确认端口 `39141～39600` 与演示端口未被占用；
-7. 不在演示当天升级 SDK、操作系统、依赖或安全策略。
+截至 2026-09-23，提交 `a663cbf` 上 Linux 四组核心回归 **4/4 PASS**；Docker Compose 在产品代码 `b10ced9` 上诊断 **9/9 PASS**。历史 Windows 五组曾 **5/5 PASS**，但当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。完整 Maple HLT/LLT 也尚未运行。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
-## 2. 开场：问题与边界（40 秒）
+先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 
-展示 `docs/architecture.md` 的总体架构图，只讲三个结论：
+录制前核对：
 
-1. 企业项目需要同时消费公共包和私有包；
-2. CjRepoMesh 的 Router 只决定“去哪个仓”，原 cjpm 继续决定“选哪个版本”；
-3. 项目同时交付 cjpm 多仓能力和仓颉原生 Hosted/Proxy/Mirror/Sync 私有仓。
+1. `git rev-parse --short HEAD` 与 `git status --short`；记录产品/测试代码提交，确认无凭据、缓存和构建产物入库。
+2. 按 [Linux 验证](linux-verification.md) 的已有 SDK 环境运行 `./integration-tests/run-linux.sh`，保存四组完整输出。不要在 Windows 主机反复触发已知的 Code Integrity 拦截，也不要修改安全策略。
+3. Docker Desktop、`CjRepoMesh` WSL 发行版、已编译 Linux 服务二进制和本地 `ubuntu:22.04` 镜像就绪后，仅操作本项目的 Compose 服务。`up.ps1` 在缺少基础镜像时可能拉取镜像；先检查并征得用户同意，不在录制时意外下载。保留用户已有的独立容器与数据卷。
+4. 使用 `deployment/docker/up.ps1` 和 `doctor.ps1` 录制一键部署与 9 项诊断；`down.ps1` 仅关闭本项目 Compose 服务且默认保留数据卷。不要使用 `-PurgeData`。
+5. 校对 [Proxy Benchmark 报告](../benchmark/results/proxy-benchmark.md) 与 [原始样本](../benchmark/results/proxy-benchmark.json)。旧数字只可标注其 2026-09-22 本机测试条件；若重新测量，先更新报告再引用。
+6. 用 1080p 回看终端字体、架构图和字幕；清除桌面通知，检查画面中没有 `.env`、Docker 环境变量、Bearer Token 或个人路径以外的隐私信息。完整验证录像和主视频目前均是待交付物。
 
-建议话术：
+## 主视频分镜（约 7 分钟）
 
-> CjRepoMesh 没有重写 cjpm 的依赖求解器。我们在中心仓访问之前加入 Repository Router，聚合允许仓库的候选版本，再把版本选择交还原求解器；这样获得企业多仓能力，同时守住官方要求的兼容性边界。
-
-## 3. Scene 1：一键部署私有仓（50 秒）
-
-```powershell
-.\deployment\windows\start.ps1 -Port 8080 -PublishToken "demo-publish-token"
-.\deployment\windows\doctor.ps1
-```
-
-必须让评委看到：
-
-- 单条命令完成构建、后台启动和健康检查；
-- Doctor 同时显示 PROCESS、STORAGE、HEALTH 为 PASS；
-- 数据目录、PID 和地址明确可见；
-- Token 不写入状态文件或日志。
-
-讲解重点：这是官方“一键部署”要求的直接证据，不需要数据库、Redis 或 Kubernetes。
-
-## 4. Scene 2：多仓不改变原版本规则（80 秒）
-
-先展示 `integration-tests/multirepo/app/cangjie-repo.toml`：高优先级仓只有 `1.0.0`，低优先级仓还提供 `2.0.0`。
-
-```powershell
-.\integration-tests\multirepo\run.ps1
-```
-
-在输出中指出：
-
-- `highest compatible version across repositories` 为 PASS；
-- 最终选择 `2.0.0`，说明仓库优先级没有错误覆盖原版本求解；
-- 同一版本存在于两个仓时，才由仓库优先级确定来源；
-- `[replace]`、404/5xx 回退和 401 阻断均有自动断言。
-
-建议话术：
-
-> Priority 决定同一最终版本从哪里下载，不决定版本范围最终选哪个版本。这个分层是我们避免破坏 cjpm 原语义的关键。
-
-## 5. Scene 3：Dependency Confusion 防护（60 秒）
-
-展示 `integration-tests/multirepo/app-namespace/cangjie-repo.toml`：
-
-```toml
-[[route]]
-namespace = "company::*"
-registry = "private"
-exclusive = true
-```
-
-说明测试中的公共仓故意放置更高版本 `company::auth 9.0.0`，私有仓只有 `1.0.0`。结果必须指出：
-
-- 构建仍选择私有 `1.0.0`；
-- 公共仓请求数为 0；
-- 私有仓返回 404 时也不越过独占边界；
-- 私有仓 401 时立即失败，不能偷偷回退公共仓。
-
-建议话术：
-
-> Fallback 不是越多越好。企业命名空间一旦认证失败或不存在，就必须失败；否则可用性机制会变成供应链漏洞。
-
-## 6. Scene 4：Explain、Doctor 与离线审计（60 秒）
-
-从多仓测试输出中展示：
-
-```text
-cjpm repo explain <package>
-cjpm repo doctor <package>
-cjpm repo explain <package> --recorded
-```
-
-讲解它们分别回答：
-
-- Explain：为何选这个版本、这个仓库，是否发生替换或路由；
-- Doctor：仓库是否可达、Token 是否正确、当前错误是否允许回退；
-- Recorded：仓库已经离线时，上一次构建的来源与 SHA-256 是否仍可审计。
-
-不要把 `cjpm-provenance.json` 描述成官方 lockfile；它是 CjRepoMesh 独立的来源审计文件。
-
-## 7. Scene 5：Proxy 离线与真实性能（70 秒）
-
-```powershell
-.\integration-tests\proxy\run.ps1
-```
-
-必须指出：
-
-- 并发首次请求只产生一次经过校验的上游填充；
-- MISS 下载索引和制品并校验 SHA-256；
-- 索引 TTL 到期只刷新元数据，不重复下载不可变制品；
-- 上游关闭后缓存仍能完成构建；
-- 损坏制品被拒绝且不进入缓存。
-
-随后展示 `benchmark/results/proxy-benchmark.md`：本机实测 Cold Median `62.76 ms`、Warm Median `33.102 ms`、Median `1.9x`。必须同时说明这是本地 HTTP 微基准，不代表公网官方仓延迟。
-
-## 8. Scene 6：批量 Mirror 与跨仓 Sync（60 秒）
-
-展示 `integration-tests/sync/mirror-manifest.txt`：
-
-```text
-meshdep 1.0.0
-meshdep 2.0.0
-```
-
-```powershell
-.\integration-tests\sync\run.ps1
-```
-
-指出：
-
-- Mirror/Sync 都能按清单批量处理；
-- 每个制品都经过 SHA-256 校验；
-- 重复执行逐项返回 SKIP；
-- 一个坏条目不会阻止后续条目，但最终返回失败并汇总数量；
-- Source 关闭后，Destination 仍能独立供 cjpm 构建。
-
-## 9. 收尾（30 秒）
-
-```powershell
-.\deployment\windows\stop.ps1
-```
-
-展示 `docs/verification-report.md`：最终提交应为五组全部 PASS。然后只说真实边界：
-
-- Windows、Linux 原生关键链路和 Docker Compose 路径均已验证；
-- Linux 四组共享核心回归已通过，仍需在最终提交号上与 Windows、Docker 一并重跑；
-- 默认 organization、无读鉴权；
-- 尚无调度和断点续传。
-
-建议收尾：
-
-> 我们优先完成了官方四项要求的可运行闭环，并把企业最容易出问题的来源可解释性、认证回退和 Dependency Confusion 做成了确定性机制。CjRepoMesh 现在不是架构图，而是可以部署、可以故障注入、可以复验的仓颉基础设施。
-
-## 10. 失败切换方案
-
-| 现场问题 | 立即动作 | 保底证据 |
+| 时间 | 画面与要点 | 对应证据 |
 | --- | --- | --- |
-| SDK 或安全策略阻止编译 | 不修改安全策略，不重复尝试 | 最终提交的验证报告、无剪切备份视频、已生成二进制演示 |
-| 端口占用 | 使用部署脚本的 `-Port` 参数切换 | `doctor.ps1` 输出 |
-| 公网不可用 | 不访问公网，全部演示使用本地夹具 | Proxy 离线构建测试 |
-| 某场景超时 | 终止该场景，直接展示对应自动测试报告 | `verification-report.md` |
-| Benchmark 波动 | 不现场宣称新数字 | 已提交原始样本和可重复脚本 |
+| 0:00–0:35 | 架构图；Router 聚合允许仓库的候选版本，原 cjpm 求解器选择版本；Hosted/Proxy/Mirror/Sync 构成私有仓闭环。 | [架构说明](architecture.md) |
+| 0:35–1:20 | Docker Compose 一条命令启动、`/health`、Doctor 9 项。启动等待可剪辑，明确标注剪辑；不展示 Token。 | [Docker 验证](docker-verification.md) |
+| 1:20–2:25 | 高优先级仓只有 1.0.0、低优先级仓有 2.0.0，最终选择 2.0.0；同版本再按仓优先级选源；跨仓传递约束与 SHA-256 来源核对。 | [Linux 四组回归](verification-report.md)、[跨仓测试](../integration-tests/lib/suites.py) |
+| 2:25–3:20 | `company::*` 独占路由；公共仓故意放 9.0.0，最终只用私有 1.0.0，公共仓请求数为 0；私有 404 不越界回退，另以认证屏障场景证明 401 不回退。 | [路由配置](../integration-tests/multirepo/app-namespace/cangjie-repo.toml)、[安全断言](../integration-tests/lib/suites.py) |
+| 3:20–4:05 | Explain/Doctor/Recorded：选择原因、连接/认证诊断、离线来源及 SHA-256；区分独立审计文件与官方 lockfile。 | [验证报告](verification-report.md) |
+| 4:05–5:05 | Proxy 并发首次填充、TTL、离线命中和损坏拒绝；展示本机冷/热基准并读出适用边界。 | [Proxy 测试](../integration-tests/lib/suites.py)、[基准报告](../benchmark/results/proxy-benchmark.md) |
+| 5:05–6:05 | 清单批量 Mirror/Sync、逐项 SHA-256、幂等 SKIP、部分失败汇总与源仓离线后目标仓构建。 | [清单](../integration-tests/sync/mirror-manifest.txt)、[验证报告](verification-report.md) |
+| 6:05–7:00 | 四项课题要求的对应关系、当前验证边界和下一步。显示真实提交号与报告，不把历史 Windows 5/5 说成当前结果。 | [提交检查表](submission-checklist.md) |
 
-任何现场失败都不得通过关闭安全功能、删除校验或修改测试断言来“修复”。
+### 必说的三句话
+
+> Priority 只在确定最终版本后决定同版本的来源，不覆盖原 cjpm 的版本求解。
+
+> 独占命名空间缺包必须失败；仓库认证失败也不能回退。可用性机制不能越过安全边界。
+
+> Linux 四组和 Docker 部署已有实测通过；Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
+
+## 演示画面与命令
+
+从项目根目录，在前置条件满足、8080 端口可用且不会覆盖现有 Compose 服务时录制 Docker 部署：
+
+```powershell
+.\deployment\docker\up.ps1
+.\deployment\docker\doctor.ps1
+```
+
+`up.ps1` 自动生成或复用保存在被 Git 忽略的 `deployment/docker/.env` 中的发布 Token，终端不回显其值；不要在命令行传明文 Token，也不要展示 `.env` 或 `docker inspect` 的环境变量。Doctor 应显示 9 项和 Overall 均为 PASS。若已有用户容器占用 8080，不停止它；选择空闲端口并按脚本 `-Port` 参数部署，或采用已录制的对应证据。
+
+Linux 核心回归从已配置的 WSL Bash 中执行，环境准备见 [Linux 验证](linux-verification.md)：
+
+```bash
+./integration-tests/run-linux.sh
+```
+
+四组运行完整耗时曾为 96.13 秒，主视频只截取相关断言与汇总，完整输出留在无剪切录像中。可展示 `highest compatible version across repositories`、`exclusive namespace dependency-confusion protection`、跨仓传递依赖来源核对等 PASS 行；不要把报告中的旧行当作当次运行画面。Explain/Doctor/Recorded 的语义由测试夹具和报告支撑；录屏应展示实际输出，不只展示命令文字。
+
+Proxy 基准报告中的 Cold Median **62.76 ms**（10 轮）、Warm Median **33.102 ms**（50 轮）、Median **1.9x** 均来自 2026-09-22 本机 HTTP 微基准，不代表公网官方仓或跨机延迟。Mirror 是显式清单镜像，不宣称完整复制官方中心仓；Sync 不宣称调度或断点续传。
+
+只关闭本次确实启动的 Compose 服务：
+
+```powershell
+.\deployment\docker\down.ps1
+```
+
+这会保留命名数据卷；不要对用户原有独立容器执行停止或删除。
+
+## 失败切换
+
+| 现场问题 | 立即动作 | 可用证据与不能说的话 |
+| --- | --- | --- |
+| Windows SDK/Code Integrity 阻断 | 保持安全策略原状，切到 Linux 或既有录像 | 展示当前 Linux 4/4、历史 Windows 5/5 并标明提交；不能说最新 Windows 已通过 |
+| Docker 不可用、镜像缺失或 8080 被占 | 不触碰用户已有容器；换空闲端口或切录像 | 已提交 Docker 9/9 与持久化记录；不能把旧记录说成现场成功 |
+| 某一组测试超时或失败 | 保留失败输出，标明本次失败；切换到历史报告 | 不能剪去失败段后宣称本次 PASS |
+| 公网不可用 | 演示本地夹具与 Proxy 离线缓存 | 不能宣称公网官方仓实测 |
+| Benchmark 波动 | 展示带日期的旧原始样本 | 不能现场编造新加速数字 |
+
+任何失败都不得通过关闭安全功能、泄露凭据、删除校验或修改测试断言来“修复”。
