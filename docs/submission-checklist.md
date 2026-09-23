@@ -43,7 +43,7 @@
 - [x] `c602c12` Docker 凭据文件先收紧权限再写入、重复授权成功；默认 Token 路径 Compose 两轮 9/9，原独立容器未更改；
 - [x] 提交 `0f0e076` 上 Linux 四组 4/4、710.19s，随后 Docker 一键启动与诊断 9/9；测试端口与临时目录无残留，Compose 容器移除且原独立容器仍健康；
 - [x] 提交 `e5be054` 上 Linux 四组 4/4、184.08s（实际重编译服务端，复用已有 cjpm）；标准 Docker 启动与诊断 9/9（复用 WSL 服务端产物）；Compose 测试容器清理后原独立容器仍健康；
-- [x] 官方 Maple 框架提交 `e92721e` 已在 WSL 跑通十一个选定 LLT 用例，原版与增强版各 11/11；制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 1/1；日志和夹具调整摘要保留在外层 `test-runs/maple-smoke/run-1790171957-a31a42db/`，完整 HLT/LLT 仍未运行；
+- [x] 官方 Maple 框架提交 `e92721e` 已在 WSL 跑通二十八个选定 LLT 用例，原版与增强版各 28/28；制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 1/1；日志和夹具调整摘要保留在外层 `test-runs/maple-smoke/run-1790174668-ce1149a9/`，完整 HLT/LLT 仍未运行；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；

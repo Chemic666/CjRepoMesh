@@ -93,7 +93,7 @@ def stabilized_archive_fixture(source: Path, destination: Path) -> tuple[Path, P
 def run_case(
     label: str, suite_name: str, executable: Path, framework_main: Path,
     test_config: Path, target: Path, expected_count: int,
-    staging: Path, results: Path,
+    staging: Path, results: Path, isolate_home: bool = False,
 ) -> None:
     if occupied_ports():
         raise RuntimeError(f"Fixture ports in use before {label} run: {occupied_ports()}")
@@ -101,7 +101,14 @@ def run_case(
     for key in tuple(env):
         if key.startswith("CJREPO_") or key.startswith("CJREPOMESH_"):
             env.pop(key)
-    env["PATH"] = f"{executable.parent}{os.pathsep}{env.get('PATH', '')}"
+    env.pop("CJPM_CONFIG", None)
+    path_prefix = str(executable.parent)
+    if isolate_home:
+        isolated_home = staging / f"{label}-{suite_name}-home"
+        isolated_home.mkdir()
+        env["HOME"] = str(isolated_home)
+        path_prefix = f"{isolated_home / '.cjpm' / 'bin'}{os.pathsep}{path_prefix}"
+    env["PATH"] = f"{path_prefix}{os.pathsep}{env.get('PATH', '')}"
     output_dir = results / f"{label}-{suite_name}"
     output_dir.mkdir()
     command = (
@@ -141,6 +148,7 @@ def main() -> int:
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--config-suite", type=Path, required=True)
     parser.add_argument("--install-coverage", type=Path, required=True)
+    parser.add_argument("--install-local-suite", type=Path, required=True)
     parser.add_argument("--update-wrong-config", type=Path, required=True)
     parser.add_argument("--archive-fixture", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
@@ -169,6 +177,9 @@ def main() -> int:
         name: require_file(install_coverage / name / f"{name}.info", f"official {name} LLT case")
         for name in install_cases
     }
+    install_local_suite = args.install_local_suite.expanduser().resolve()
+    if not install_local_suite.is_dir() or len(tuple(install_local_suite.rglob("*.info"))) != 17:
+        raise ValueError(f"Expected 17 official local-install LLT cases: {install_local_suite}")
     update_wrong_config = args.update_wrong_config.expanduser().resolve()
     if not update_wrong_config.is_dir() or len(tuple(update_wrong_config.rglob("*.info"))) != 2:
         raise ValueError(f"Expected two official cjpm update config LLT cases: {update_wrong_config}")
@@ -218,6 +229,10 @@ def main() -> int:
                         label, case_name, executable, framework_main,
                         config, case_info, 1, staging, results,
                     )
+                run_case(
+                    label, "install_local", executable, framework_main,
+                    config, install_local_suite, 17, staging, results, isolate_home=True,
+                )
                 run_case(
                     label, "update_wrong_config", executable, framework_main,
                     config, update_wrong_config, 2, staging, results,
