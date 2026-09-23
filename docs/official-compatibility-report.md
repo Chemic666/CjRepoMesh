@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 项目测试入口：`a49b5e1`；并发下载失败修复：`efb7e24`；本轮旧诊断兼容修复：`0aae9ea`
-> 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过；官方 HTTP 状态 LLT 的 16 条断言在两版上分别通过，且官方 Maple 框架对七个选定 cjpm LLT 用例在两版上各 7/7 通过；另一个制品异常矩阵仅在稳定化测试副本上两版各 1/1 通过。完整 Maple HLT/LLT 尚未运行。
+> 结论：修复后的 cjpm 与官方原版单仓差分 7/7 通过；官方 HTTP 状态 LLT 的 16 条断言在两版上分别通过，且官方 Maple 框架对十一个选定 cjpm LLT 用例在两版上各 11/11 通过；另一个制品异常矩阵仅在稳定化测试副本上两版各 1/1 通过。完整 Maple HLT/LLT 尚未运行。
 
 ## 对照基线与环境
 
@@ -65,6 +65,8 @@
 
 随后只在烟测入口的临时测试副本中，将该服务脚本的 gzip mtime 固定为 0；不改归档内容、索引断言或 cjpm 的哈希校验。Maple 复核原版 **1/1 PASS（10.64s）**、增强版 **1/1 PASS（9.57s）**，与前述七个用例共同运行的日志在 `test-runs/maple-smoke/run-1790171311-a4644d17/`；其中 `archive-fixture-adjustment.txt` 记录原始和调整后服务脚本的 SHA-256。这个结果只证明稳定化夹具下的兼容性，不把它算入七个未改测试逻辑的用例，也不宣称原始夹具稳定通过。
 
+再扩展官方 `git_install_options.info`、`git_install_workspace.info` 与 `update/wrong_config` 两个用例后，统一入口在同一原版与增强版二进制上各 **11/11 PASS**（HTTP 1、配置 3、安装 5、更新错误配置 2）；稳定化制品异常矩阵另各 **1/1 PASS**。本轮逐例日志及夹具调整摘要在 `test-runs/maple-smoke/run-1790171957-a31a42db/`。新增 Git 用例覆盖分支、标签、提交与 workspace 安装；更新用例覆盖空路径和不存在路径的明确拒绝。项目产品源码与两版二进制摘要未变。这个十一个用例仍只是选定 LLT 子集。
+
 ## 复现命令
 
 在加载仓颉 SDK `envsetup.sh` 并设置 `CANGJIE_STDX_PATH` 后，从项目根目录运行：
@@ -80,6 +82,6 @@ python3 integration-tests/compatibility/run.py \
 
 ## 尚未覆盖
 
-- 官方 Maple 框架已跑通上述七个选定的 cjpm LLT 用例，另有一个稳定化制品异常矩阵通过；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原样制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
+- 官方 Maple 框架已跑通上述十一个选定的 cjpm LLT 用例，另有一个稳定化制品异常矩阵通过；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原始制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
 - 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。

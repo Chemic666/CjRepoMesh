@@ -141,6 +141,7 @@ def main() -> int:
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--config-suite", type=Path, required=True)
     parser.add_argument("--install-coverage", type=Path, required=True)
+    parser.add_argument("--update-wrong-config", type=Path, required=True)
     parser.add_argument("--archive-fixture", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
     parser.add_argument("--official-cjpm", type=Path, required=True)
@@ -161,11 +162,16 @@ def main() -> int:
         "central_repository_missing",
         "repository_cached",
         "git_install_invalid_config",
+        "git_install_options",
+        "git_install_workspace",
     )
     install_infos = {
         name: require_file(install_coverage / name / f"{name}.info", f"official {name} LLT case")
         for name in install_cases
     }
+    update_wrong_config = args.update_wrong_config.expanduser().resolve()
+    if not update_wrong_config.is_dir() or len(tuple(update_wrong_config.rglob("*.info"))) != 2:
+        raise ValueError(f"Expected two official cjpm update config LLT cases: {update_wrong_config}")
     archive_fixture = args.archive_fixture.expanduser().resolve()
     require_file(archive_fixture / "repository_archive_matrix.info", "official archive LLT case")
     require_file(archive_fixture / "run_archive_matrix.sh", "official archive LLT script")
@@ -212,6 +218,10 @@ def main() -> int:
                         label, case_name, executable, framework_main,
                         config, case_info, 1, staging, results,
                     )
+                run_case(
+                    label, "update_wrong_config", executable, framework_main,
+                    config, update_wrong_config, 2, staging, results,
+                )
                 run_case(
                     label, "repository_archive_matrix_stabilized", executable,
                     framework_main, config, archive_info, 1, staging, results,

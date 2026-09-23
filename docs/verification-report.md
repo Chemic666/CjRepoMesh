@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的七个选定 cjpm LLT 用例在原版与增强版上各 7/7 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
+> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的十一个选定 cjpm LLT 用例在原版与增强版上各 11/11 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
 
 ## 环境
 
@@ -167,3 +167,5 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 2026-09-23 增加官方缓存安装及 Git 无效配置用例后，`integration-tests/compatibility/maple_smoke.py` 在原版与增强版 cjpm 上各 **7/7 PASS**：HTTP 状态 1/1、配置 3/3、缺仓 1/1、缓存安装 1/1、Git 无效配置 1/1。两版二进制 SHA-256 未变；逐例日志在外层 `test-runs/maple-smoke/run-1790170871-2e498703/`。测试只覆盖选定 LLT，不代表完整 HLT/LLT。
 
 单独探索的官方制品异常矩阵首次为原版 PASS、增强版 FAIL，增强版未改夹具复跑 PASS。失败点是 `wrongpkg` 的哈希校验；官方夹具每次请求动态创建 gzip 压缩包，本地验证其跨秒产生不同时间戳字节及 SHA-256，因此不能把原始夹具的单次通过记作稳定通过，也不据此修改或放松产品哈希检查。之后仅在临时测试副本固定 gzip mtime 为 0，Maple 对同一制品矩阵判定原版 **1/1 PASS（10.64s）**、增强版 **1/1 PASS（9.57s）**，日志在外层 `test-runs/maple-smoke/run-1790171311-a4644d17/`，并附有原始和稳定化脚本的 SHA-256。这个 **1/1 不计入七个未改测试逻辑的选定用例**，不宣称原始夹具稳定通过。未重跑 Linux 四组或 Docker，因为本轮只修改测试入口与说明，未修改产品代码。
+
+随后新增官方 Git 分支/标签/提交安装、workspace 安装与两个更新错误配置用例。统一入口在原版与增强版上各 **11/11 PASS**（HTTP 1、配置 3、安装 5、更新 2）；仅稳定化测试副本的制品矩阵另各 **1/1 PASS**。本轮逐例日志与夹具调整摘要在外层 `test-runs/maple-smoke/run-1790171957-a31a42db/`。两版二进制摘要未变；这轮没有改产品源码，也没有重跑 Linux 四组、Docker 或 Windows。

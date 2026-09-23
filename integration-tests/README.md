@@ -82,6 +82,7 @@ python3 integration-tests/compatibility/maple_smoke.py \
   --fixture /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/repository/coverage/http_status_matrix \
   --config-suite /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/config/coverage \
   --install-coverage /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/install/coverage \
+  --update-wrong-config /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/update/wrong_config \
   --archive-fixture /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/install/coverage/repository_archive_matrix \
   --test-config /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/test.cfg \
   --official-cjpm /path/to/official/cjpm \
@@ -89,7 +90,7 @@ python3 integration-tests/compatibility/maple_smoke.py \
   --results-dir /path/to/test-results
 ```
 
-入口仅在临时副本中把 HTTP 状态用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；官方 Git 跟踪文件不变。Maple 对官方 HTTP 状态、三个配置，以及缺少中心仓、缓存安装、Git 无效配置这七个选定用例分别运行两版 cjpm，要求每版 `7/7 PASS`。另外运行 `repository_archive_matrix`：它原样试跑会因官方夹具动态 gzip 时间戳偶发哈希不一致，入口只在测试副本中固定 gzip mtime 为 0，再要求两版各 `1/1 PASS`。结果日志和原始/稳定化测试服务脚本摘要保存在唯一的 `--results-dir/run-*` 中。稳定化矩阵不能表述为未经调整的官方用例通过；该入口也不代表完整 HLT/LLT。
+入口仅在临时副本中把 HTTP 状态用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；官方 Git 跟踪文件不变。Maple 对官方 HTTP 状态、三个配置、五个安装场景和两个更新错误配置，共十一个选定用例分别运行两版 cjpm，要求每版 `11/11 PASS`。另外运行 `repository_archive_matrix`：它原样试跑会因官方夹具动态 gzip 时间戳偶发哈希不一致，入口只在测试副本中固定 gzip mtime 为 0，再要求两版各 `1/1 PASS`。结果日志和原始/稳定化测试服务脚本摘要保存在唯一的 `--results-dir/run-*` 中。稳定化矩阵不能表述为未经调整的官方用例通过；该入口也不代表完整 HLT/LLT。
 
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
