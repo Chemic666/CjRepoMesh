@@ -149,6 +149,7 @@ def main() -> int:
     parser.add_argument("--config-suite", type=Path, required=True)
     parser.add_argument("--install-coverage", type=Path, required=True)
     parser.add_argument("--install-local-suite", type=Path, required=True)
+    parser.add_argument("--uninstall-suite", type=Path, required=True)
     parser.add_argument("--update-wrong-config", type=Path, required=True)
     parser.add_argument("--archive-fixture", type=Path, required=True)
     parser.add_argument("--test-config", type=Path, required=True)
@@ -180,6 +181,9 @@ def main() -> int:
     install_local_suite = args.install_local_suite.expanduser().resolve()
     if not install_local_suite.is_dir() or len(tuple(install_local_suite.rglob("*.info"))) != 17:
         raise ValueError(f"Expected 17 official local-install LLT cases: {install_local_suite}")
+    uninstall_suite = args.uninstall_suite.expanduser().resolve()
+    if not uninstall_suite.is_dir() or len(tuple(uninstall_suite.rglob("*.info"))) != 4:
+        raise ValueError(f"Expected four official uninstall LLT cases: {uninstall_suite}")
     update_wrong_config = args.update_wrong_config.expanduser().resolve()
     if not update_wrong_config.is_dir() or len(tuple(update_wrong_config.rglob("*.info"))) != 2:
         raise ValueError(f"Expected two official cjpm update config LLT cases: {update_wrong_config}")
@@ -232,6 +236,10 @@ def main() -> int:
                 run_case(
                     label, "install_local", executable, framework_main,
                     config, install_local_suite, 17, staging, results, isolate_home=True,
+                )
+                run_case(
+                    label, "uninstall", executable, framework_main,
+                    config, uninstall_suite, 4, staging, results, isolate_home=True,
                 )
                 run_case(
                     label, "update_wrong_config", executable, framework_main,
