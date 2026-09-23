@@ -70,7 +70,7 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 
 - Linux 原生 cjpm/Server 构建、四组共享核心回归和离线来源解释已通过，详见 `docs/linux-verification.md`；
 - Docker Compose 一键启动、真实发布、容器重建持久化和最小权限诊断已通过，详见 `docs/docker-verification.md`；
-- Docker 在后续修复过程中再次 9/9 通过且启动输出不再回显 Token；`de2da77` 新增的 SecureString 与 `.env` ACL 逻辑已静态/权限测试，但因 Docker Desktop 随后停止，尚未再次执行容器启动；
+- Docker 在后续修复过程中再次 9/9 通过且启动输出不再回显 Token；`de2da77` 的 SecureString/ACL 路径在当时尚未完成容器启动复测，后续 `c602c12` 的默认 Token/ACL 完整链路已复测，见文末与 `docs/docker-verification.md`；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - 未验证默认 organization 之外的服务端协议；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
@@ -131,3 +131,7 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 提交 `662935d` 扩展多仓夹具：高优先级仓的索引保持合法、只篡改同版本制品的下载字节；低优先级仓仍提供可用制品。断言要求增强版 cjpm 因 SHA-256 不一致拒绝构建，低优先级仓没有收到制品下载请求，也没有写出成功来源记录。随后不清空应用缓存，恢复高优先级仓的正常制品，要求构建成功，来源仍为高优先级仓，审计 SHA-256 与实际制品一致。这验证失败下载没有污染成功缓存或偷换制品来源。
 
 2026-09-23 在已有 WSL 测试副本和修复后的 cjpm 二进制上运行 `./integration-tests/run-linux.sh --suite multirepo --skip-server-build`，新增断言及整组 **PASS，600.00s**；统一入口总耗时 600.10s。该轮编译相关步骤明显慢于此前约 85s 的多仓单组，期间进程持续推进且内存、磁盘空间充足；两次运行条件和系统负载未严格控制，不据此归因于代码性能变化。测试后 `integration-tests/.tmp` 已清理，固定测试端口未见监听。本轮是多仓单组复测，未重跑 Linux 四组完整回归或其他平台。
+
+## Docker 凭据权限复核
+
+提交 `c602c12` 修复 Docker `up.ps1` 在已有受保护 `.env` 上重复授权时要求 `SeSecurityPrivilege` 的问题，同时把凭据写入移到 ACL 收紧之后。空白新文件与重复授权均经无凭据临时文件测试；实际 Compose 使用已有 `.env` 完成 `up.ps1 → doctor.ps1 → down.ps1` 两轮，Doctor 每轮 **9/9 PASS**。`.env` ACL 读回为关闭继承、仅当前用户一条 FullControl 允许规则；启动输出不含 Token。Compose 容器已移除，命名数据卷保留，原有独立容器仍健康。未下载或安装依赖；显式 SecureString Token 参数分支未单独端到端复测。

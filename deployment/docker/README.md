@@ -40,7 +40,7 @@ $upstreamToken = Read-Host "Upstream token (optional)" -AsSecureString
   -UpstreamToken $upstreamToken
 ```
 
-`.env` 写入后会在 Windows 上移除继承权限，只保留当前用户的完全控制权。Compose 会把 Token 注入运行容器的环境变量，因此拥有本机 Docker 管理权限的用户仍可通过容器检查读取它；Token 不会进入 Git、Docker 构建上下文或镜像层。
+在 Windows 上，脚本先确认 `.env` 属于当前用户并非符号链接，再保护空文件或已有文件的访问规则，然后写入 Token，最后读回校验权限：关闭继承且只保留当前用户的完全控制权。重复启动也会重新校验，不要求额外的系统安全特权。Compose 会把 Token 注入运行容器的环境变量，因此拥有本机 Docker 管理权限的用户仍可通过容器检查读取它；Token 不会进入 Git、Docker 构建上下文或镜像层。
 
 ## 运行诊断
 

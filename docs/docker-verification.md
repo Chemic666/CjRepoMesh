@@ -86,7 +86,13 @@ Overall                  PASS
 - 包数据只写入 `/var/lib/cjrepo` 命名卷；
 - 默认不向局域网暴露端口。
 
-2026-09-23 在 P1 回归中再次执行 `up.ps1 → doctor.ps1 → down.ps1`，9 项仍全部 PASS，容器停止后命名卷保留。回归同时发现启动脚本会回显发布 Token；提交 `de2da77` 已改为隐藏输出、使用 `SecureString` 接收显式 Token，并将 `.env` ACL 收紧为仅当前 Windows 用户。输出脱敏与 ACL 逻辑已验证；由于 Docker Desktop 随后停止，SecureString/ACL 完整容器启动链仍需在最终回归中复验。
+2026-09-23 在 P1 回归中再次执行 `up.ps1 → doctor.ps1 → down.ps1`，9 项仍全部 PASS，容器停止后命名卷保留。回归同时发现启动脚本会回显发布 Token；提交 `de2da77` 改为隐藏输出、使用 `SecureString` 接收显式 Token，并将 `.env` ACL 收紧为仅当前 Windows 用户。Docker Desktop 随后停止，因此这一步当时仅完成输出脱敏与 ACL 静态/权限测试；后续容器复核见下节。
+
+## 凭据保护与重复启动复核
+
+2026-09-23 复测时发现：已收紧 ACL 的 `.env` 上重复调用原 `Set-Acl` 会因 `SeSecurityPrivilege` 不足而失败，Compose 容器因此未启动。提交 `c602c12` 改为只写入文件访问规则，不再重设所有者；写凭据前先确认文件非符号链接、归当前用户所有并已收紧权限，写后再次读回校验。无凭据临时文件上首次与重复调用保护函数均成功。现有 `.env` 的读回结果是关闭继承、仅当前用户一条 FullControl 允许规则。
+
+修复后两次实际执行 `up.ps1 → doctor.ps1 → down.ps1`，每次 Docker 安全/健康诊断均 **9/9 PASS**，启动输出没有回显 Token，Compose 容器结束后已移除、命名数据卷保留。用户已有的独立容器 `magical_bartik` 全程保持健康；本轮使用本地 `ubuntu:22.04` 镜像，没有下载或安装依赖。显式 `-PublishToken` 的 SecureString 参数形式尚未另做端到端容器复测，不把默认自动/复用 Token 路径等同于该分支验证。
 
 ## 边界
 
