@@ -8,7 +8,7 @@
 
 ## 证据边界与录制顺序
 
-截至 2026-09-23，提交 `a663cbf` 上 Linux 四组核心回归 **4/4 PASS**；Docker Compose 在产品代码 `b10ced9` 上诊断 **9/9 PASS**。历史 Windows 五组曾 **5/5 PASS**，但当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。完整 Maple HLT/LLT 也尚未运行。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-23，测试逻辑 `2bb1884` 上 Linux 四组核心回归 **4/4 PASS**；后续 `662935d` 的篡改制品多仓单组也通过，但不替代四组全量。Docker Compose 在凭据权限修复 `c602c12` 后诊断 **9/9 PASS**。历史 Windows 五组曾 **5/5 PASS**，但当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。完整 Maple HLT/LLT 也尚未运行。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 

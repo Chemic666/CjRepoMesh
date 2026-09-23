@@ -1,8 +1,8 @@
 # CjRepoMesh 全量验证报告
 
 > 执行日期：2026-09-23
-> 核心回归基线：`8e33119`；后续安全修复：`de2da77`
-> 结论：历史 Windows 五组在 `8e33119` 上通过；最新 Linux 四组在 `a663cbf` 上通过，Docker 诊断在产品代码 `b10ced9` 上通过；Windows 当前构建被系统 Application Control 阻断
+> 历史基线：Windows 五组 `8e33119`；最新 Linux 四组测试逻辑 `2bb1884`；Docker ACL 修复 `c602c12`
+> 结论：Linux 四组最新完整回归 4/4，后续 `662935d` 的篡改制品专项多仓单组通过；Docker 凭据保护修复后 9/9；Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把专项复核当作全量复核。
 
 ## 环境
 
@@ -76,7 +76,7 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
 - 性能数据见独立的 `benchmark/results/proxy-benchmark.md`，不由本功能回归推导。
 
-## 本轮最新提交复核
+## 早期提交复核（历史记录）
 
 在 `b10ced9` 上运行 Windows `integration-tests/run-all.ps1 -SkipServerBuild`：第一组打包夹具时，系统 Application Control 拦截 `cjc -v`，统一入口停止，故本轮 Windows 结果记为 **环境阻断**，不能沿用上表的历史 5/5 作为当前提交结果。未调整 Windows 安全策略。
 
