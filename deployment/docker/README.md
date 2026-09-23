@@ -26,15 +26,21 @@
 4. 构建、启动并等待 `/health` 通过。
 
 重复执行且未显式传入 `-PublishToken` 时，脚本会复用已有 `.env` 中的 Token，避免普通重建意外轮换凭据。
+启动输出不会回显 Token 值，避免终端日志或演示录屏泄露凭据。
 
-指定端口、Token 或上游代理：
+指定端口或上游代理时，Token 使用 `SecureString`，避免明文进入 PowerShell 历史：
 
 ```powershell
+$publishToken = Read-Host "Publish token" -AsSecureString
+$upstreamToken = Read-Host "Upstream token (optional)" -AsSecureString
 .\deployment\docker\up.ps1 `
   -Port 18080 `
-  -PublishToken "replace-with-a-long-random-token" `
-  -Upstream "https://upstream.example.com"
+  -PublishToken $publishToken `
+  -Upstream "https://upstream.example.com" `
+  -UpstreamToken $upstreamToken
 ```
+
+`.env` 写入后会在 Windows 上移除继承权限，只保留当前用户的完全控制权。Compose 会把 Token 注入运行容器的环境变量，因此拥有本机 Docker 管理权限的用户仍可通过容器检查读取它；Token 不会进入 Git、Docker 构建上下文或镜像层。
 
 ## 运行诊断
 

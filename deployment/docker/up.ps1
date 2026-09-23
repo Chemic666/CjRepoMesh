@@ -5,9 +5,9 @@
 param(
     [ValidateRange(1, 65535)]
     [int]$Port = 8080,
-    [string]$PublishToken = "",
+    [Security.SecureString]$PublishToken,
     [string]$Upstream = "",
-    [string]$UpstreamToken = "",
+    [Security.SecureString]$UpstreamToken,
     [ValidateRange(0, 31536000)]
     [long]$ProxyTtlSeconds = 86400,
     [string]$WslDistribution = "CjRepoMesh",
@@ -18,6 +18,33 @@ param(
 $ErrorActionPreference = "Stop"
 $scriptRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $envPath = Join-Path $scriptRoot ".env"
+$publishTokenValue = if ($null -ne $PublishToken) {
+    [Net.NetworkCredential]::new("", $PublishToken).Password
+} else {
+    ""
+}
+$upstreamTokenValue = if ($null -ne $UpstreamToken) {
+    [Net.NetworkCredential]::new("", $UpstreamToken).Password
+} else {
+    ""
+}
+
+function Protect-CredentialFile([string]$Path) {
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        return
+    }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $acl = [Security.AccessControl.FileSecurity]::new()
+    $acl.SetOwner($identity.User)
+    $acl.SetAccessRuleProtection($true, $false)
+    $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+        $identity.User,
+        [Security.AccessControl.FileSystemRights]::FullControl,
+        [Security.AccessControl.AccessControlType]::Allow
+    )
+    $acl.AddAccessRule($rule)
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI is not available. Install or enable Docker Desktop first."
@@ -27,15 +54,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker engine is not running. Start Docker Desktop and retry."
 }
 
-if ([string]::IsNullOrWhiteSpace($PublishToken) -and (Test-Path -LiteralPath $envPath)) {
+if ([string]::IsNullOrWhiteSpace($publishTokenValue) -and (Test-Path -LiteralPath $envPath)) {
     $existingToken = Get-Content -LiteralPath $envPath |
         Where-Object { $_.StartsWith("CJREPO_PUBLISH_TOKEN=") } |
         Select-Object -First 1
     if ($existingToken) {
-        $PublishToken = $existingToken.Substring($existingToken.IndexOf("=") + 1)
+        $publishTokenValue = $existingToken.Substring($existingToken.IndexOf("=") + 1)
     }
 }
-if ([string]::IsNullOrWhiteSpace($PublishToken)) {
+if ([string]::IsNullOrWhiteSpace($publishTokenValue)) {
     $randomBytes = New-Object byte[] 32
     $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
     try {
@@ -43,12 +70,12 @@ if ([string]::IsNullOrWhiteSpace($PublishToken)) {
     } finally {
         $generator.Dispose()
     }
-    $PublishToken = ([BitConverter]::ToString($randomBytes)).Replace("-", "").ToLowerInvariant()
+    $publishTokenValue = ([BitConverter]::ToString($randomBytes)).Replace("-", "").ToLowerInvariant()
 }
-if ($PublishToken -notmatch '^[A-Za-z0-9._~-]{16,256}$') {
+if ($publishTokenValue -notmatch '^[A-Za-z0-9._~-]{16,256}$') {
     throw "PublishToken must contain 16-256 URL-safe characters."
 }
-foreach ($value in @($Upstream, $UpstreamToken)) {
+foreach ($value in @($Upstream, $upstreamTokenValue)) {
     if ($value.Contains("`r") -or $value.Contains("`n")) {
         throw "Environment values must not contain newlines."
     }
@@ -59,12 +86,13 @@ foreach ($value in @($Upstream, $UpstreamToken)) {
 
 $lines = @(
     "CJREPO_HOST_PORT=$Port",
-    "CJREPO_PUBLISH_TOKEN=$PublishToken",
+    "CJREPO_PUBLISH_TOKEN=$publishTokenValue",
     "CJREPO_UPSTREAM=$Upstream",
-    "CJREPO_UPSTREAM_TOKEN=$UpstreamToken",
+    "CJREPO_UPSTREAM_TOKEN=$upstreamTokenValue",
     "CJREPO_PROXY_TTL_SECONDS=$ProxyTtlSeconds"
 )
 [IO.File]::WriteAllLines($envPath, $lines, [Text.UTF8Encoding]::new($false))
+Protect-CredentialFile $envPath
 
 docker compose --project-directory $scriptRoot --env-file $envPath up -d --build
 if ($LASTEXITCODE -ne 0) {
@@ -89,5 +117,4 @@ if (-not $healthy) {
 }
 
 Write-Host "CjRepo container is ready: http://127.0.0.1:$Port"
-Write-Host "Publish token: $PublishToken"
-Write-Host "Credentials are stored only in the ignored file: $envPath"
+Write-Host "Publish token value is hidden. Credentials are stored in the ignored file: $envPath"

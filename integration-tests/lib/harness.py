@@ -237,9 +237,7 @@ def command_exists(command: str) -> bool:
 
 def platform_executable(base: Path) -> Path:
     if os.name == "nt":
-        candidate = base.with_suffix(".exe")
-        if candidate.exists():
-            return candidate
+        return base.with_suffix(".exe")
     return base
 
 
