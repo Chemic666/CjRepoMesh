@@ -19,6 +19,12 @@ def fixtures():
             ROOT / "packages" / "meshdep-v1-low",
             ROOT / "packages" / "meshdep-v2-low",
         ]
+    if REPOSITORY == "legacy-mixed":
+        return [
+            ROOT / "packages" / "meshdep-v1-low",
+            ROOT / "packages" / "meshdep-v2-low",
+            ROOT / "packages" / "company-auth-v1-private",
+        ]
     if REPOSITORY == "private":
         return [ROOT / "packages" / "company-auth-v1-private"]
     if REPOSITORY == "public":

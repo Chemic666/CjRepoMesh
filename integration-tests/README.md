@@ -57,7 +57,20 @@ export CJREPOMESH_SERVER=/path/to/cjrepo
 ./integration-tests/run-linux.sh --suite sync
 ```
 
-运行器会在开始前拒绝已占用的固定测试端口，在每组结束时回收全部子进程并确认端口关闭。服务端仅构建一次，夹具产物、应用缓存、锁文件、Provenance 和请求日志会在成功或失败后统一清理；服务端存储使用系统临时目录。
+运行器会在开始前拒绝已占用的固定测试端口，在每组结束时回收全部子进程并确认端口关闭。服务端仅构建一次，夹具产物、应用缓存、锁文件、Provenance 和请求日志会在成功或失败后统一清理；服务端测试存储使用被 Git 忽略的 `integration-tests/.tmp/`。
+
+## 官方原版兼容性差分
+
+在 Linux 上准备同一源码基线的官方原版 cjpm 后，可比较旧单仓配置的版本、锁文件、依赖树与缓存，并运行本地官方 HTTP 状态 LLT 夹具：
+
+```bash
+python3 integration-tests/compatibility/run.py \
+  --official-cjpm /path/to/official/cjpm/dist/cjpm \
+  --enhanced-cjpm /path/to/CjRepoMesh/cjpm/dist/cjpm \
+  --official-fixture /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/repository/coverage/http_status_matrix
+```
+
+原版构建与测试范围、实际结果见 `docs/official-compatibility-report.md`。本入口不代替完整 Maple HLT/LLT。
 
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
