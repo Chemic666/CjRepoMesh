@@ -197,21 +197,35 @@ def _transitive_app(
 
 
 def _assert_transitive_sources(
-    app: Path, *, mesh_version: str, mesh_repository: str,
+    context: TestContext, app: Path, *, mesh_version: str, mesh_repository: str,
     bridge_version: str, bridge_repository: str
 ) -> None:
     provenance = json.loads((app / "cjpm-provenance.json").read_text(encoding="utf-8"))
     selected = {item["package"]: item for item in provenance["packages"]}
+    assert_equal(provenance["formatVersion"], 1, label="transitive provenance format")
+    assert_equal(set(selected), {"meshdep", "meshbridge"}, label="transitive provenance packages")
+    artifact_fixtures = {
+        ("meshdep", "1.0.0", "high"): "meshdep-v1-high",
+        ("meshdep", "2.0.0", "low"): "meshdep-v2-low",
+        ("meshbridge", "1.0.0", "low"): "meshbridge-v1",
+        ("meshbridge", "2.0.0", "high"): "meshbridge-v2",
+    }
     for package, version, repository in (
         ("meshdep", mesh_version, mesh_repository),
         ("meshbridge", bridge_version, bridge_repository),
     ):
-        if package not in selected:
-            raise TestFailure(f"Transitive provenance did not record {package}")
         assert_equal(selected[package]["version"], version, label=f"{package} version")
         assert_equal(selected[package]["repository"], repository, label=f"{package} repository")
-        if not selected[package].get("sha256"):
-            raise TestFailure(f"Transitive provenance did not record {package} checksum")
+        port = 39141 if repository == "high" else 39142
+        assert_equal(
+            selected[package]["registry"], f"http://127.0.0.1:{port}",
+            label=f"{package} registry URL",
+        )
+        artifact = (
+            context.multirepo_root / "packages" / artifact_fixtures[(package, version, repository)]
+            / "target" / f"{package}-{version}.cjp"
+        )
+        assert_equal(selected[package]["sha256"], sha256(artifact), label=f"{package} SHA-256")
 
 
 def _run_multirepo_transitive(context: TestContext) -> None:
@@ -235,7 +249,7 @@ def _run_multirepo_transitive(context: TestContext) -> None:
         assert_contains(result.output, mesh_marker)
         assert_contains(result.output, bridge_marker)
         _assert_transitive_sources(
-            app, mesh_version=mesh_version, mesh_repository=mesh_repository,
+            context, app, mesh_version=mesh_version, mesh_repository=mesh_repository,
             bridge_version=bridge_version, bridge_repository=bridge_repository,
         )
         context.pass_message(f"cross-repository {name}: resolved versions and audited sources")
