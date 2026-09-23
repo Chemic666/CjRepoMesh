@@ -42,3 +42,4 @@ benchmark/proxy/storage/
 benchmark/proxy/*.log
 tools/node_modules/
 .codex-slides/
+.codex-slides-redesign/

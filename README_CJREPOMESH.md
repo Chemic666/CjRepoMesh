@@ -191,7 +191,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 最近在提交 `0f0e076` 上复核：Linux 共享核心入口 4/4 PASS，Docker 安全诊断 9/9 PASS；Windows 入口在打包夹具时被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7 通过（含传递依赖约束、冲突与锁文件转换），官方仓库 HTTP 状态夹具在两版上各 16/16 断言通过。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
-本次完整回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。另备有 [8 页可编辑技术答辩稿](submission/CjRepoMesh-technical-defense-2026-09-23.pptx)，视频路线仍待录制。
+本次完整回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。另备有 [8 页可编辑技术答辩稿（重设计版）](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)，视频路线仍待录制。
 
 性能测试单独运行，避免把性能波动混入功能回归：
 
