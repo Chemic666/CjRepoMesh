@@ -1098,6 +1098,13 @@ def run_sync(context: TestContext) -> None:
         )
         assert_contains(invalid.output, "total=2 succeeded=1 failed=1")
         assert_equal(len(_read_lines(upstream_log)), first_request_count, label="invalid mirror requests")
+        malformed_org = run_command(
+            (context.server, "mirror", "http://127.0.0.1:39401", "meshcorp::", "1.0.0"),
+            cwd=context.server_root, env=mirror_env, expect_success=False,
+        )
+        assert_contains(malformed_org.output, "invalid organization-qualified package")
+        assert_equal(len(_read_lines(upstream_log)), first_request_count,
+                     label="malformed organization must not reach upstream")
         context.pass_message("batch mirror manifest is checksum-verified, idempotent and reports partial failure")
         processes.stop(upstream)
 
