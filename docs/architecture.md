@@ -151,7 +151,7 @@ storage/
 
 ## 7. 已知边界
 
-- Hosted 与 Proxy 支持默认仓及 `?organization=<组织名>`，按组织分别存放索引和制品，并拒绝其他查询参数或组织身份不匹配，避免别名到默认仓；Mirror、Sync 仍只支持默认仓；读取鉴权可通过 `CJREPO_READ_TOKEN` 显式启用，默认仍公开读取；
+- Hosted 与 Proxy 支持默认仓及 `?organization=<组织名>`，按组织分别存放索引和制品，并拒绝其他查询参数或组织身份不匹配，避免别名到默认仓；Mirror、Sync 的命令与清单可用 `组织名::包名` 选择组织仓；读取鉴权可通过 `CJREPO_READ_TOKEN` 显式启用，默认仍公开读取；
 - 存储锁是进程级全局锁，尚未细化到包级；
 - Mirror/Sync 已支持显式批量清单，但尚无调度和断点续传；
 - Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与四组共享核心回归、Docker Compose 真实发布和容器重建持久化均已验证；

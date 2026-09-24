@@ -58,7 +58,7 @@ Cache MISS 会从上游获取并原子落盘；制品必须与已缓存索引中
 
 ## Mirror
 
-主动拉取指定包和版本：
+主动拉取指定包和版本；命名组织仓可将包参数写成 `<组织名>::<包名>`：
 
 ```powershell
 $env:CJREPO_STORAGE = "./storage"
@@ -73,6 +73,7 @@ Mirror 会下载索引和制品、验证 SHA-256 后写入本地仓。若本地�
 # mirror.txt：每行一个 package/version，空行和注释会被忽略
 meshdep 1.0.0
 meshdep 2.0.0
+meshcorp::orgmeshdep 1.0.0
 ```
 
 ```powershell
@@ -83,7 +84,7 @@ main.exe mirror-manifest https://upstream.example.com mirror.txt
 
 ## Repository Sync
 
-将一个 CjRepo 中的指定版本增量同步到另一个 CjRepo：
+将一个 CjRepo 中的指定版本增量同步到另一个 CjRepo；命名组织仓同样使用 `<组织名>::<包名>`：
 
 ```powershell
 $env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
@@ -92,7 +93,7 @@ main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 
 同步会从 Source 获取索引与制品、验证 SHA-256，再通过目标仓发布协议写入。目标版本已经存在时，409 被解释为幂等 `SKIP`。
 
-批量同步复用 Mirror 的 `package version` 清单格式：
+批量同步复用 Mirror 的 `package version` 清单格式，包括可选的组织名前缀：
 
 ```powershell
 $env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
@@ -101,4 +102,4 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 
 批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
 
-当前限制：Mirror/Sync 仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
+当前限制：读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持默认仓和命名组织仓的显式批量清单，但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。

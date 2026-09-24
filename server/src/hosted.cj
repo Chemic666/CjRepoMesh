@@ -19,16 +19,22 @@ private let FRAME_VERSION: UInt8 = 1
 // receives only the path. Accept exactly that one parameter to prevent aliases.
 func requestedRegistryOrganization(context: HttpContext): String {
     if (let Some(raw) <- context.request.url.rawQuery) {
-        if (!Regex("^organization=_*[A-Za-z][_A-Za-z0-9]*$").matches(raw)) {
+        if (!raw.startsWith("organization=")) {
             throw Exception("invalid registry organization query")
         }
         let organization = raw[13..]
-        if (organization.size < 3 || organization.size > 64 || organization.toAsciiLower() == "default") {
+        if (!isNamedRegistryOrganization(organization)) {
             throw Exception("invalid registry organization")
         }
         return organization
     }
     return "default"
+}
+
+func isNamedRegistryOrganization(organization: String): Bool {
+    return organization.size >= 3 && organization.size <= 64 &&
+        organization.toAsciiLower() != "default" &&
+        Regex("^_*[A-Za-z][_A-Za-z0-9]*$").matches(organization)
 }
 
 func metadataOrganization(storageOrganization: String): String {

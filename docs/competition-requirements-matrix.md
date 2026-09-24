@@ -171,6 +171,7 @@ registry + organization + package + version
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
 - [x] 批量清单主动 Mirror，逐项校验、幂等跳过并汇总部分失败；
 - [x] 带令牌的 CjRepo-to-CjRepo 批量 Sync，逐项幂等并汇总部分失败；
+- [x] Mirror/Sync 支持 `组织名::包名`，索引/制品按组织隔离；组织包同步后源仓离线仍可由目标仓完成 cjpm 构建；
 - [x] Source 离线后 Destination 独立完成 cjpm 构建；
 - [x] Windows 一条命令构建并启动私有仓，提供健康诊断和安全停止；
 - [x] 发布后停止/重启，持久化制品仍可下载并通过 SHA-256 校验；
@@ -183,7 +184,7 @@ registry + organization + package + version
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；
-- [ ] Mirror/Sync 组织仓、按包细粒度锁；Hosted/Proxy 组织仓与可选读取鉴权已实现，默认仍公开；
+- [ ] 按包细粒度锁；Hosted/Proxy/Mirror/Sync 组织仓与可选读取鉴权已实现，默认仍公开；
 - [ ] Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：

@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：Hosted/Proxy 命名组织仓加入后，服务端于 2026-09-24 通过 Linux 四组完整回归 4/4、219.88 秒；真实 cjpm 组织包发布、代理拉包、离线缓存及私有 Hosted 拉包专项通过。当前服务端二进制打包的 Docker 镜像诊断 9/9，并通过私有默认仓/组织仓隔离持久化专项。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另有本地打包、树与组织名选定批次通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
+> 结论：Hosted/Proxy/Mirror/Sync 命名组织仓加入后，服务端于 2026-09-24 通过 Linux 四组完整回归 4/4、236.04 秒；真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包专项通过。当前服务端二进制打包的 Docker 镜像诊断 9/9，并通过私有默认仓/组织仓隔离持久化专项。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另有本地打包、树与组织名选定批次通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
 
 ## 环境
 
@@ -72,7 +72,7 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 - Docker Compose 一键启动、真实发布、容器重建持久化和最小权限诊断已通过，详见 `docs/docker-verification.md`；
 - Docker 在后续修复过程中再次 9/9 通过且启动输出不再回显 Token；`de2da77` 的 SecureString/ACL 路径在当时尚未完成容器启动复测，后续 `c602c12` 的默认 Token/ACL 完整链路已复测，见文末与 `docs/docker-verification.md`；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
-- Hosted/Proxy 命名 organization 已验证；Mirror/Sync 组织仓尚未实现或验证；
+- Hosted/Proxy/Mirror/Sync 命名 organization 已分别通过专项验证；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
 - 性能数据见独立的 `benchmark/results/proxy-benchmark.md`，不由本功能回归推导。
 
@@ -197,3 +197,5 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 随后在 Hosted 模式实现命名 organization：仅接受合法 `?organization=<组织名>`，核对发布元数据和索引组织身份，并按组织分目录存储；默认仓继续使用无查询请求。Proxy 仍拒绝组织查询。使用真实增强版 cjpm 完成组织包 `bundle → publish → run`，并从启用读取鉴权的组织仓通过 `token-env` 拉包运行。Linux 四组回归 **4/4 PASS、184.28s**（多仓 140.19s、Hosted 24.43s、Proxy 10.65s、Sync 5.52s），随后仅追加私有组织仓客户端夹具，Hosted 专项 **PASS、43.10s**。服务端二进制 SHA-256 `9c9aac3ed913cbcb4fdb0a0728fb64dc652aed77af7beabb82a52a3036c97c50`；当前 Docker 镜像诊断 **9/9 PASS**，隔离容器内默认仓与同名同版本组织仓均能发布、隔离读取、容器重建后保留并分别拒绝重复发布（409）。
 
 随后 Proxy 也实现命名组织仓：代理把规范化组织参数传给上游，索引与制品按组织分区缓存，上游索引组织身份不匹配时返回 502 且不落盘，制品须匹配同组织缓存索引的 SHA-256。真实增强版 cjpm 经 Proxy 拉取 Hosted 组织包并运行；停止 Hosted 上游后清理客户端缓存，再次经 Proxy 缓存构建运行。Linux 四组 **4/4 PASS、219.88s**（多仓 155.23s、Hosted 29.20s、Proxy 25.73s、Sync 5.90s）；加入错组织上游索引拒绝断言后，Proxy 专项 **PASS、37.54s**。服务端二进制 SHA-256 `5fbb27e6effe719234eee31a58c4a1876ad9d16c97b2d157d223e2b5444500f5`，当前 Docker 镜像诊断 **9/9 PASS**，隔离私有仓/组织仓持久化专项 **PASS**。Mirror/Sync 仍只覆盖默认仓。
+
+最终补齐 Mirror/Sync 命名组织仓：单项命令和原有两列清单均接受 `组织名::包名`，索引/制品按组织分区，源索引组织身份和制品 SHA-256 仍严格校验。组织包的镜像与同步均验证幂等跳过，停止源仓后目标仓能由真实增强版 cjpm 编译运行组织应用。Linux 四组 **4/4 PASS、236.04s**（多仓 154.62s、Hosted 32.01s、Proxy 27.71s、Sync 17.42s）。Docker 构建上下文中服务端 SHA-256 `09f956b0399c3b00ae71f122ece3d1c87a95d90c2ffd464fa78aa3dd8dafe4d4`；主容器沿用原 `.env` 与数据卷更新，诊断 **9/9 PASS**，新版镜像隔离私有默认仓/组织仓持久化专项 **PASS**。尚未覆盖当前版本 Windows 原生运行、按包细粒度锁、自动调度和断点续传。

@@ -17,9 +17,15 @@ func runMirror(arguments: Array<String>): Bool {
         return false
     }
     let upstream = trimTrailingSlash(arguments[0])
-    let name = arguments[1]
+    let packageSpec = arguments[1]
     let version = arguments[2]
-    if (!isSafePackageSegment(name) || !isSafePackageSegment(version) || name.size < 3) {
+    let (organization, name) = try {
+        parseMirrorPackage(packageSpec)
+    } catch (e: Exception) {
+        eprintln("Error: ${e.message}")
+        return false
+    }
+    if (!isSafePackageSegment(version)) {
         eprintln("Error: invalid package name or version")
         return false
     }
@@ -27,24 +33,25 @@ func runMirror(arguments: Array<String>): Bool {
     let storage = getVariable("CJREPO_STORAGE") ?? Path(".").join("storage").toString()
     let token = getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
     try {
-        if (cachedArtifactIsValid(storage, name, version)) {
-            println("[mirror] package=${name} version=${version} result=SKIP reason=already-valid")
+        if (cachedArtifactIsValid(storage, organization, name, version)) {
+            println("[mirror] package=${packageSpec} version=${version} result=SKIP reason=already-valid")
             return true
         }
-        let (indexBody, _, expectedChecksum) = fetchIndexVersion(upstream, token, name, version)
-        let (artifactStatus, artifact) = fetchUpstream(upstream, token, "/pkg/${name}/${version}")
+        let (indexBody, _, expectedChecksum) = fetchIndexVersion(upstream, token, organization, name, version)
+        let (artifactStatus, artifact) = fetchUpstream(upstream, token,
+            organizationRequestPath("/pkg/${name}/${version}", organization))
         if (artifactStatus != 200) {
             throw Exception("upstream artifact returned status ${artifactStatus}")
         }
         verifyChecksum(artifact, expectedChecksum)
 
-        let indexPath = indexCachePath(storage, name)
-        let artifactPath = artifactCachePath(storage, name, version)
+        let indexPath = indexCachePath(storage, organization, name)
+        let artifactPath = artifactCachePath(storage, organization, name, version)
         ensureParent(indexPath)
         ensureParent(artifactPath)
         File.writeTo(indexPath, indexBody)
         File.writeTo(artifactPath, artifact)
-        println("[mirror] package=${name} version=${version} result=SYNCED checksum=${expectedChecksum}")
+        println("[mirror] package=${packageSpec} version=${version} result=SYNCED checksum=${expectedChecksum}")
         return true
     } catch (e: Exception) {
         eprintln("Error: mirror failed: ${e.message}")
@@ -56,9 +63,10 @@ func runMirror(arguments: Array<String>): Bool {
  * Mirrors every package/version pair in a plain-text manifest.
  *
  * Blank lines and lines beginning with '#' are ignored. Each remaining line
- * must contain exactly two space-separated fields: package and version. A bad
- * entry does not prevent later entries from being attempted; the final status
- * is unsuccessful if any entry failed.
+ * must contain exactly two space-separated fields: package and version. The
+ * package may be organization-qualified as organization::package. A bad entry
+ * does not prevent later entries from being attempted; the final status is
+ * unsuccessful if any entry failed.
  */
 func runMirrorManifest(arguments: Array<String>): Bool {
     if (arguments.size != 2) {
@@ -117,9 +125,15 @@ func runSync(arguments: Array<String>): Bool {
     }
     let source = trimTrailingSlash(arguments[0])
     let destination = trimTrailingSlash(arguments[1])
-    let name = arguments[2]
+    let packageSpec = arguments[2]
     let version = arguments[3]
-    if (!isSafePackageSegment(name) || !isSafePackageSegment(version) || name.size < 3) {
+    let (organization, name) = try {
+        parseMirrorPackage(packageSpec)
+    } catch (e: Exception) {
+        eprintln("Error: ${e.message}")
+        return false
+    }
+    if (!isSafePackageSegment(version)) {
         eprintln("Error: invalid package name or version")
         return false
     }
@@ -127,14 +141,15 @@ func runSync(arguments: Array<String>): Bool {
     let sourceToken = getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
     let destinationToken = getVariable("CJREPO_SYNC_DESTINATION_TOKEN") ?? ""
     try {
-        let (_, indexLine, expectedChecksum) = fetchIndexVersion(source, sourceToken, name, version)
-        let (artifactStatus, artifact) = fetchUpstream(source, sourceToken, "/pkg/${name}/${version}")
+        let (_, indexLine, expectedChecksum) = fetchIndexVersion(source, sourceToken, organization, name, version)
+        let (artifactStatus, artifact) = fetchUpstream(source, sourceToken,
+            organizationRequestPath("/pkg/${name}/${version}", organization))
         if (artifactStatus != 200) {
             throw Exception("source artifact returned status ${artifactStatus}")
         }
         verifyChecksum(artifact, expectedChecksum)
 
-        let metadata = "{\"organization\":\"\",\"name\":\"${name}\",\"version\":\"${version}\",\"index\":${indexLine}}".toArray()
+        let metadata = "{\"organization\":\"${metadataOrganization(organization)}\",\"name\":\"${name}\",\"version\":\"${version}\",\"index\":${indexLine}}".toArray()
         let frame = ArrayList<UInt8>()
         frame.add(1)
         frame.add(all: encodeLittleEndianSize(metadata.size))
@@ -147,7 +162,7 @@ func runSync(arguments: Array<String>): Bool {
         try {
             let requestBuilder = HttpRequestBuilder()
                 .method("POST")
-                .url("${destination}/pkg/${name}")
+                .url("${destination}${organizationRequestPath("/pkg/${name}", organization)}")
                 .body(frame.toArray())
             if (!destinationToken.isEmpty()) {
                 requestBuilder.header("Authorization", destinationToken)
@@ -155,11 +170,11 @@ func runSync(arguments: Array<String>): Bool {
             let response = client.send(requestBuilder.build())
             drain(response)
             if (response.status == 200) {
-                println("[sync] package=${name} version=${version} result=SYNCED")
+                println("[sync] package=${packageSpec} version=${version} result=SYNCED")
                 return true
             }
             if (response.status == 409) {
-                println("[sync] package=${name} version=${version} result=SKIP reason=already-exists")
+                println("[sync] package=${packageSpec} version=${version} result=SKIP reason=already-exists")
                 return true
             }
             throw Exception("destination returned status ${response.status}")
@@ -230,8 +245,9 @@ func runSyncManifest(arguments: Array<String>): Bool {
     return failed == 0
 }
 
-private func fetchIndexVersion(upstream: String, token: String, name: String, version: String): (Array<UInt8>, String, String) {
-    let path = indexRequestPath(name)
+private func fetchIndexVersion(upstream: String, token: String, organization: String, name: String,
+    version: String): (Array<UInt8>, String, String) {
+    let path = organizationRequestPath(indexRequestPath(name), organization)
     let (status, body) = fetchUpstream(upstream, token, path)
     if (status != 200) {
         throw Exception("upstream index returned status ${status}")
@@ -244,7 +260,8 @@ private func fetchIndexVersion(upstream: String, token: String, name: String, ve
         }
         let value = JsonValue.fromStr(line)
         let object = value.asObject()
-        if (jsonString(object, "name") != name || !jsonString(object, "organization").isEmpty()) {
+        if (jsonString(object, "name") != name ||
+            jsonString(object, "organization") != metadataOrganization(organization)) {
             throw Exception("upstream returned an invalid package index")
         }
         if (jsonString(object, "version") == version) {
@@ -258,14 +275,14 @@ private func fetchIndexVersion(upstream: String, token: String, name: String, ve
     return (body, selectedLine, expectedChecksum)
 }
 
-private func cachedArtifactIsValid(storage: String, name: String, version: String): Bool {
-    let indexPath = indexCachePath(storage, name)
-    let artifactPath = artifactCachePath(storage, name, version)
+private func cachedArtifactIsValid(storage: String, organization: String, name: String, version: String): Bool {
+    let indexPath = indexCachePath(storage, organization, name)
+    let artifactPath = artifactCachePath(storage, organization, name, version)
     if (!exists(indexPath) || !exists(artifactPath)) {
         return false
     }
     try {
-        let expectedChecksum = checksumFromCachedIndex(storage, "default", name, version)
+        let expectedChecksum = checksumFromCachedIndex(storage, organization, name, version)
         let sha256 = SHA256()
         sha256.write(File.readFrom(artifactPath))
         return toHexString(sha256.finish()) == expectedChecksum
@@ -288,12 +305,28 @@ private func indexRequestPath(name: String): String {
     return "/index/${firstLevel}/${secondLevel}/${name}"
 }
 
-private func indexCachePath(storage: String, name: String): Path {
-    return Path(storage).join("index").join("default").join(indexRequestPath(name)[7..])
+private func indexCachePath(storage: String, organization: String, name: String): Path {
+    return Path(storage).join("index").join(organization).join(indexRequestPath(name)[7..])
 }
 
-private func artifactCachePath(storage: String, name: String, version: String): Path {
-    return Path(storage).join("artifacts").join("default").join(name).join(version).join("${name}-${version}.cjp")
+private func artifactCachePath(storage: String, organization: String, name: String, version: String): Path {
+    return Path(storage).join("artifacts").join(organization).join(name).join(version).join("${name}-${version}.cjp")
+}
+
+private func organizationRequestPath(path: String, organization: String): String {
+    return if (organization == "default") { path } else { "${path}?organization=${organization}" }
+}
+
+private func parseMirrorPackage(spec: String): (String, String) {
+    let parts = spec.split("::", removeEmpty: true)
+    let organization = if (parts.size == 1 && parts[0] == spec) { "default" } else if (
+        parts.size == 2 && spec == "${parts[0]}::${parts[1]}" && isNamedRegistryOrganization(parts[0])
+    ) { parts[0] } else { throw Exception("invalid organization-qualified package") }
+    let name = parts[parts.size - 1]
+    if (!isSafePackageSegment(name) || name.size < 3) {
+        throw Exception("invalid package name")
+    }
+    return (organization, name)
 }
 
 private func encodeLittleEndianSize(size: Int64): Array<UInt8> {

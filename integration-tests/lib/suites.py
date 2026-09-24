@@ -95,7 +95,7 @@ class TestContext:
                 (root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json")
             )
         for suite in ("hosted-server", "proxy", "sync"):
-            apps = ("app", "private-app", "org-package", "org-app", "org-private-app") if suite == "hosted-server" else (("app", "org-app") if suite == "proxy" else ("app",))
+            apps = ("app", "private-app", "org-package", "org-app", "org-private-app") if suite == "hosted-server" else (("app", "org-app") if suite in ("proxy", "sync") else ("app",))
             for name in apps:
                 app = self.tests_root / suite / name
                 generated.extend((app / "target", app / "cache", app / "cjpm.lock", app / "cjpm-provenance.json"))
@@ -1060,10 +1060,13 @@ def run_sync(context: TestContext) -> None:
     suite_root = context.tests_root / "sync"
     app = suite_root / "app"
     context.reset_app(app)
+    org_app = suite_root / "org-app"
+    context.reset_app(org_app)
     mirror_storage = context.temp_root / "mirror-storage"
     destination_storage = context.temp_root / "destination-storage"
     manifest = suite_root / "mirror-manifest.txt"
     invalid_manifest = suite_root / "mirror-manifest-invalid.txt"
+    org_manifest = suite_root / "org-manifest.txt"
     upstream_log = context.multirepo_root / "low.requests.log"
     remove_within(upstream_log, (context.tests_root,))
 
@@ -1146,10 +1149,44 @@ def run_sync(context: TestContext) -> None:
         assert_contains(invalid_sync.output, "total=2 succeeded=1 failed=1")
         context.pass_message("batch Sync requires source read and destination publish tokens, is idempotent and reports partial failure")
 
+        org_package = context.tests_root / "hosted-server" / "org-package"
+        context.reset_app(org_package)
+        context.cjpm_command(org_package, "bundle")
+        org_metadata = (org_package / "target" / "meta-data.json").read_bytes()
+        org_artifact = (org_package / "target" / "orgmeshdep-1.0.0.cjp").read_bytes()
+        assert_equal(
+            http_request("POST", "http://127.0.0.1:39501/pkg/orgmeshdep?organization=meshcorp",
+                         headers={"Authorization": "source-publish-token"},
+                         body=publish_frame(org_metadata, org_artifact)).status,
+            200, label="organization source publish",
+        )
+        org_mirror_env = dict(mirror_env)
+        org_mirror_env["CJREPO_UPSTREAM_TOKEN"] = "source-read-token"
+        org_mirror = run_command(
+            (context.server, "mirror-manifest", "http://127.0.0.1:39501", org_manifest),
+            cwd=context.server_root, env=org_mirror_env,
+        )
+        assert_contains(org_mirror.output, "total=1 succeeded=1 failed=0")
+        if not (mirror_storage / "artifacts" / "meshcorp" / "orgmeshdep" / "1.0.0" /
+                "orgmeshdep-1.0.0.cjp").exists():
+            raise TestFailure("Mirror organization artifact was not isolated")
+        org_mirror_again = run_command(
+            (context.server, "mirror-manifest", "http://127.0.0.1:39501", org_manifest),
+            cwd=context.server_root, env=org_mirror_env,
+        )
+        assert_contains(org_mirror_again.output, "result=SKIP")
+        org_sync = run_command((*sync_command, org_manifest), cwd=context.server_root, env=sync_env)
+        assert_contains(org_sync.output, "total=1 succeeded=1 failed=0")
+        org_sync_again = run_command((*sync_command, org_manifest), cwd=context.server_root, env=sync_env)
+        assert_contains(org_sync_again.output, "result=SKIP")
+        context.pass_message("organization Mirror and Sync manifests isolate storage and remain idempotent")
+
         processes.stop(source)
         result = context.cjpm_command(app, "run")
         assert_contains(result.output, "low-2.0.0")
-        context.pass_message("synced destination builds while the source repository is offline")
+        result = context.cjpm_command(org_app, "run")
+        assert_contains(result.output, "meshcorp-1.0.0")
+        context.pass_message("default and organization destination builds while the source is offline")
     wait_for_ports_closed(ports)
 
 

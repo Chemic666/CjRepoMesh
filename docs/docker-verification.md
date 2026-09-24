@@ -120,3 +120,5 @@ Overall                  PASS
 Hosted 命名组织仓实现后，使用服务端二进制 SHA-256 `9c9aac3ed913cbcb4fdb0a0728fb64dc652aed77af7beabb82a52a3036c97c50` 重建当前项目容器，保留原有 `.env` 和数据卷；`doctor.ps1` 再次 **9/9 PASS**。隔离 Docker 持久化专项在私有读取模式下向默认仓和命名组织仓发布同名同版本包，检查两边索引/制品的认证和隔离，强制重建容器后均保持可读，两边重复发布分别返回 409；专项 **PASS**，临时项目和卷已清理。Proxy/Mirror/Sync 组织仓不在此次验证范围。
 
 Proxy 命名组织仓加入后，使用服务端二进制 SHA-256 `5fbb27e6effe719234eee31a58c4a1876ad9d16c97b2d157d223e2b5444500f5` 更新构建上下文，并用现有 `.env` 原样重建主项目容器，保留命名数据卷。`doctor.ps1` **9/9 PASS**；基于新版镜像的隔离 Docker 私有默认仓/组织仓持久化专项 **PASS**，临时项目和卷已清理。Proxy 组织仓真实客户端和离线缓存由 Linux 集成测试验证，Docker 专项未覆盖代理上游。
+
+Mirror/Sync 命名组织仓加入后，最终服务端二进制 SHA-256 `09f956b0399c3b00ae71f122ece3d1c87a95d90c2ffd464fa78aa3dd8dafe4d4`。用原 `.env` 和命名数据卷重建主项目容器，`doctor.ps1` **9/9 PASS**；新版镜像隔离 Docker 私有默认仓/组织仓持久化专项 **PASS**，临时项目和卷已清理。Mirror/Sync 组织仓的真实客户端与源仓离线验证在 Linux 集成测试完成，Docker 专项未直接运行镜像或同步命令。
