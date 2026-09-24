@@ -95,6 +95,8 @@ python3 integration-tests/compatibility/maple_smoke.py \
 
 入口仅在临时副本中把 HTTP 状态与本地索引刷新用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；官方 Git 跟踪文件不变。Maple 对官方 HTTP 状态、三个配置、五个安装覆盖、十七个本地安装、四个卸载、两个更新错误配置和七个更新覆盖用例，共三十九个选定用例分别运行两版 cjpm，要求每版 `39/39 PASS`。本地安装、卸载和新增更新用例使用各自独立临时 `HOME`，且把其 `.cjpm/bin` 加入测试进程的 `PATH`，避免污染用户环境并使安装命令可被后续断言找到。本地索引刷新只访问 `127.0.0.1:39138`，入口检查测试端口释放。另外运行 `repository_archive_matrix`：它原样试跑会因官方夹具动态 gzip 时间戳偶发哈希不一致，入口只在测试副本中固定 gzip mtime 为 0，再要求两版各 `1/1 PASS`。结果日志和原始/稳定化测试服务脚本摘要保存在唯一的 `--results-dir/run-*` 中。稳定化矩阵不能表述为未经调整的官方用例通过；该入口也不代表完整 HLT/LLT。
 
+另有 `integration-tests/compatibility/maple_local_bundle.py` 专门运行官方 `LLT/Tools/cjpm/CJNATIVE/repo/bundle` 下的 23 个本地打包用例。它先检查用例数量及命令未变，再逐例以隔离 `HOME` 对照原版和增强版，并将 46 份日志写到指定 `--results-dir`；不运行外部发布用例。参数为 `--framework`、`--bundle-suite`、`--test-config`、`--official-cjpm`、`--enhanced-cjpm`、`--results-dir`，路径含义与上述入口一致。
+
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
 ```powershell
