@@ -189,3 +189,7 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 同日新增并运行隔离 Docker 持久化专项 `integration-tests/docker_persistence.py`：独立临时 Compose 项目中，未经授权的读取与发布返回 401；授权发布后索引及合成制品可读；强制重建容器后两者仍在且制品 SHA-256 一致，重复发布返回 409。**专项 PASS**，其容器和卷已清理；原项目容器再次诊断 **9/9 PASS**。合成制品专项不代替真实 cjpm 发布/安装或最终提交上的全量回归。
 
 继续处理官方测试覆盖缺口：筛出 `repo/bundle` 23 个本地 LLT（不运行外部发布），用官方原版与增强版分别逐例执行，**两版各 23/23 PASS**；46 份日志在外层 `test-runs/maple-bundle/bundle-1790223696-c5626f35/`。这是先前 39 项之外的独立选定批次，不等于完整 Maple。Windows 侧已确认本机 `D:\Apps\Cangjie\bin\cjc.exe` 仍为 `NotSigned`，先前 Code Integrity 3077 事件明确阻断它；仓库代码或测试脚本无法给该工具链签名。当前继续以 Linux 原生回归作产品验证，不关闭系统安全策略，也不把 Linux 结果冒充 Windows 原生五组。
+
+同日再运行官方本地 `tree` **17 项**、`organization` **12 项**，原版和增强版每批均全通过；34 份依赖树日志和 24 份组织名日志分别保存在外层 `test-runs/maple-tree/tree-1790224129-a37bb849/`、`test-runs/maple-organization/organization-1790224256-52fb157b/`。隔离临时目录已清理。组织名批次只覆盖本地路径依赖，不外推为服务端组织仓支持。
+
+组织名边界审查发现服务端原本仅按 URL path 分发，`?organization=demo` 被忽略，会把请求导向默认仓已有索引/制品。修复后默认仓的索引、制品和发布端点拒绝任何查询参数（400）；私有读取先验令牌，无令牌仍为 401。Hosted 测试覆盖明文、空值、编码组织名及其他查询参数，Proxy 测试确认拒绝后不访问上游。服务端真实重编译，SHA-256 `bd424b79d39ebd47d550a8130fa7d06a444babe62e2fe3496751796ed3c353af`；Linux 四组 **4/4 PASS、176.32s**（多仓 142.77s、Hosted 13.69s、Proxy 10.81s、Sync 5.51s）。当前二进制已打入 Docker 镜像，主项目容器诊断 **9/9 PASS**；在保留数据卷的容器上，同一默认仓包无查询请求为 200、带组织查询为 400。独立 Docker 私有仓持久化专项含组织查询断言再次 PASS。此修复是“未支持组织仓时拒绝错误路由”，并非实现组织仓。

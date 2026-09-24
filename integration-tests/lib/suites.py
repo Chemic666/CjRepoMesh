@@ -717,6 +717,24 @@ def run_hosted(context: TestContext) -> None:
             raise TestFailure("Hosted artifact checksum mismatch")
         context.pass_message("hosted artifact download and checksum")
 
+        for query in ("organization=demo", "organization=", "%6Frganization=demo", "unused=x"):
+            for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+                assert_equal(
+                    http_request("GET", f"{base}{path}?{query}").status,
+                    400,
+                    label=f"default namespace query rejection {path}?{query}",
+                )
+        assert_equal(
+            http_request(
+                "POST", f"{base}/pkg/meshdep?organization=demo",
+                headers={"Authorization": "publish-token"},
+                body=publish_frame(metadata, artifact),
+            ).status,
+            400,
+            label="organization publish must not alias default namespace",
+        )
+        context.pass_message("unsupported organization and other queries cannot alias default Hosted storage")
+
         result = context.cjpm_command(app, "run")
         assert_contains(result.output, "low-2.0.0")
         context.pass_message("enhanced cjpm resolves and runs a package from CjRepo Server")
@@ -766,6 +784,19 @@ def run_hosted(context: TestContext) -> None:
                 http_request("GET", private_base + path, headers={"Authorization": "read-token"}).status,
                 200,
                 label=f"valid read token {path}",
+            )
+            assert_equal(
+                http_request("GET", private_base + path + "?organization=demo").status,
+                401,
+                label=f"missing read token with organization query {path}",
+            )
+            assert_equal(
+                http_request(
+                    "GET", private_base + path + "?organization=demo",
+                    headers={"Authorization": "read-token"},
+                ).status,
+                400,
+                label=f"authorized unsupported organization query {path}",
             )
         context.pass_message("private Hosted index and artifact reject missing or invalid read tokens")
         result = context.cjpm_command(
@@ -887,6 +918,17 @@ def run_proxy(context: TestContext) -> None:
         for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
             assert_equal(http_request("GET", private_base + path).status, 401, label=f"private proxy {path}")
         assert_equal(_read_lines(low_log), upstream_before, label="unauthorized private proxy upstream requests")
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(
+                http_request(
+                    "GET", private_base + path + "?organization=demo",
+                    headers={"Authorization": "proxy-read-token"},
+                ).status,
+                400,
+                label=f"unsupported private proxy organization query {path}",
+            )
+        assert_equal(_read_lines(low_log), upstream_before, label="unsupported proxy namespace upstream requests")
+        context.pass_message("unsupported organization query cannot fill or read the default Proxy cache")
         for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
             assert_equal(
                 http_request("GET", private_base + path, headers={"Authorization": "proxy-read-token"}).status,

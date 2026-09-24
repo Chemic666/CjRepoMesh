@@ -74,6 +74,24 @@ private class ReadAuthorizationHandler <: HttpRequestHandler {
     }
 }
 
+// The distributor receives only the URL path. Until organization routing is
+// implemented, never let a query silently alias the default namespace.
+private class DefaultNamespaceHandler <: HttpRequestHandler {
+    private let handler: HttpRequestHandler
+
+    public init(handler: HttpRequestHandler) {
+        this.handler = handler
+    }
+
+    public func handle(context: HttpContext): Unit {
+        if (let Some(_) <- context.request.url.rawQuery) {
+            respondError(context, 400, "query parameters are not supported by the default registry")
+            return
+        }
+        handler.handle(context)
+    }
+}
+
 private class ArtifactReadHandler <: HttpRequestHandler {
     private let storage: String
     private let upstream: String
@@ -155,10 +173,10 @@ private class RegistryDistributor <: HttpRequestDistributor {
             if (isSafeIndexPath(relative)) {
                 let indexPath = Path(storage).join("index").join("default").join(relative).toString()
                 if (!upstream.isEmpty()) {
-                    return protectedRead(ProxyIndexHandler(storage, upstream, upstreamToken, relative,
-                        proxyTtlSeconds))
+                    return protectedRead(DefaultNamespaceHandler(ProxyIndexHandler(storage, upstream,
+                        upstreamToken, relative, proxyTtlSeconds)))
                 }
-                return protectedRead(FileHandler(indexPath))
+                return protectedRead(DefaultNamespaceHandler(FileHandler(indexPath)))
             }
         }
 
@@ -171,7 +189,8 @@ private class RegistryDistributor <: HttpRequestDistributor {
             if (segments.size == 2 && isSafeSegment(segments[0]) && isSafeSegment(segments[1])) {
                 let name = segments[0]
                 let version = segments[1]
-                return protectedRead(ArtifactReadHandler(storage, upstream, upstreamToken, name, version, path))
+                return protectedRead(DefaultNamespaceHandler(ArtifactReadHandler(storage, upstream,
+                    upstreamToken, name, version, path)))
             }
         }
 

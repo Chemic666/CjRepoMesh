@@ -115,6 +115,14 @@ def main() -> None:
             expect(status, 200, "published artifact")
             if downloaded != artifact:
                 raise AssertionError("published artifact differs from uploaded bytes")
+            for path in (index_path, artifact_path):
+                expect(request(base, path + "?organization=other")[0], 401,
+                       "unauthorized organization query")
+                expect(request(base, path + "?organization=other", token=read_token)[0], 400,
+                       "organization query must not alias default storage")
+            expect(request(base, f"/pkg/{package}?organization=other",
+                           token=publish_token, body=frame)[0], 400,
+                   "organization publish must not alias default storage")
             compose(project, env_file, env, "up", "-d", "--no-build", "--force-recreate")
             healthy(base)
             expect(request(base, index_path)[0], 401, "private index after recreation")
@@ -122,11 +130,13 @@ def main() -> None:
             expect(request(base, index_path, token=read_token)[0], 200, "persisted index")
             status, downloaded = request(base, artifact_path, token=read_token)
             expect(status, 200, "persisted artifact")
+            expect(request(base, artifact_path + "?organization=other", token=read_token)[0],
+                   400, "organization query after recreation")
             if hashlib.sha256(downloaded).hexdigest() != checksum:
                 raise AssertionError("persisted artifact SHA-256 mismatch")
             expect(request(base, f"/pkg/{package}", token=publish_token, body=frame)[0],
                    409, "duplicate publish after recreation")
-            print("PASS: private auth, publish, index/artifact integrity, persistent recreation, duplicate 409")
+            print("PASS: private auth, namespace isolation, publish, persistence, duplicate 409")
         finally:
             # The generated project name scopes this removal to this test's container and volume.
             compose(project, env_file, env, "down", "-v", "--remove-orphans")

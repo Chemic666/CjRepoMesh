@@ -14,6 +14,8 @@ cjpm run
 
 可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。
 
+当前仅实现默认 organization。由于 HTTP 分发器只传入 URL path，索引、制品和发布端点会明确拒绝任何查询参数（400）；私有读取仍先鉴权（无令牌为 401）。因此 `?organization=...` 不会被静默当作默认仓请求处理。组织仓发布/读取尚未实现，不应把这项隔离措施误认为组织仓功能。
+
 健康检查：
 
 ```text

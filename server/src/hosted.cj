@@ -36,6 +36,10 @@ class PublishHandler <: HttpRequestHandler {
             respondError(context, 401, "authentication failed")
             return
         }
+        if (let Some(_) <- context.request.url.rawQuery) {
+            respondError(context, 400, "query parameters are not supported by the default registry")
+            return
+        }
 
         try {
             let frameBuffer = ArrayList<UInt8>()
