@@ -4,6 +4,7 @@ param(
     [int]$Port = 8080,
     [string]$Storage = "",
     [string]$PublishToken = "",
+    [string]$ReadToken = "",
     [string]$Upstream = "",
     [string]$UpstreamToken = "",
     [ValidateRange(0, 31536000)]
@@ -20,6 +21,10 @@ $serverExe = Join-Path $serverRoot "target\release\bin\main.exe"
 $runRoot = Join-Path $scriptRoot "run"
 $logRoot = Join-Path $scriptRoot "logs"
 $statePath = Join-Path $runRoot "cjrepo.json"
+
+if (-not [string]::IsNullOrEmpty($ReadToken) -and [string]::IsNullOrEmpty($PublishToken)) {
+    throw "PublishToken is required when ReadToken is set."
+}
 
 if ([string]::IsNullOrWhiteSpace($Storage)) {
     $Storage = Join-Path $scriptRoot "data"
@@ -88,6 +93,7 @@ $environmentNames = @(
     "CJREPO_PORT",
     "CJREPO_STORAGE",
     "CJREPO_PUBLISH_TOKEN",
+    "CJREPO_READ_TOKEN",
     "CJREPO_UPSTREAM",
     "CJREPO_UPSTREAM_TOKEN",
     "CJREPO_PROXY_TTL_SECONDS"
@@ -102,6 +108,7 @@ try {
     $env:CJREPO_PORT = [string]$Port
     $env:CJREPO_STORAGE = $Storage
     $env:CJREPO_PUBLISH_TOKEN = $PublishToken
+    $env:CJREPO_READ_TOKEN = $ReadToken
     $env:CJREPO_UPSTREAM = $Upstream
     $env:CJREPO_UPSTREAM_TOKEN = $UpstreamToken
     $env:CJREPO_PROXY_TTL_SECONDS = [string]$ProxyTtlSeconds

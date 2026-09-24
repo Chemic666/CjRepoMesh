@@ -151,7 +151,7 @@ storage/
 
 ## 7. 已知边界
 
-- 当前服务端只支持默认 organization，读取端尚未鉴权；
+- 当前服务端只支持默认 organization；读取鉴权可通过 `CJREPO_READ_TOKEN` 显式启用，默认仍公开读取；
 - 存储锁是进程级全局锁，尚未细化到包级；
 - Mirror/Sync 已支持显式批量清单，但尚无调度和断点续传；
 - Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与四组共享核心回归、Docker Compose 真实发布和容器重建持久化均已验证；

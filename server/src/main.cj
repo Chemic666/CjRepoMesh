@@ -28,6 +28,10 @@ private func configuredPublishToken(): String {
     return getVariable("CJREPO_PUBLISH_TOKEN") ?? ""
 }
 
+private func configuredReadToken(): String {
+    return getVariable("CJREPO_READ_TOKEN") ?? ""
+}
+
 private func configuredUpstream(): String {
     let value = getVariable("CJREPO_UPSTREAM") ?? ""
     return if (value.endsWith("/")) { value[..value.size - 1] } else { value }
@@ -51,6 +55,65 @@ private func configuredProxyTtlSeconds(): Int64 {
     }
 }
 
+// Check the client credential before touching local cache or upstream state.
+private class ReadAuthorizationHandler <: HttpRequestHandler {
+    private let handler: HttpRequestHandler
+    private let token: String
+
+    public init(handler: HttpRequestHandler, token: String) {
+        this.handler = handler
+        this.token = token
+    }
+
+    public func handle(context: HttpContext): Unit {
+        if ((context.request.headers.getFirst("Authorization") ?? "") != token) {
+            respondError(context, 401, "authentication failed")
+            return
+        }
+        handler.handle(context)
+    }
+}
+
+private class ArtifactReadHandler <: HttpRequestHandler {
+    private let storage: String
+    private let upstream: String
+    private let upstreamToken: String
+    private let name: String
+    private let version: String
+    private let requestPath: String
+
+    public init(storage: String, upstream: String, upstreamToken: String, name: String, version: String,
+        requestPath: String) {
+        this.storage = storage
+        this.upstream = upstream
+        this.upstreamToken = upstreamToken
+        this.name = name
+        this.version = version
+        this.requestPath = requestPath
+    }
+
+    public func handle(context: HttpContext): Unit {
+        let artifactPath = Path(storage)
+            .join("artifacts")
+            .join("default")
+            .join(name)
+            .join(version)
+            .join("${name}-${version}.cjp")
+            .toString()
+        if (exists(artifactPath)) {
+            if (upstream.isEmpty()) {
+                FileHandler(artifactPath).handle(context)
+            } else {
+                CacheHitHandler(artifactPath, requestPath).handle(context)
+            }
+        } else if (!upstream.isEmpty()) {
+            ProxyArtifactHandler(storage, upstream, upstreamToken, name, version).handle(context)
+        } else {
+            FileHandler(artifactPath).handle(context)
+        }
+    }
+}
+
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
@@ -61,14 +124,21 @@ private class RegistryDistributor <: HttpRequestDistributor {
     private let storage: String
     private let upstream: String
     private let upstreamToken: String
+    private let readToken: String
     private let proxyTtlSeconds: Int64
     private let exactHandlers = HashMap<String, HttpRequestHandler>()
 
-    public init(storage: String, upstream: String, upstreamToken: String, proxyTtlSeconds: Int64) {
+    public init(storage: String, upstream: String, upstreamToken: String, readToken: String,
+        proxyTtlSeconds: Int64) {
         this.storage = storage
         this.upstream = upstream
         this.upstreamToken = upstreamToken
+        this.readToken = readToken
         this.proxyTtlSeconds = proxyTtlSeconds
+    }
+
+    private func protectedRead(handler: HttpRequestHandler): HttpRequestHandler {
+        return if (readToken.isEmpty()) { handler } else { ReadAuthorizationHandler(handler, readToken) }
     }
 
     public func register(path: String, handler: HttpRequestHandler): Unit {
@@ -85,9 +155,10 @@ private class RegistryDistributor <: HttpRequestDistributor {
             if (isSafeIndexPath(relative)) {
                 let indexPath = Path(storage).join("index").join("default").join(relative).toString()
                 if (!upstream.isEmpty()) {
-                    return ProxyIndexHandler(storage, upstream, upstreamToken, relative, proxyTtlSeconds)
+                    return protectedRead(ProxyIndexHandler(storage, upstream, upstreamToken, relative,
+                        proxyTtlSeconds))
                 }
-                return FileHandler(indexPath)
+                return protectedRead(FileHandler(indexPath))
             }
         }
 
@@ -100,20 +171,7 @@ private class RegistryDistributor <: HttpRequestDistributor {
             if (segments.size == 2 && isSafeSegment(segments[0]) && isSafeSegment(segments[1])) {
                 let name = segments[0]
                 let version = segments[1]
-                let artifactPath = Path(storage)
-                    .join("artifacts")
-                    .join("default")
-                    .join(name)
-                    .join(version)
-                    .join("${name}-${version}.cjp")
-                    .toString()
-                if (exists(artifactPath)) {
-                    return if (upstream.isEmpty()) { FileHandler(artifactPath) } else { CacheHitHandler(artifactPath, path) }
-                }
-                if (!upstream.isEmpty()) {
-                    return ProxyArtifactHandler(storage, upstream, upstreamToken, name, version)
-                }
-                return FileHandler(artifactPath)
+                return protectedRead(ArtifactReadHandler(storage, upstream, upstreamToken, name, version, path))
             }
         }
 
@@ -144,8 +202,13 @@ main(): Int64 {
         }
     }
 
+    let readToken = configuredReadToken()
+    if (!readToken.isEmpty() && configuredPublishToken().isEmpty()) {
+        eprintln("Error: CJREPO_PUBLISH_TOKEN is required when CJREPO_READ_TOKEN is set")
+        return 2
+    }
     let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken(),
-        configuredProxyTtlSeconds())
+        readToken, configuredProxyTtlSeconds())
     distributor.register("/health", { context =>
         context.responseBuilder
             .header("Content-Type", "application/json; charset=utf-8")

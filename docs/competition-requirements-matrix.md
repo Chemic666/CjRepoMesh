@@ -164,6 +164,7 @@ registry + organization + package + version
 - [x] 仓颉原生私有仓 HTTP 服务骨架与健康检查；
 - [x] 默认 organization 的 Hosted Registry 发布、索引与制品下载；
 - [x] 发布鉴权、SHA-256 复核和重复版本 409；
+- [x] 可选的 Hosted/Proxy 私有读取鉴权，缺失或错误令牌在访问上游前返回 401；
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
 - [x] Proxy Cache MISS/HIT 与上游离线构建；
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
@@ -181,7 +182,7 @@ registry + organization + package + version
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；
-- [ ] 私有中心仓 organization、读鉴权和按包细粒度锁；
+- [ ] 私有中心仓 organization 和按包细粒度锁；读取鉴权已可选实现，默认仍公开；
 - [ ] Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：

@@ -25,6 +25,14 @@
 3. 自动生成发布 Token，并仅写入被忽略的 `.env`；
 4. 构建、启动并等待 `/health` 通过。
 
+若新服务端在 Windows 工作区的 WSL 挂载路径中构建，可明确指定该 Linux 二进制，避免误用 WSL 原生目录中较早的产物：
+
+```powershell
+.\deployment\docker\up.ps1 -ServerBinaryPath ".\server\target\release\bin\main"
+```
+
+脚本仍从选定的 WSL 发行版复制运行时库，并在 `.build-context/manifest.json` 记录实际打包文件的 SHA-256。
+
 重复执行且未显式传入 `-PublishToken` 时，脚本会复用已有 `.env` 中的 Token，避免普通重建意外轮换凭据。
 启动输出不会回显 Token 值，避免终端日志或演示录屏泄露凭据。
 
@@ -32,15 +40,17 @@
 
 ```powershell
 $publishToken = Read-Host "Publish token" -AsSecureString
+$readToken = Read-Host "Read token (optional for private downloads)" -AsSecureString
 $upstreamToken = Read-Host "Upstream token (optional)" -AsSecureString
 .\deployment\docker\up.ps1 `
   -Port 18080 `
   -PublishToken $publishToken `
+  -ReadToken $readToken `
   -Upstream "https://upstream.example.com" `
   -UpstreamToken $upstreamToken
 ```
 
-在 Windows 上，脚本先确认 `.env` 属于当前用户并非符号链接，再保护空文件或已有文件的访问规则，然后写入 Token，最后读回校验权限：关闭继承且只保留当前用户的完全控制权。重复启动也会重新校验，不要求额外的系统安全特权。Compose 会把 Token 注入运行容器的环境变量，因此拥有本机 Docker 管理权限的用户仍可通过容器检查读取它；Token 不会进入 Git、Docker 构建上下文或镜像层。
+在 Windows 上，脚本先确认 `.env` 属于当前用户并非符号链接，再保护空文件或已有文件的访问规则，然后写入 Token，最后读回校验权限：关闭继承且只保留当前用户的完全控制权。重复启动也会重新校验，不要求额外的系统安全特权。`-ReadToken` 为可选项；设置后 Hosted/Proxy 索引和制品读取均需相同的原始 `Authorization` 值，重复启动会沿用已有 `.env` 中的读取令牌。要恢复公开读取，显式运行 `up.ps1 -DisableReadToken`；此开关不能与 `-ReadToken` 同用。发布 Token 由脚本自动生成或沿用，服务端拒绝只配读取令牌、不配发布令牌。Compose 会把 Token 注入运行容器的环境变量，因此拥有本机 Docker 管理权限的用户仍可通过容器检查读取它；Token 不会进入 Git、Docker 构建上下文或镜像层。
 
 ## 运行诊断
 
@@ -71,6 +81,6 @@ $upstreamToken = Read-Host "Upstream token (optional)" -AsSecureString
 ## 安全边界
 
 - 容器内监听 `0.0.0.0` 仅用于 Docker 网络；宿主机发布范围由 Compose 端口映射决定；
-- 默认自动生成发布 Token，读取端当前仍未鉴权；
+- 默认自动生成发布 Token；读取鉴权需显式传入 `-ReadToken`，未启用时仍为公开读取；
 - `.env` 和 `.build-context` 均已加入 `.gitignore`，不得手工提交；
 - 当前 Docker 方案只支持 Linux x86_64。

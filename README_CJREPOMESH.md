@@ -189,7 +189,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-最近在 `e5be054` 上复核 Linux 共享核心入口 4/4 PASS（含菱形依赖图）及 Docker 安全诊断 9/9 PASS；修复旧诊断后又以新编译的增强版 cjpm 跑通 Linux 四组 4/4（复用服务端构建）。Windows 入口在打包夹具时被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7 通过（含传递依赖约束、冲突与锁文件转换）；官方仓库 HTTP 状态夹具在两版上各 16/16 断言通过。官方 Maple 框架对三十九个选定 LLT 用例在两版上各判定为 39/39 PASS；另有一个制品异常矩阵在只对测试副本固定 gzip 时间戳后两版各 1/1 PASS。完整 HLT/LLT 尚未运行。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+最近新增可选的私有读取令牌，并防止“读私有、写匿名”的错误配置。2026-09-24 在新编译服务端上完成 Linux 四组共享核心回归 **4/4 PASS，189.09 秒**；当前二进制 Docker 镜像的安全诊断 **9/9 PASS**，私有读取容器专项验证无令牌 401、正确令牌可继续查询，之后恢复原配置。Windows 入口仍被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7 通过；官方仓库 HTTP 状态夹具在两版上各 16/16 断言通过。官方 Maple 框架对三十九个选定 LLT 用例在两版上各判定为 39/39 PASS；另有一个制品异常矩阵在只对测试副本固定 gzip 时间戳后两版各 1/1 PASS。完整 HLT/LLT 尚未运行。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
 本次完整回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。另备有 [8 页可编辑技术答辩稿（重设计版）](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)，视频路线仍待录制。
 
@@ -207,6 +207,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | --- | --- |
 | Dependency Confusion | 独占命名空间使公共仓请求数为 0 |
 | 认证失败后错误回退 | 401/403 立即失败 |
+| 私有仓未授权读取 | 可选读取令牌保护 Hosted/Proxy 索引与制品，在访问缓存或上游前返回 401 |
 | 制品篡改 | cjpm、Proxy、Mirror、Sync 全链路 SHA-256 |
 | 跨仓同名同版本污染 | 缓存键和来源记录包含仓库身份 |
 | 静默强制替换 | 显式 `[replace]`，Explain 显示决策 |
@@ -228,7 +229,7 @@ docs/                 架构、验收、报告、演示和提交材料
 
 以下能力尚未完成，不应在参赛材料中描述成已有功能：
 
-- 服务端只支持默认 organization，读取端尚未鉴权；
+- 服务端只支持默认 organization；读取鉴权需显式配置，默认仍公开读取；
 - 当前使用进程级存储锁，尚未细化为按包锁；
 - Mirror/Sync 尚无调度和断点续传；
 - Linux 原生构建与四组共享核心回归已验证；Windows 一键部署和 Docker Compose 分别保留平台专属验证入口；

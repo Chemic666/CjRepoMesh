@@ -44,6 +44,7 @@
 - [x] 提交 `0f0e076` 上 Linux 四组 4/4、710.19s，随后 Docker 一键启动与诊断 9/9；测试端口与临时目录无残留，Compose 容器移除且原独立容器仍健康；
 - [x] 提交 `e5be054` 上 Linux 四组 4/4、184.08s（实际重编译服务端，复用已有 cjpm）；标准 Docker 启动与诊断 9/9（复用 WSL 服务端产物）；Compose 测试容器清理后原独立容器仍健康；
 - [x] 官方 Maple 框架提交 `e92721e` 已在 WSL 跑通三十九个选定 LLT 用例，原版与增强版各 39/39；制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 1/1；日志和夹具调整摘要保留在外层 `test-runs/maple-smoke/run-1790176547-80305f39/`，完整 HLT/LLT 仍未运行；
+- [x] 新服务端可选私有读取鉴权及不安全配置拒绝已在 Linux Hosted、Proxy 和 Sync 端到端验证；2026-09-24 四组共享核心 4/4、189.09s，当前二进制 Docker 镜像诊断 9/9，容器私有读取开关专项通过并已恢复原配置；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
@@ -73,7 +74,7 @@
 - [ ] 展示 Explain/Doctor，而不是只展示 `BUILD SUCCESS`；
 - [ ] 所有字幕、终端字体和架构图在 1080p 下可读；
 - [ ] 准备断网、端口占用、SDK 阻断和 Benchmark 波动的保底切换；
-- [ ] 答辩结尾如实说明 organization、读鉴权、调度、断点续传和 Linux/Docker 边界。
+- [ ] 答辩结尾如实说明 organization、按包锁、调度、断点续传、读取鉴权默认关闭及 Windows/Docker 当前验证边界。
 
 ## F. 提交前最后 30 分钟
 

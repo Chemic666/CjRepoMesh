@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：旧诊断兼容修复后的增强版 cjpm 通过 Linux 四组完整回归 4/4；此前 Docker 诊断 9/9，包含菱形依赖图。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断。各次提交号与耗时见文末，不把历史 Windows 通过当作当前结果。
+> 结论：可选私有读取鉴权及“读私有、写匿名”配置拒绝加入后，服务端于 2026-09-24 通过 Linux 四组完整回归 4/4、189.09 秒；当前服务端二进制打包的 Docker 镜像诊断 9/9，并通过容器内私有读取专项。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
 
 ## 环境
 
@@ -177,3 +177,11 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 本轮扩展官方 `update/coverage` 七个用例，其中 `local_index_refresh` 使用仅监听 `127.0.0.1:39138` 的测试服务，入口仅在临时副本规范该夹具 Windows 检出文件的 CRLF。两版统一运行各 **39/39 PASS**（前述 32 项加更新 7 项），稳定化制品矩阵另各 **1/1 PASS**。逐例日志与夹具调整摘要在外层 `test-runs/maple-smoke/run-1790176547-80305f39/`。两版二进制摘要未变，产品源码及官方测试仓跟踪文件未改；Linux 四组、Docker、Windows 原生五组和完整 Maple HLT/LLT 本轮未复测。
 
 本地官方测试快照仍有大量未覆盖用例：CJNATIVE cjpm LLT 773 个 `.info`、HLT cjpm 157 个 `.info`，上述通过数只是子集。部分 HLT 发布用例会携带测试凭据向外部中心仓执行 `cjpm publish`，本轮未运行，也未在报告中披露凭据。完整 HLT 需要先明确可用的隔离测试仓和写入授权。
+
+## 可选私有读取鉴权
+
+2026-09-23 为 CjRepo Server 增加 `CJREPO_READ_TOKEN`：显式设置时保护 Hosted/Proxy 的索引和制品请求，未设置时保持原有公开读取，`/health` 不受影响。服务端在触碰本地缓存或发起上游请求前先校验原始 `Authorization` 值，故无令牌/错误令牌均返回 401，不能用 Proxy 触发未授权上游流量。客户端继续使用已实现的 `token-env`；仓间 Sync 从私有源仓读取时使用 `CJREPO_UPSTREAM_TOKEN`，目标发布仍使用独立令牌。
+
+用增强版 cjpm SHA-256 `6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a` 在 Windows 挂载工作区的 WSL 2 / Ubuntu 22.04.5 中真实编译新服务端，Linux 服务端二进制 SHA-256 `f08a1e560e1d17ea98d89f00937bf6ab9f96e93b4551d131481ffcb2144053d6`。Hosted 专项 **1/1 PASS（28.01s）**，验证公开读取兼容、私有索引与制品拒绝无效令牌、有效令牌下 cjpm 编译运行。随后复用该新服务端执行 Linux 四组：**4/4 PASS，总计 176.45s**，多仓 145.20s、Hosted 10.94s、Proxy 11.00s、Sync 5.77s。再扩展 Proxy 未授权 MISS 不触发上游、授权离线 HIT，以及私有源仓 Sync 拒绝缺令牌后，Proxy/Sync 专项 **2/2 PASS，总计 31.59s**（23.58s、6.00s）。PowerShell 启动脚本语法与 Compose 配置静态检查通过；本轮 Docker 引擎未运行，未执行实际镜像构建/容器诊断。Windows 原生最新五组仍受 Application Control 阻断，完整官方 Maple HLT/LLT 未重跑。
+
+2026-09-24 开机后重启项目 WSL 与 Docker Desktop，修正“只配置读取令牌、却允许匿名发布”的风险：此配置现在于服务启动前返回错误；制品缓存存在性判定移到读取鉴权之后。新服务端在 WSL 真实重编译后 SHA-256 为 `afb896fd886525dc91ff01b9eadb3731e632e7defcbfbe8b74db5d488902d61f`，四组核心回归 **4/4 PASS，总计 189.09s**：多仓 147.03s、Hosted 20.91s、Proxy 11.50s、Sync 6.17s。测试包含拒绝不安全配置、私有 Hosted 下载、Proxy 未授权 MISS 不访问上游、授权离线 HIT，以及私有源仓 Sync。新增 Docker 打包参数显式指定此二进制，打包文件 SHA 与源文件一致；Docker 当前镜像诊断 **9/9 PASS**。临时启用随机读取令牌后，容器中索引和制品请求无令牌均返回 401，正确令牌下缺失资源均返回正常 404；随后通过正式 `up.ps1 -ReadToken` 与 `up.ps1 -DisableReadToken` 验证鉴权生效及公开读取恢复，最终诊断 **9/9 PASS**。Compose 服务和命名卷保留运行，独立容器未启动或修改。Windows 原生五组与完整官方 Maple HLT/LLT 本轮未复测。

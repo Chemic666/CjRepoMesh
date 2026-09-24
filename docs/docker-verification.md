@@ -98,9 +98,17 @@ Overall                  PASS
 
 - 当前镜像打包流程只支持 Linux x86_64；
 - 构建前需要已完成 WSL Linux 编译，并准备 Docker 基础镜像；
-- 读取端尚未鉴权，发布端使用 Bearer Token；
+- 上述历史 Docker 运行只验证发布端令牌（原始 `Authorization` 值），未启用或验证后来新增的可选读取令牌；
 - 本记录不等同于公网安全审计、长期压力测试或多节点高可用验证。
 
 ## 最新一键部署诊断
 
 2026-09-23 在提交 `e5be054` 上执行标准 `up.ps1 → doctor.ps1 → down.ps1`，诊断 **9/9 PASS**，包括非 root、只读根文件系统、无新权限、localhost 绑定、持久化卷和健康 API。打包脚本读取已有 WSL 服务端二进制，SHA-256 为 `5cedbde24bf02f71d0a68da50808af9b639d6b04da4d10af9034a88c53ac44de`；产品源码自前次基线 `0f0e076` 未修改，本轮未将 Windows 挂载路径新编译的二进制复制入镜像。Compose 容器和网络已移除，命名卷保留，原独立容器 `magical_bartik` 仍为 healthy。未重复真实发布与持久化重建场景，也未测试显式 `-PublishToken` 分支。
+
+## 2026-09-24 当前镜像复核
+
+开机后先确认 Docker Desktop 与项目 WSL 已启动、`ubuntu:22.04` 基础镜像本地存在、项目 Compose 服务原本未运行。新增 `up.ps1 -ServerBinaryPath` 参数，明确打包本工作区最新 Linux 服务端；`.build-context/manifest.json` 中 `cjrepo` SHA-256 与源产物一致，均为 `afb896fd886525dc91ff01b9eadb3731e632e7defcbfbe8b74db5d488902d61f`。此二进制已通过同日 Linux 四组完整回归。`up.ps1` 使用已有发布令牌启动后，`doctor.ps1` **9/9 PASS**；未开启读取令牌时，合法格式但不存在的索引和制品仍返回 404。
+
+随后仅对项目 Compose 容器临时注入随机 `CJREPO_READ_TOKEN` 并重建，不修改 `.env` 中保存的凭据或命名数据卷。两类读取请求无令牌均返回 401，正确令牌下对不存在资源返回 404；测试结束后再次重建恢复原配置，`doctor.ps1` 再次 **9/9 PASS**。
+
+之后通过正式一键脚本复核用户入口：`up.ps1 -ReadToken` 启动后，无令牌读取为 401、正确令牌读取缺失资源为 404；`up.ps1 -DisableReadToken` 后公开读取恢复为 404。两参数互斥检查通过，最终 `doctor.ps1` 仍 **9/9 PASS**。项目容器保持运行且健康，命名数据卷保留；此前独立容器 `magical_bartik` 开机后为停止状态，本轮未触碰它。此复核没有重复真实发布、持久化重建或显式 `-PublishToken` 参数分支。

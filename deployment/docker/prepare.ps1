@@ -5,7 +5,8 @@
 param(
     [string]$WslDistribution = "CjRepoMesh",
     [string]$WslProjectRoot = "/home/chemic/work/CjRepoMesh-src",
-    [string]$WslSdkRoot = "/home/chemic/apps/cangjie-1.1.3"
+    [string]$WslSdkRoot = "/home/chemic/apps/cangjie-1.1.3",
+    [string]$ServerBinaryPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,9 +35,13 @@ $sources = [ordered]@{
 
 New-Item -ItemType Directory -Force -Path $contextRoot | Out-Null
 foreach ($name in $sources.Keys) {
-    $source = Convert-ToWslUnc $sources[$name]
+    $source = if ($name -eq "cjrepo" -and -not [string]::IsNullOrWhiteSpace($ServerBinaryPath)) {
+        [IO.Path]::GetFullPath($ServerBinaryPath)
+    } else {
+        Convert-ToWslUnc $sources[$name]
+    }
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-        throw "Required Linux artifact not found: $($sources[$name])"
+        throw "Required Linux artifact not found: $source"
     }
     Copy-Item -LiteralPath $source -Destination (Join-Path $contextRoot $name) -Force
 }
@@ -53,5 +58,5 @@ $manifest = foreach ($name in $sources.Keys) {
     [Text.UTF8Encoding]::new($false)
 )
 
-Write-Host "Docker build context prepared from WSL distribution '$WslDistribution'."
+Write-Host "Docker build context prepared with runtime from WSL distribution '$WslDistribution'."
 $manifest | Format-Table -AutoSize

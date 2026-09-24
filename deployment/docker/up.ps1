@@ -6,18 +6,24 @@ param(
     [ValidateRange(1, 65535)]
     [int]$Port = 8080,
     [Security.SecureString]$PublishToken,
+    [Security.SecureString]$ReadToken,
+    [switch]$DisableReadToken,
     [string]$Upstream = "",
     [Security.SecureString]$UpstreamToken,
     [ValidateRange(0, 31536000)]
     [long]$ProxyTtlSeconds = 86400,
     [string]$WslDistribution = "CjRepoMesh",
     [string]$WslProjectRoot = "/home/chemic/work/CjRepoMesh-src",
-    [string]$WslSdkRoot = "/home/chemic/apps/cangjie-1.1.3"
+    [string]$WslSdkRoot = "/home/chemic/apps/cangjie-1.1.3",
+    [string]$ServerBinaryPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $envPath = Join-Path $scriptRoot ".env"
+if ($DisableReadToken -and $null -ne $ReadToken) {
+    throw "ReadToken and DisableReadToken cannot be used together."
+}
 $publishTokenValue = if ($null -ne $PublishToken) {
     [Net.NetworkCredential]::new("", $PublishToken).Password
 } else {
@@ -25,6 +31,11 @@ $publishTokenValue = if ($null -ne $PublishToken) {
 }
 $upstreamTokenValue = if ($null -ne $UpstreamToken) {
     [Net.NetworkCredential]::new("", $UpstreamToken).Password
+} else {
+    ""
+}
+$readTokenValue = if ($null -ne $ReadToken) {
+    [Net.NetworkCredential]::new("", $ReadToken).Password
 } else {
     ""
 }
@@ -84,6 +95,14 @@ if ([string]::IsNullOrWhiteSpace($publishTokenValue) -and $hadEnvFile) {
         $publishTokenValue = $existingToken.Substring($existingToken.IndexOf("=") + 1)
     }
 }
+if (-not $DisableReadToken -and [string]::IsNullOrWhiteSpace($readTokenValue) -and $hadEnvFile) {
+    $existingReadToken = Get-Content -LiteralPath $envPath |
+        Where-Object { $_.StartsWith("CJREPO_READ_TOKEN=") } |
+        Select-Object -First 1
+    if ($existingReadToken) {
+        $readTokenValue = $existingReadToken.Substring($existingReadToken.IndexOf("=") + 1)
+    }
+}
 if ([string]::IsNullOrWhiteSpace($publishTokenValue)) {
     $randomBytes = New-Object byte[] 32
     $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
@@ -97,6 +116,9 @@ if ([string]::IsNullOrWhiteSpace($publishTokenValue)) {
 if ($publishTokenValue -notmatch '^[A-Za-z0-9._~-]{16,256}$') {
     throw "PublishToken must contain 16-256 URL-safe characters."
 }
+if ($readTokenValue -and $readTokenValue -notmatch '^[A-Za-z0-9._~-]{16,256}$') {
+    throw "ReadToken must contain 16-256 URL-safe characters."
+}
 foreach ($value in @($Upstream, $upstreamTokenValue)) {
     if ($value.Contains("`r") -or $value.Contains("`n")) {
         throw "Environment values must not contain newlines."
@@ -104,11 +126,13 @@ foreach ($value in @($Upstream, $upstreamTokenValue)) {
 }
 
 & (Join-Path $scriptRoot "prepare.ps1") `
-    -WslDistribution $WslDistribution -WslProjectRoot $WslProjectRoot -WslSdkRoot $WslSdkRoot
+    -WslDistribution $WslDistribution -WslProjectRoot $WslProjectRoot -WslSdkRoot $WslSdkRoot `
+    -ServerBinaryPath $ServerBinaryPath
 
 $lines = @(
     "CJREPO_HOST_PORT=$Port",
     "CJREPO_PUBLISH_TOKEN=$publishTokenValue",
+    "CJREPO_READ_TOKEN=$readTokenValue",
     "CJREPO_UPSTREAM=$Upstream",
     "CJREPO_UPSTREAM_TOKEN=$upstreamTokenValue",
     "CJREPO_PROXY_TTL_SECONDS=$ProxyTtlSeconds"

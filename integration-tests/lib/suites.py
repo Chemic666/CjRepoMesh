@@ -27,7 +27,7 @@ from .harness import (
 )
 
 
-CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39300, 39301, 39302, 39401, 39501, 39502)
+CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39401, 39501, 39502)
 
 
 class TestContext:
@@ -95,8 +95,10 @@ class TestContext:
                 (root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json")
             )
         for suite in ("hosted-server", "proxy", "sync"):
-            app = self.tests_root / suite / "app"
-            generated.extend((app / "target", app / "cache", app / "cjpm.lock", app / "cjpm-provenance.json"))
+            apps = ("app", "private-app") if suite == "hosted-server" else ("app",)
+            for name in apps:
+                app = self.tests_root / suite / name
+                generated.extend((app / "target", app / "cache", app / "cjpm.lock", app / "cjpm-provenance.json"))
         generated.extend(self.multirepo_root.glob("*.requests.log"))
         for path in generated:
             remove_within(path, (self.tests_root,))
@@ -601,6 +603,7 @@ def _start_server(
     storage: Path,
     upstream: str = "",
     publish_token: str = "",
+    read_token: str = "",
     output_name: str,
 ):
     env = dict(context.env)
@@ -613,6 +616,10 @@ def _start_server(
         env["CJREPO_PUBLISH_TOKEN"] = publish_token
     else:
         env.pop("CJREPO_PUBLISH_TOKEN", None)
+    if read_token:
+        env["CJREPO_READ_TOKEN"] = read_token
+    else:
+        env.pop("CJREPO_READ_TOKEN", None)
     process = processes.start(
         (context.server,),
         cwd=context.server_root,
@@ -625,17 +632,32 @@ def _start_server(
 
 def run_hosted(context: TestContext) -> None:
     port = 39200
-    assert_ports_available((port,))
+    private_port = 39201
+    assert_ports_available((port, private_port, 39202))
     package_root = context.bundle("meshdep-v2-low")
     concurrent_root = context.bundle("meshdep-v1-high")
     context.ensure_server()
     app = context.tests_root / "hosted-server" / "app"
     context.reset_app(app)
+    private_app = context.tests_root / "hosted-server" / "private-app"
+    context.reset_app(private_app)
     storage = context.temp_root / "hosted-storage"
 
     metadata = (package_root / "target" / "meta-data.json").read_bytes()
     artifact_path = package_root / "target" / "meshdep-2.0.0.cjp"
     artifact = artifact_path.read_bytes()
+    invalid_env = dict(context.env)
+    invalid_env.update({
+        "CJREPO_PORT": "39202",
+        "CJREPO_STORAGE": str(context.temp_root / "invalid-private-storage"),
+        "CJREPO_READ_TOKEN": "read-token",
+    })
+    invalid_server = run_command(
+        (context.server,), cwd=context.server_root, env=invalid_env,
+        expect_success=False, timeout=5,
+    )
+    assert_contains(invalid_server.output, "CJREPO_PUBLISH_TOKEN is required")
+    context.pass_message("private read mode refuses unauthenticated publishing")
     base = f"http://127.0.0.1:{port}"
     with ManagedProcesses() as processes:
         _start_server(
@@ -722,7 +744,38 @@ def run_hosted(context: TestContext) -> None:
         stored = storage / "artifacts" / "default" / "meshdep" / "1.0.0" / "meshdep-1.0.0.cjp"
         assert_equal(sha256(stored), sha256(concurrent_path), label="concurrent artifact checksum")
         context.pass_message("concurrent duplicate publish is atomic: one success, one conflict, intact index")
-    wait_for_ports_closed((port,))
+
+        _start_server(
+            context,
+            processes,
+            port=private_port,
+            storage=storage,
+            publish_token="publish-token",
+            read_token="read-token",
+            output_name="hosted-private.log",
+        )
+        private_base = f"http://127.0.0.1:{private_port}"
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(http_request("GET", private_base + path).status, 401, label=f"missing read token {path}")
+            assert_equal(
+                http_request("GET", private_base + path, headers={"Authorization": "wrong-token"}).status,
+                401,
+                label=f"wrong read token {path}",
+            )
+            assert_equal(
+                http_request("GET", private_base + path, headers={"Authorization": "read-token"}).status,
+                200,
+                label=f"valid read token {path}",
+            )
+        context.pass_message("private Hosted index and artifact reject missing or invalid read tokens")
+        result = context.cjpm_command(
+            private_app,
+            "run",
+            extra_env={"CJREPOMESH_READ_TOKEN": "read-token"},
+        )
+        assert_contains(result.output, "low-2.0.0")
+        context.pass_message("enhanced cjpm resolves private Hosted package via token-env")
+    wait_for_ports_closed((port, private_port, 39202))
 
 
 def _concurrent_get(url: str, count: int) -> None:
@@ -735,7 +788,7 @@ def _concurrent_get(url: str, count: int) -> None:
 
 
 def run_proxy(context: TestContext) -> None:
-    ports = (39300, 39301, 39302)
+    ports = (39300, 39301, 39302, 39303)
     assert_ports_available(ports)
     context.bundle("meshdep-v1-low")
     context.bundle("meshdep-v2-low")
@@ -816,6 +869,38 @@ def run_proxy(context: TestContext) -> None:
             raise TestFailure("Proxy cached an artifact that failed SHA-256 verification")
         context.pass_message("proxy rejects a corrupt upstream artifact without caching it")
         processes.stop(corrupt_upstream)
+
+        private_upstream = processes.start(_mock_command(context, 39301, "low"), cwd=context.multirepo_root)
+        wait_for_port(39301)
+        _start_server(
+            context,
+            processes,
+            port=39303,
+            storage=context.temp_root / "private-proxy-storage",
+            upstream="http://127.0.0.1:39301",
+            publish_token="proxy-publish-token",
+            read_token="proxy-read-token",
+            output_name="proxy-private.log",
+        )
+        private_base = "http://127.0.0.1:39303"
+        upstream_before = _read_lines(low_log)
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(http_request("GET", private_base + path).status, 401, label=f"private proxy {path}")
+        assert_equal(_read_lines(low_log), upstream_before, label="unauthorized private proxy upstream requests")
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(
+                http_request("GET", private_base + path, headers={"Authorization": "proxy-read-token"}).status,
+                200,
+                label=f"authorized private proxy {path}",
+            )
+        processes.stop(private_upstream)
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(
+                http_request("GET", private_base + path, headers={"Authorization": "proxy-read-token"}).status,
+                200,
+                label=f"offline private proxy cache {path}",
+            )
+        context.pass_message("private Proxy rejects unauthenticated MISS and serves authenticated offline HIT")
     wait_for_ports_closed(ports)
 
 
@@ -871,6 +956,8 @@ def run_sync(context: TestContext) -> None:
             processes,
             port=39501,
             storage=mirror_storage,
+            publish_token="source-publish-token",
+            read_token="source-read-token",
             output_name="sync-source.log",
         )
         _start_server(
@@ -889,6 +976,14 @@ def run_sync(context: TestContext) -> None:
             "http://127.0.0.1:39501",
             "http://127.0.0.1:39502",
         )
+        unauthenticated_sync = run_command(
+            (*sync_command, manifest),
+            cwd=context.server_root,
+            env=sync_env,
+            expect_success=False,
+        )
+        assert_contains(unauthenticated_sync.output, "status 401")
+        sync_env["CJREPO_UPSTREAM_TOKEN"] = "source-read-token"
         first_sync = run_command((*sync_command, manifest), cwd=context.server_root, env=sync_env)
         assert_contains(first_sync.output, "total=2 succeeded=2 failed=0")
         assert_equal(first_sync.output.count("result=SYNCED"), 2, label="synced item count")
@@ -902,7 +997,7 @@ def run_sync(context: TestContext) -> None:
             expect_success=False,
         )
         assert_contains(invalid_sync.output, "total=2 succeeded=1 failed=1")
-        context.pass_message("batch CjRepo-to-CjRepo sync is authenticated, idempotent and reports partial failure")
+        context.pass_message("batch Sync requires source read and destination publish tokens, is idempotent and reports partial failure")
 
         processes.stop(source)
         result = context.cjpm_command(app, "run")

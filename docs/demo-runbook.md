@@ -8,7 +8,7 @@
 
 ## 证据边界与录制顺序
 
-截至 2026-09-23，提交 `e5be054` 上 Linux 四组核心回归 **4/4 PASS，184.08 秒**，包含菱形依赖图与篡改制品场景；标准 Docker Compose 诊断 **9/9 PASS**。之后修复旧诊断并新编译增强版 cjpm，Linux 四组再获 **4/4 PASS，161.42 秒**（复用服务端构建）。三十九个选定官方 cjpm LLT 用例经 Maple 框架在原版与增强版上各 **39/39 PASS**；另有制品异常矩阵在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**，完整 HLT/LLT 尚未运行。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-24，加入可选私有读取鉴权及不安全配置拒绝的新服务端，在 Linux 四组核心回归中 **4/4 PASS，189.09 秒**；当前二进制打包的 Docker 镜像诊断 **9/9 PASS**，临时开启读取令牌的容器专项亦通过并已恢复原配置。三十九个选定官方 cjpm LLT 用例经 Maple 框架在原版与增强版上各 **39/39 PASS**；另有制品异常矩阵在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**，完整 HLT/LLT 尚未运行。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 
@@ -19,7 +19,7 @@
 3. Docker Desktop、`CjRepoMesh` WSL 发行版、已编译 Linux 服务二进制和本地 `ubuntu:22.04` 镜像就绪后，仅操作本项目的 Compose 服务。`up.ps1` 在缺少基础镜像时可能拉取镜像；先检查并征得用户同意，不在录制时意外下载。保留用户已有的独立容器与数据卷。
 4. 使用 `deployment/docker/up.ps1` 和 `doctor.ps1` 录制一键部署与 9 项诊断；`down.ps1` 仅关闭本项目 Compose 服务且默认保留数据卷。不要使用 `-PurgeData`。
 5. 校对 [Proxy Benchmark 报告](../benchmark/results/proxy-benchmark.md) 与 [原始样本](../benchmark/results/proxy-benchmark.json)。旧数字只可标注其 2026-09-22 本机测试条件；若重新测量，先更新报告再引用。
-6. 用 1080p 回看终端字体、架构图和字幕；清除桌面通知，检查画面中没有 `.env`、Docker 环境变量、Bearer Token 或个人路径以外的隐私信息。完整验证录像和主视频目前均是待交付物。
+6. 用 1080p 回看终端字体、架构图和字幕；清除桌面通知，检查画面中没有 `.env`、Docker 环境变量、任何认证 Token 或个人路径以外的隐私信息。完整验证录像和主视频目前均是待交付物。
 
 ## 主视频分镜（约 7 分钟）
 
@@ -40,7 +40,7 @@
 
 > 独占命名空间缺包必须失败；仓库认证失败也不能回退。可用性机制不能越过安全边界。
 
-> Linux 四组和 Docker 部署已有实测通过；Maple 跑通三十九个选定官方 LLT 用例，另有一个仅在稳定化测试副本上通过。Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
+> 当前 Linux 四组和 Docker 9 项诊断已通过，容器私有读取开关亦有实测。Maple 跑通三十九个选定官方 LLT 用例，另有一个仅在稳定化测试副本上通过。Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
 
 ## 演示画面与命令
 

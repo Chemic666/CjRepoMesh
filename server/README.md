@@ -12,6 +12,8 @@ cjpm run
 
 默认监听 `127.0.0.1:8080`，可通过 `CJREPO_ADDRESS` 和 `CJREPO_PORT` 修改地址与端口。容器部署使用 `CJREPO_ADDRESS=0.0.0.0`，直接运行时仍默认只接受本机连接。存储目录默认为当前目录下的 `storage`，可通过 `CJREPO_STORAGE` 修改。设置 `CJREPO_PUBLISH_TOKEN` 后，发布请求必须携带相同的 `Authorization` 值。
 
+可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。
+
 健康检查：
 
 ```text
@@ -93,4 +95,4 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 
 批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
 
-当前限制：仅支持默认 organization；读取端尚未鉴权；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传；尚未提供 Docker 部署。
+当前限制：仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
