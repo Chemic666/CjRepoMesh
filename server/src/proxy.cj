@@ -57,10 +57,12 @@ class ProxyIndexHandler <: HttpRequestHandler {
             }
             println("[proxy] path=${upstreamPath} cache=MISS upstream=${upstream}")
             let cachePath = Path(storage).join("index").join(organization).join(relative)
+            let segments = relative.split("/", removeEmpty: true)
+            let expectedName = segments[segments.size - 1]
             var responseStatus: UInt16 = 200
             var responseBody = "".toArray()
             var cacheResult = "MISS"
-            synchronized(STORAGE_WRITE_MUTEX) {
+            synchronized(packageStorageLock(storage, organization, expectedName)) {
                 if (proxyCacheIsFresh(cachePath, ttlSeconds)) {
                     responseBody = File.readFrom(cachePath)
                     cacheResult = "HIT_AFTER_WAIT"
@@ -69,8 +71,6 @@ class ProxyIndexHandler <: HttpRequestHandler {
                     responseStatus = upstreamStatus
                     responseBody = upstreamBody
                     if (upstreamStatus == 200) {
-                        let segments = relative.split("/", removeEmpty: true)
-                        let expectedName = segments[segments.size - 1]
                         let normalized = ArrayList<String>()
                         for (line in String.fromUtf8(upstreamBody).lines()) {
                             if (line.trimAscii().isEmpty()) {
@@ -150,7 +150,7 @@ class ProxyArtifactHandler <: HttpRequestHandler {
             var responseStatus: UInt16 = 200
             var responseBody = "".toArray()
             var cacheResult = "MISS"
-            synchronized(STORAGE_WRITE_MUTEX) {
+            synchronized(packageStorageLock(storage, organization, name)) {
                 if (exists(cachePath)) {
                     responseBody = File.readFrom(cachePath)
                     cacheResult = "HIT_AFTER_WAIT"

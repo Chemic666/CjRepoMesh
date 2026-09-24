@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -34,6 +35,8 @@ def fixtures():
             ROOT / "packages" / "meshbridge-v1",
             ROOT / "packages" / "meshbridge-v2",
         ]
+    if REPOSITORY == "slow-mixed":
+        return [ROOT / "packages" / "meshdep-v2-low", ROOT / "packages" / "otherdep-v1"]
     if REPOSITORY in ("transitive-high", "artifact-forbidden-transitive-high"):
         return [
             ROOT / "packages" / "meshdep-v1-high",
@@ -74,6 +77,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         with LOG.open("a", encoding="utf-8") as request_log:
             request_log.write(f"GET {path}\n")
+        if REPOSITORY == "slow-mixed" and path == "/index/me/sh/meshdep":
+            time.sleep(1.5)
+            with LOG.open("a", encoding="utf-8") as request_log:
+                request_log.write(f"DONE {path}\n")
         forced_status = {
             "missing": 404,
             "server-error": 500,

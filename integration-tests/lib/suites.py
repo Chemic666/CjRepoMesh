@@ -27,7 +27,7 @@ from .harness import (
 )
 
 
-CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39401, 39501, 39502)
+CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307, 39401, 39501, 39502)
 
 
 class TestContext:
@@ -75,6 +75,7 @@ class TestContext:
             "meshleaf-v1",
             "company-auth-v1-private",
             "company-auth-v9-public",
+            "otherdep-v1",
         ):
             root = self.multirepo_root / "packages" / package
             generated.extend((root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json"))
@@ -877,10 +878,11 @@ def _concurrent_get(url: str, count: int) -> None:
 
 
 def run_proxy(context: TestContext) -> None:
-    ports = (39300, 39301, 39302, 39303, 39304, 39305)
+    ports = (39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307)
     assert_ports_available(ports)
     context.bundle("meshdep-v1-low")
     context.bundle("meshdep-v2-low")
+    context.bundle("otherdep-v1")
     context.ensure_server()
     app = context.tests_root / "proxy" / "app"
     context.reset_app(app)
@@ -889,8 +891,10 @@ def run_proxy(context: TestContext) -> None:
     storage = context.temp_root / "proxy-storage"
     low_log = context.multirepo_root / "low.requests.log"
     corrupt_log = context.multirepo_root / "corrupt.requests.log"
+    slow_log = context.multirepo_root / "slow-mixed.requests.log"
     remove_within(low_log, (context.tests_root,))
     remove_within(corrupt_log, (context.tests_root,))
+    remove_within(slow_log, (context.tests_root,))
 
     with ManagedProcesses() as processes:
         upstream = processes.start(_mock_command(context, 39301, "low"), cwd=context.multirepo_root)
@@ -936,6 +940,32 @@ def run_proxy(context: TestContext) -> None:
         assert_contains(result.output, "low-2.0.0")
         assert_equal(_read_lines(low_log), ttl_requests, label="offline upstream request log")
         context.pass_message("proxy cache HIT supports an offline build")
+
+        slow_upstream = processes.start(_mock_command(context, 39306, "slow-mixed"), cwd=context.multirepo_root)
+        wait_for_port(39306)
+        _start_server(
+            context, processes, port=39307, storage=context.temp_root / "proxy-striped-storage",
+            upstream="http://127.0.0.1:39306", output_name="proxy-striped.log",
+        )
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            slow_request = executor.submit(http_request, "GET", "http://127.0.0.1:39307/index/me/sh/meshdep")
+            for _ in range(100):
+                if "GET /index/me/sh/meshdep" in _read_lines(slow_log):
+                    break
+                time.sleep(0.02)
+            else:
+                raise TestFailure("slow upstream request did not begin")
+            fast_response = http_request("GET", "http://127.0.0.1:39307/index/ot/he/otherdep")
+            assert_equal(fast_response.status, 200, label="independent package proxy status")
+            events = _read_lines(slow_log)
+            if "GET /index/ot/he/otherdep" not in events or (
+                "DONE /index/me/sh/meshdep" in events and
+                events.index("DONE /index/me/sh/meshdep") < events.index("GET /index/ot/he/otherdep")
+            ):
+                raise TestFailure("an unrelated package waited behind the slow package fill")
+            assert_equal(slow_request.result().status, 200, label="slow package proxy status")
+        processes.stop(slow_upstream)
+        context.pass_message("different packages fill concurrently without a global storage lock")
 
         processes.stop(proxy)
         if storage.exists():

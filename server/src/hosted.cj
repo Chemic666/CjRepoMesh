@@ -118,7 +118,7 @@ class PublishHandler <: HttpRequestHandler {
 
             let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
             var duplicate = false
-            synchronized(STORAGE_WRITE_MUTEX) {
+            synchronized(packageStorageLock(storage, storageOrganization, name)) {
                 // Recheck while holding the lock so concurrent publishes cannot
                 // both pass the duplicate test or interleave index records.
                 if (exists(artifactPath)) {

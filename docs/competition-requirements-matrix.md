@@ -184,7 +184,7 @@ registry + organization + package + version
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；
-- [ ] 按包细粒度锁；Hosted/Proxy/Mirror/Sync 组织仓与可选读取鉴权已实现，默认仍公开；
+- [x] 按仓库、组织和包名定位的 256 个有界锁分片；同包安全且不同包可并行，碰撞包仍可能串行；Hosted/Proxy/Mirror/Sync 组织仓与可选读取鉴权已实现，默认仍公开；
 - [ ] Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：
