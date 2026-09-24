@@ -1140,8 +1140,26 @@ def run_sync(context: TestContext) -> None:
         assert_contains(malformed_org.output, "invalid organization-qualified package")
         assert_equal(len(_read_lines(upstream_log)), first_request_count,
                      label="malformed organization must not reach upstream")
+        legacy_storage = context.temp_root / "legacy-mirror-storage"
+        legacy_index = legacy_storage / "index" / "default" / "me" / "sh" / "meshdep"
+        legacy_artifact = legacy_storage / "artifacts" / "default" / "meshdep" / "1.0.0" / "meshdep-1.0.0.cjp"
+        legacy_index.parent.mkdir(parents=True)
+        legacy_artifact.parent.mkdir(parents=True)
+        shutil.copyfile(mirror_storage / "index" / "default" / "me" / "sh" / "meshdep", legacy_index)
+        shutil.copyfile(mirror_storage / "artifacts" / "default" / "meshdep" / "1.0.0" / "meshdep-1.0.0.cjp",
+                        legacy_artifact)
+        legacy_env = dict(mirror_env)
+        legacy_env["CJREPO_STORAGE"] = str(legacy_storage)
         context.pass_message("batch mirror manifest is checksum-verified, idempotent and reports partial failure")
         processes.stop(upstream)
+        repaired = run_command(
+            (context.server, "mirror", "http://127.0.0.1:39401", "meshdep", "1.0.0"),
+            cwd=context.server_root, env=legacy_env,
+        )
+        assert_contains(repaired.output, "result=SKIP")
+        repaired_versions = [json.loads(line)["version"] for line in legacy_index.read_text(encoding="utf-8").splitlines()]
+        assert_equal(repaired_versions, ["1.0.0"], label="offline repair of legacy over-advertised mirror index")
+        context.pass_message("legacy mirror index is pruned offline when a verified cached version is revisited")
 
         source = _start_server(
             context,
@@ -1152,6 +1170,21 @@ def run_sync(context: TestContext) -> None:
             read_token="source-read-token",
             output_name="sync-source.log",
         )
+        sparse_storage = context.temp_root / "sparse-mirror-storage"
+        sparse_env = dict(mirror_env)
+        sparse_env["CJREPO_STORAGE"] = str(sparse_storage)
+        sparse_env["CJREPO_UPSTREAM_TOKEN"] = "source-read-token"
+        sparse_command = (context.server, "mirror", "http://127.0.0.1:39501", "meshdep")
+        run_command((*sparse_command, "1.0.0"), cwd=context.server_root, env=sparse_env)
+        sparse_index = sparse_storage / "index" / "default" / "me" / "sh" / "meshdep"
+        versions = [json.loads(line)["version"] for line in sparse_index.read_text(encoding="utf-8").splitlines()]
+        assert_equal(versions, ["1.0.0"], label="sparse mirror index after one version")
+        if (sparse_storage / "artifacts" / "default" / "meshdep" / "2.0.0" / "meshdep-2.0.0.cjp").exists():
+            raise TestFailure("sparse mirror unexpectedly downloaded unselected version")
+        run_command((*sparse_command, "2.0.0"), cwd=context.server_root, env=sparse_env)
+        versions = [json.loads(line)["version"] for line in sparse_index.read_text(encoding="utf-8").splitlines()]
+        assert_equal(versions, ["1.0.0", "2.0.0"], label="sparse mirror index after second version")
+        context.pass_message("Mirror advertises only verified local versions, not the whole upstream index")
         _start_server(
             context,
             processes,

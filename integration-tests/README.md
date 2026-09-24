@@ -17,7 +17,7 @@
 | Multi-repository cjpm | 多仓聚合、优先级、跨仓传递依赖与冲突、`[replace]`、Explain、Doctor、Provenance、认证屏障、独占路由和旧配置兼容 |
 | Hosted repository | 发布、索引、下载、私有读取鉴权、SHA-256、重复版本和并发原子写 |
 | Proxy repository | MISS/HIT、私有读取拦截上游访问、并发填充合并、索引 TTL、离线缓存和损坏拒绝 |
-| Repository sync | 批量 Mirror/Sync 清单、部分失败汇总；源/目标索引比较、已有制品跳过下载、校验和冲突拒绝；私有目标仓读写令牌分离、周期 watcher 清单变更、幂等和源仓离线构建 |
+| Repository sync | 批量 Mirror/Sync 清单、部分失败汇总；镜像只公开已验证的本地版本并离线清理旧索引；源/目标索引比较、已有制品跳过下载、校验和冲突拒绝；私有目标仓读写令牌分离、周期 watcher 清单变更、幂等和源仓离线构建 |
 | Windows deployment | 一条命令构建启动、健康检查、持久化重启、诊断和安全停止 |
 
 可显式指定增强版 cjpm 和环境脚本：

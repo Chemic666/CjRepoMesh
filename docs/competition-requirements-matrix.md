@@ -182,6 +182,7 @@ registry + organization + package + version
 - [x] 并发重复发布原子化，严格产生一个成功和一个 409；
 - [x] 并发 Proxy 首次请求合并为一次校验后的上游填充；
 - [x] Proxy 索引 TTL 到期后刷新，版本化制品不重复下载；
+- [x] Mirror 本地索引仅公开已下载并校验的版本；旧版过度公开的缓存索引可在离线重访时清理；
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；

@@ -82,6 +82,8 @@ main.exe mirror-manifest https://upstream.example.com mirror.txt
 
 命令会继续处理清单中的后续条目，并在结尾输出 `total`、`succeeded`、`failed` 汇总；任一条目失败或清单为空时返回非零状态。重复执行已经完整缓存的清单只输出 `SKIP`，不访问上游。
 
+本地镜像索引只列出已下载并通过 SHA-256 校验的版本，不照搬上游的其他版本。制品先原子落盘，之后索引才公开该版本；重新访问已验证缓存时，还会离线清理旧版镜像可能留下的“有索引、无制品”条目。
+
 持续镜像清单可使用 `main.exe mirror-watch https://upstream.example.com mirror.txt 60`；末尾为 1–86400 秒的轮询间隔。每轮重新读取清单，新版本会镜像，已缓存版本跳过；失败轮次会在下一轮重试。用进程管理器托管此命令，停止进程即可停止轮询。
 
 ## Repository Sync

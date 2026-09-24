@@ -35,10 +35,11 @@ func runMirror(arguments: Array<String>): Bool {
     let token = getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
     try {
         if (cachedArtifactIsValid(storage, organization, name, version)) {
+            repairMirroredIndex(storage, organization, name, version)
             println("[mirror] package=${packageSpec} version=${version} result=SKIP reason=already-valid")
             return true
         }
-        let (indexBody, _, expectedChecksum) = fetchIndexVersion(upstream, token, organization, name, version)
+        let (_, indexLine, expectedChecksum) = fetchIndexVersion(upstream, token, organization, name, version)
         let (artifactStatus, artifact) = fetchUpstream(upstream, token,
             organizationRequestPath("/pkg/${name}/${version}", organization))
         if (artifactStatus != 200) {
@@ -48,16 +49,96 @@ func runMirror(arguments: Array<String>): Bool {
 
         let indexPath = indexCachePath(storage, organization, name)
         let artifactPath = artifactCachePath(storage, organization, name, version)
+        let localIndex = mirrorIndexWithVersion(storage, organization, name, version, indexLine,
+            expectedChecksum)
         ensureParent(indexPath)
         ensureParent(artifactPath)
-        File.writeTo(indexPath, indexBody)
-        File.writeTo(artifactPath, artifact)
+        // Publish the verified artifact before advertising its version in the
+        // local index. Other upstream versions must never appear here.
+        writeFileAtomically(artifactPath, artifact)
+        writeFileAtomically(indexPath, localIndex)
         println("[mirror] package=${packageSpec} version=${version} result=SYNCED checksum=${expectedChecksum}")
         return true
     } catch (e: Exception) {
         eprintln("Error: mirror failed: ${e.message}")
         return false
     }
+}
+
+private func repairMirroredIndex(storage: String, organization: String, name: String, version: String): Unit {
+    let indexPath = indexCachePath(storage, organization, name)
+    let previousIndex = String.fromUtf8(File.readFrom(indexPath))
+    var selectedLine = ""
+    var expectedChecksum = ""
+    for (line in previousIndex.lines()) {
+        if (line.trimAscii().isEmpty()) {
+            continue
+        }
+        let value = JsonValue.fromStr(line)
+        let object = value.asObject()
+        if (jsonString(object, "version") == version) {
+            selectedLine = value.toJsonString().replace("\r", "").replace("\n", "")
+            expectedChecksum = jsonString(object, "sha256sum")
+        }
+    }
+    if (selectedLine.isEmpty() || expectedChecksum.isEmpty()) {
+        throw Exception("local mirror index is missing the cached version")
+    }
+    let repairedIndex = mirrorIndexWithVersion(storage, organization, name, version, selectedLine,
+        expectedChecksum)
+    if (String.fromUtf8(repairedIndex) != previousIndex) {
+        writeFileAtomically(indexPath, repairedIndex)
+    }
+}
+
+private func mirrorIndexWithVersion(storage: String, organization: String, name: String, version: String,
+    indexLine: String, expectedChecksum: String): Array<UInt8> {
+    let indexPath = indexCachePath(storage, organization, name)
+    var localIndex = ""
+    var includedVersion = false
+    let seenVersions = ArrayList<String>()
+    if (exists(indexPath)) {
+        for (line in String.fromUtf8(File.readFrom(indexPath)).lines()) {
+            if (line.trimAscii().isEmpty()) {
+                continue
+            }
+            let value = JsonValue.fromStr(line)
+            let object = value.asObject()
+            if (jsonString(object, "name") != name ||
+                jsonString(object, "organization") != metadataOrganization(organization)) {
+                throw Exception("local mirror index has an invalid package identity")
+            }
+            let cachedVersion = jsonString(object, "version")
+            let cachedChecksum = jsonString(object, "sha256sum")
+            if (!isSafePackageSegment(cachedVersion)) {
+                throw Exception("local mirror index has an invalid version")
+            }
+            for (seen in seenVersions) {
+                if (seen == cachedVersion) {
+                    throw Exception("local mirror index contains a duplicate version")
+                }
+            }
+            seenVersions.add(cachedVersion)
+            if (cachedVersion == version) {
+                if (cachedChecksum != expectedChecksum) {
+                    throw Exception("local mirror version conflicts with upstream checksum")
+                }
+                localIndex += "${indexLine}\n"
+                includedVersion = true
+                continue
+            }
+            let cachedArtifact = artifactCachePath(storage, organization, name, cachedVersion)
+            if (!exists(cachedArtifact)) {
+                continue
+            }
+            let sha256 = SHA256()
+            sha256.write(File.readFrom(cachedArtifact))
+            if (toHexString(sha256.finish()) == cachedChecksum) {
+                localIndex += "${value.toJsonString().replace("\r", "").replace("\n", "")}\n"
+            }
+        }
+    }
+    return if (includedVersion) { localIndex.toArray() } else { "${localIndex}${indexLine}\n".toArray() }
 }
 
 /**
