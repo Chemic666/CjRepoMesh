@@ -27,7 +27,7 @@ from .harness import (
 )
 
 
-CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307, 39401, 39501, 39502)
+CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307, 39401, 39501, 39502, 39503)
 
 
 class TestContext:
@@ -1082,8 +1082,9 @@ def run_proxy(context: TestContext) -> None:
 
 
 def run_sync(context: TestContext) -> None:
-    ports = (39401, 39501, 39502)
+    ports = (39401, 39501, 39502, 39503)
     assert_ports_available(ports)
+    context.bundle("meshdep-v1-high")
     context.bundle("meshdep-v1-low")
     context.bundle("meshdep-v2-low")
     context.ensure_server()
@@ -1098,7 +1099,11 @@ def run_sync(context: TestContext) -> None:
     invalid_manifest = suite_root / "mirror-manifest-invalid.txt"
     org_manifest = suite_root / "org-manifest.txt"
     upstream_log = context.multirepo_root / "low.requests.log"
+    blocked_artifact_log = context.multirepo_root / "artifact-forbidden-low.requests.log"
+    conflicting_source_log = context.multirepo_root / "high.requests.log"
     remove_within(upstream_log, (context.tests_root,))
+    remove_within(blocked_artifact_log, (context.tests_root,))
+    remove_within(conflicting_source_log, (context.tests_root,))
 
     with ManagedProcesses() as processes:
         upstream = processes.start(_mock_command(context, 39401, "low"), cwd=context.multirepo_root)
@@ -1177,6 +1182,29 @@ def run_sync(context: TestContext) -> None:
         again_sync = run_command((*sync_command, manifest), cwd=context.server_root, env=sync_env)
         assert_contains(again_sync.output, "total=2 succeeded=2 failed=0")
         assert_equal(again_sync.output.count("result=SKIP"), 2, label="sync SKIP count")
+        blocked_artifact_source = processes.start(
+            _mock_command(context, 39401, "artifact-forbidden-low"), cwd=context.multirepo_root
+        )
+        wait_for_port(39401)
+        incremental = run_command(
+            (context.server, "sync", "http://127.0.0.1:39401", "http://127.0.0.1:39502",
+             "meshdep", "1.0.0"), cwd=context.server_root, env=sync_env,
+        )
+        assert_contains(incremental.output, "result=SKIP reason=already-valid")
+        assert_equal(_read_lines(blocked_artifact_log), ["GET /index/me/sh/meshdep"],
+                     label="incremental Sync must not fetch an existing artifact")
+        processes.stop(blocked_artifact_source)
+        conflicting_source = processes.start(_mock_command(context, 39401, "high"), cwd=context.multirepo_root)
+        wait_for_port(39401)
+        conflict = run_command(
+            (context.server, "sync", "http://127.0.0.1:39401", "http://127.0.0.1:39502",
+             "meshdep", "1.0.0"), cwd=context.server_root, env=sync_env, expect_success=False,
+        )
+        assert_contains(conflict.output, "destination version conflicts with source checksum")
+        assert_equal(_read_lines(conflicting_source_log), ["GET /index/me/sh/meshdep"],
+                     label="checksum conflict must not fetch or upload artifact")
+        processes.stop(conflicting_source)
+        context.pass_message("incremental Sync skips matching versions before artifact download and rejects checksum conflicts")
         invalid_sync = run_command(
             (*sync_command, invalid_manifest),
             cwd=context.server_root,
@@ -1185,6 +1213,33 @@ def run_sync(context: TestContext) -> None:
         )
         assert_contains(invalid_sync.output, "total=2 succeeded=1 failed=1")
         context.pass_message("batch Sync requires source read and destination publish tokens, is idempotent and reports partial failure")
+
+        _start_server(
+            context, processes, port=39503, storage=context.temp_root / "private-destination-storage",
+            publish_token="private-destination-publish", read_token="private-destination-read",
+            output_name="sync-private-destination.log",
+        )
+        private_destination_env = dict(sync_env)
+        private_destination_env["CJREPO_SYNC_DESTINATION_TOKEN"] = "private-destination-publish"
+        private_destination_command = (
+            context.server, "sync", "http://127.0.0.1:39501", "http://127.0.0.1:39503",
+            "meshdep", "2.0.0",
+        )
+        missing_destination_read = run_command(
+            private_destination_command, cwd=context.server_root,
+            env=private_destination_env, expect_success=False,
+        )
+        assert_contains(missing_destination_read.output, "destination index returned status 401")
+        private_destination_env["CJREPO_SYNC_DESTINATION_READ_TOKEN"] = "private-destination-read"
+        private_destination_sync = run_command(
+            private_destination_command, cwd=context.server_root, env=private_destination_env,
+        )
+        assert_contains(private_destination_sync.output, "result=SYNCED")
+        private_destination_again = run_command(
+            private_destination_command, cwd=context.server_root, env=private_destination_env,
+        )
+        assert_contains(private_destination_again.output, "result=SKIP reason=already-valid")
+        context.pass_message("private destination Sync requires separate read and publish tokens")
 
         org_package = context.tests_root / "hosted-server" / "org-package"
         context.reset_app(org_package)

@@ -140,8 +140,14 @@ func runSync(arguments: Array<String>): Bool {
 
     let sourceToken = getVariable("CJREPO_UPSTREAM_TOKEN") ?? ""
     let destinationToken = getVariable("CJREPO_SYNC_DESTINATION_TOKEN") ?? ""
+    let destinationReadToken = getVariable("CJREPO_SYNC_DESTINATION_READ_TOKEN") ?? ""
     try {
         let (_, indexLine, expectedChecksum) = fetchIndexVersion(source, sourceToken, organization, name, version)
+        if (destinationHasVersion(destination, destinationReadToken, organization, name, version,
+            expectedChecksum)) {
+            println("[sync] package=${packageSpec} version=${version} result=SKIP reason=already-valid")
+            return true
+        }
         let (artifactStatus, artifact) = fetchUpstream(source, sourceToken,
             organizationRequestPath("/pkg/${name}/${version}", organization))
         if (artifactStatus != 200) {
@@ -174,8 +180,12 @@ func runSync(arguments: Array<String>): Bool {
                 return true
             }
             if (response.status == 409) {
-                println("[sync] package=${packageSpec} version=${version} result=SKIP reason=already-exists")
-                return true
+                if (destinationHasVersion(destination, destinationReadToken, organization, name, version,
+                    expectedChecksum)) {
+                    println("[sync] package=${packageSpec} version=${version} result=SKIP reason=concurrent-publish")
+                    return true
+                }
+                throw Exception("destination version conflicts with source checksum")
             }
             throw Exception("destination returned status ${response.status}")
         } finally {
@@ -185,6 +195,44 @@ func runSync(arguments: Array<String>): Bool {
         eprintln("Error: repository sync failed: ${e.message}")
         return false
     }
+}
+
+private func destinationHasVersion(destination: String, token: String, organization: String, name: String,
+    version: String, expectedChecksum: String): Bool {
+    let path = organizationRequestPath(indexRequestPath(name), organization)
+    let (status, body) = fetchUpstream(destination, token, path)
+    if (status == 404) {
+        return false
+    }
+    if (status != 200) {
+        throw Exception("destination index returned status ${status}")
+    }
+    var found = false
+    var sawEntry = false
+    for (line in String.fromUtf8(body).lines()) {
+        if (line.trimAscii().isEmpty()) {
+            continue
+        }
+        sawEntry = true
+        let object = JsonValue.fromStr(line).asObject()
+        if (jsonString(object, "name") != name ||
+            jsonString(object, "organization") != metadataOrganization(organization)) {
+            throw Exception("destination returned an invalid package index")
+        }
+        if (jsonString(object, "version") == version) {
+            if (found) {
+                throw Exception("destination index contains a duplicate version")
+            }
+            if (jsonString(object, "sha256sum") != expectedChecksum) {
+                throw Exception("destination version conflicts with source checksum")
+            }
+            found = true
+        }
+    }
+    if (!sawEntry) {
+        throw Exception("destination returned an empty package index")
+    }
+    return found
 }
 
 /**

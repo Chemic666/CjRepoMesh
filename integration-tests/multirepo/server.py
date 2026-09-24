@@ -17,7 +17,7 @@ def fixtures():
         "high", "token", "artifact-unauthorized", "artifact-forbidden", "corrupt-high"
     ):
         return [ROOT / "packages" / "meshdep-v1-high"]
-    if REPOSITORY in ("low", "corrupt"):
+    if REPOSITORY in ("low", "corrupt", "artifact-forbidden-low"):
         return [
             ROOT / "packages" / "meshdep-v1-low",
             ROOT / "packages" / "meshdep-v2-low",
@@ -107,7 +107,8 @@ class Handler(BaseHTTPRequestHandler):
                 "artifact-unauthorized": 401,
                 "artifact-forbidden": 403,
                 "artifact-forbidden-transitive-high": 403,
-                "artifact-forbidden-transitive-low": 403,
+            "artifact-forbidden-transitive-low": 403,
+            "artifact-forbidden-low": 403,
             }.get(REPOSITORY)
             if artifact_status is not None:
                 payload = json.dumps({"errors": [{"message": REPOSITORY}]}).encode("utf-8")

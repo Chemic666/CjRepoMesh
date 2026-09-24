@@ -91,7 +91,9 @@ $env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
 main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 ```
 
-同步会从 Source 获取索引与制品、验证 SHA-256，再通过目标仓发布协议写入。目标版本已经存在时，409 被解释为幂等 `SKIP`。
+同步先读取 Source 与 Destination 的索引并比较指定版本的 SHA-256：目标已有相同版本时直接 `SKIP`，不下载源制品；同版本校验和不同则报冲突，不覆盖目标。只有缺失版本才下载、校验并发布制品。并发发布导致 409 时会重新读取目标索引，只有校验和相同才视为幂等跳过。
+
+如果目标仓启用了私有读取，还须另设 `CJREPO_SYNC_DESTINATION_READ_TOKEN`；它与用于写入的 `CJREPO_SYNC_DESTINATION_TOKEN` 是独立令牌。清单中途失败后可重新运行：已成功且校验和相同的版本会跳过制品传输；当前尚无持久化进度游标或自动重试调度。
 
 批量同步复用 Mirror 的 `package version` 清单格式，包括可选的组织名前缀：
 

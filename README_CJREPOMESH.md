@@ -163,7 +163,7 @@ $env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
   mirror.txt
 ```
 
-Sync 从 Source 取得索引和制品、验证 SHA-256，再通过目标仓发布协议写入；目标版本已经存在时按幂等 `SKIP` 处理。
+Sync 先比较 Source 和 Destination 索引的指定版本与 SHA-256：相同则直接 `SKIP`、不下载制品；缺失才下载、校验并发布；同版本校验和不同则报冲突，不覆盖目标。私有目标仓的读取和发布可分别使用 `CJREPO_SYNC_DESTINATION_READ_TOKEN`、`CJREPO_SYNC_DESTINATION_TOKEN`。清单中断后可重跑并跳过已完整同步项，但尚无持久化进度游标。
 
 ## 验证
 

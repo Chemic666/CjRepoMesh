@@ -171,6 +171,7 @@ registry + organization + package + version
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
 - [x] 批量清单主动 Mirror，逐项校验、幂等跳过并汇总部分失败；
 - [x] 带令牌的 CjRepo-to-CjRepo 批量 Sync，逐项幂等并汇总部分失败；
+- [x] Sync 先比较源与目标版本校验和，只传缺失制品；同版本不同校验和拒绝覆盖，私有目标仓支持独立读取令牌；
 - [x] Mirror/Sync 支持 `组织名::包名`，索引/制品按组织隔离；组织包同步后源仓离线仍可由目标仓完成 cjpm 构建；
 - [x] Source 离线后 Destination 独立完成 cjpm 构建；
 - [x] Windows 一条命令构建并启动私有仓，提供健康诊断和安全停止；
