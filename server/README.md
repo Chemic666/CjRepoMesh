@@ -14,7 +14,7 @@ cjpm run
 
 可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。
 
-Hosted 端点接受 cjpm 使用的 `?organization=<组织名>`，并按组织隔离索引和制品；不带查询参数使用默认仓。组织名必须符合 3–64 字符的仓颉标识符格式，其他查询参数、空值、编码别名和显式 `organization=default` 均返回 400，避免误读为默认仓。私有读取仍先鉴权（无令牌为 401）。Proxy、Mirror 和 Sync 当前只处理默认仓。
+Hosted 与 Proxy 端点接受 cjpm 使用的 `?organization=<组织名>`，并按组织隔离索引和制品；不带查询参数使用默认仓。组织名必须符合 3–64 字符的仓颉标识符格式，其他查询参数、空值、编码别名和显式 `organization=default` 均返回 400，避免误读为默认仓。私有读取仍先鉴权（无令牌为 401）。Mirror 和 Sync 当前只处理默认仓。
 
 健康检查：
 
@@ -53,6 +53,8 @@ $env:CJREPO_PROXY_TTL_SECONDS = "86400"
 ```
 
 Cache MISS 会从上游获取并原子落盘；制品必须与已缓存索引中的 SHA-256 一致才会写入。并发首次请求在存储锁内复查缓存，因此只由一个请求访问上游，其余请求等待后直接命中。索引默认 86400 秒过期，可通过 `CJREPO_PROXY_TTL_SECONDS` 调整；制品按版本与校验和视为不可变内容，不随索引 TTL 重复下载。Cache HIT 不访问上游，因此缓存完整时支持离线构建。上游非 200 状态会原样透传，网络异常或完整性错误返回 502。
+
+命名组织查询会原样携带到上游，并存入独立组织缓存；上游索引的 `organization` 必须与请求一致，否则拒绝缓存。组织制品始终与对应组织的索引校验和核对。
 
 ## Mirror
 
@@ -99,4 +101,4 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 
 批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
 
-当前限制：Proxy/Mirror/Sync 仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
+当前限制：Mirror/Sync 仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。

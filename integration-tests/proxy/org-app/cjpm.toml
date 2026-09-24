@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "proxy_org_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh organization Proxy consumer fixture"
+
+[dependencies]
+"meshcorp::orgmeshdep" = "1.0.0"

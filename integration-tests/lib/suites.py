@@ -95,7 +95,7 @@ class TestContext:
                 (root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json")
             )
         for suite in ("hosted-server", "proxy", "sync"):
-            apps = ("app", "private-app", "org-package", "org-app", "org-private-app") if suite == "hosted-server" else ("app",)
+            apps = ("app", "private-app", "org-package", "org-app", "org-private-app") if suite == "hosted-server" else (("app", "org-app") if suite == "proxy" else ("app",))
             for name in apps:
                 app = self.tests_root / suite / name
                 generated.extend((app / "target", app / "cache", app / "cjpm.lock", app / "cjpm-provenance.json"))
@@ -877,13 +877,15 @@ def _concurrent_get(url: str, count: int) -> None:
 
 
 def run_proxy(context: TestContext) -> None:
-    ports = (39300, 39301, 39302, 39303)
+    ports = (39300, 39301, 39302, 39303, 39304, 39305)
     assert_ports_available(ports)
     context.bundle("meshdep-v1-low")
     context.bundle("meshdep-v2-low")
     context.ensure_server()
     app = context.tests_root / "proxy" / "app"
     context.reset_app(app)
+    org_app = context.tests_root / "proxy" / "org-app"
+    context.reset_app(org_app)
     storage = context.temp_root / "proxy-storage"
     low_log = context.multirepo_root / "low.requests.log"
     corrupt_log = context.multirepo_root / "corrupt.requests.log"
@@ -961,11 +963,12 @@ def run_proxy(context: TestContext) -> None:
 
         private_upstream = processes.start(_mock_command(context, 39301, "low"), cwd=context.multirepo_root)
         wait_for_port(39301)
+        private_proxy_storage = context.temp_root / "private-proxy-storage"
         _start_server(
             context,
             processes,
             port=39303,
-            storage=context.temp_root / "private-proxy-storage",
+            storage=private_proxy_storage,
             upstream="http://127.0.0.1:39301",
             publish_token="proxy-publish-token",
             read_token="proxy-read-token",
@@ -979,14 +982,22 @@ def run_proxy(context: TestContext) -> None:
         for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
             assert_equal(
                 http_request(
-                    "GET", private_base + path + "?organization=demo",
+                    "GET", private_base + path + "?unused=x",
                     headers={"Authorization": "proxy-read-token"},
                 ).status,
                 400,
-                label=f"unsupported private proxy organization query {path}",
+                label=f"unsupported private proxy query {path}",
             )
-        assert_equal(_read_lines(low_log), upstream_before, label="unsupported proxy namespace upstream requests")
-        context.pass_message("unsupported organization query cannot fill or read the default Proxy cache")
+        assert_equal(_read_lines(low_log), upstream_before, label="unsupported proxy query upstream requests")
+        context.pass_message("unsupported query cannot fill or read the default Proxy cache")
+        assert_equal(
+            http_request("GET", private_base + "/index/me/sh/meshdep?organization=meshcorp",
+                         headers={"Authorization": "proxy-read-token"}).status,
+            502, label="Proxy refuses upstream index from wrong organization",
+        )
+        if (private_proxy_storage / "index" / "meshcorp" / "me" / "sh" / "meshdep").exists():
+            raise TestFailure("Proxy cached an upstream index with the wrong organization")
+        context.pass_message("Proxy rejects mismatched upstream organization without poisoning cache")
         for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
             assert_equal(
                 http_request("GET", private_base + path, headers={"Authorization": "proxy-read-token"}).status,
@@ -1001,6 +1012,42 @@ def run_proxy(context: TestContext) -> None:
                 label=f"offline private proxy cache {path}",
             )
         context.pass_message("private Proxy rejects unauthenticated MISS and serves authenticated offline HIT")
+
+        org_package = context.tests_root / "hosted-server" / "org-package"
+        context.reset_app(org_package)
+        context.cjpm_command(org_package, "bundle")
+        org_metadata = (org_package / "target" / "meta-data.json").read_bytes()
+        org_artifact = (org_package / "target" / "orgmeshdep-1.0.0.cjp").read_bytes()
+        org_source = "http://127.0.0.1:39304"
+        org_proxy = "http://127.0.0.1:39305"
+        org_source_process = _start_server(
+            context, processes, port=39304, storage=context.temp_root / "proxy-org-source",
+            publish_token="org-publish-token", output_name="proxy-org-source.log",
+        )
+        assert_equal(
+            http_request("POST", org_source + "/pkg/orgmeshdep?organization=meshcorp",
+                         headers={"Authorization": "org-publish-token"},
+                         body=publish_frame(org_metadata, org_artifact)).status,
+            200, label="organization upstream publish",
+        )
+        _start_server(
+            context, processes, port=39305, storage=context.temp_root / "proxy-org-cache",
+            upstream=org_source, output_name="proxy-org.log",
+        )
+        result = context.cjpm_command(org_app, "run")
+        assert_contains(result.output, "meshcorp-1.0.0")
+        org_cache = context.temp_root / "proxy-org-cache"
+        if not (org_cache / "index" / "meshcorp" / "or" / "gm" / "orgmeshdep").exists():
+            raise TestFailure("Proxy organization index was not isolated in cache")
+        if not (org_cache / "artifacts" / "meshcorp" / "orgmeshdep" / "1.0.0" / "orgmeshdep-1.0.0.cjp").exists():
+            raise TestFailure("Proxy organization artifact was not isolated in cache")
+        assert_equal(http_request("GET", org_proxy + "/index/or/gm/orgmeshdep").status,
+                     404, label="default namespace cannot read organization index")
+        processes.stop(org_source_process)
+        context.reset_app(org_app)
+        result = context.cjpm_command(org_app, "run")
+        assert_contains(result.output, "meshcorp-1.0.0")
+        context.pass_message("Proxy organization cache isolates namespace and supports offline cjpm build")
     wait_for_ports_closed(ports)
 
 

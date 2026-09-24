@@ -74,24 +74,6 @@ private class ReadAuthorizationHandler <: HttpRequestHandler {
     }
 }
 
-// The distributor receives only the URL path. Until organization routing is
-// implemented, never let a query silently alias the default namespace.
-private class DefaultNamespaceHandler <: HttpRequestHandler {
-    private let handler: HttpRequestHandler
-
-    public init(handler: HttpRequestHandler) {
-        this.handler = handler
-    }
-
-    public func handle(context: HttpContext): Unit {
-        if (let Some(_) <- context.request.url.rawQuery) {
-            respondError(context, 400, "query parameters are not supported by the default registry")
-            return
-        }
-        handler.handle(context)
-    }
-}
-
 private class HostedIndexHandler <: HttpRequestHandler {
     private let storage: String
     private let relative: String
@@ -138,10 +120,6 @@ private class ArtifactReadHandler <: HttpRequestHandler {
             respondError(context, 400, e.message)
             return
         }
-        if (!upstream.isEmpty() && organization != "default") {
-            respondError(context, 400, "organization proxying is not supported")
-            return
-        }
         let artifactPath = Path(storage)
             .join("artifacts")
             .join(organization)
@@ -156,7 +134,7 @@ private class ArtifactReadHandler <: HttpRequestHandler {
                 CacheHitHandler(artifactPath, requestPath).handle(context)
             }
         } else if (!upstream.isEmpty()) {
-            ProxyArtifactHandler(storage, upstream, upstreamToken, name, version).handle(context)
+            ProxyArtifactHandler(storage, upstream, upstreamToken, name, version, organization).handle(context)
         } else {
             FileHandler(artifactPath).handle(context)
         }
@@ -166,7 +144,7 @@ private class ArtifactReadHandler <: HttpRequestHandler {
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
- * Hosted storage is partitioned by organization; Proxy remains default-only.
+ * Hosted and Proxy storage are partitioned by organization.
  */
 private class RegistryDistributor <: HttpRequestDistributor {
     private let storage: String
@@ -202,8 +180,8 @@ private class RegistryDistributor <: HttpRequestDistributor {
             let relative = path[7..]
             if (isSafeIndexPath(relative)) {
                 if (!upstream.isEmpty()) {
-                    return protectedRead(DefaultNamespaceHandler(ProxyIndexHandler(storage, upstream,
-                        upstreamToken, relative, proxyTtlSeconds)))
+                    return protectedRead(ProxyIndexHandler(storage, upstream,
+                        upstreamToken, relative, proxyTtlSeconds))
                 }
                 return protectedRead(HostedIndexHandler(storage, relative))
             }

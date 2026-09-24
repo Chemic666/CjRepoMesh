@@ -265,7 +265,7 @@ private func cachedArtifactIsValid(storage: String, name: String, version: Strin
         return false
     }
     try {
-        let expectedChecksum = checksumFromCachedIndex(storage, name, version)
+        let expectedChecksum = checksumFromCachedIndex(storage, "default", name, version)
         let sha256 = SHA256()
         sha256.write(File.readFrom(artifactPath))
         return toHexString(sha256.finish()) == expectedChecksum

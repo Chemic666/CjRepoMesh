@@ -44,9 +44,19 @@ class ProxyIndexHandler <: HttpRequestHandler {
 
     public func handle(context: HttpContext): Unit {
         let requestPath = "/index/${relative}"
-        println("[proxy] path=${requestPath} cache=MISS upstream=${upstream}")
+        var organization = "default"
         try {
-            let cachePath = Path(storage).join("index").join("default").join(relative)
+            organization = requestedRegistryOrganization(context)
+        } catch (e: Exception) {
+            respondError(context, 400, e.message)
+            return
+        }
+        try {
+            let upstreamPath = if (organization == "default") { requestPath } else {
+                "${requestPath}?organization=${organization}"
+            }
+            println("[proxy] path=${upstreamPath} cache=MISS upstream=${upstream}")
+            let cachePath = Path(storage).join("index").join(organization).join(relative)
             var responseStatus: UInt16 = 200
             var responseBody = "".toArray()
             var cacheResult = "MISS"
@@ -55,7 +65,7 @@ class ProxyIndexHandler <: HttpRequestHandler {
                     responseBody = File.readFrom(cachePath)
                     cacheResult = "HIT_AFTER_WAIT"
                 } else {
-                    let (upstreamStatus, upstreamBody) = fetchUpstream(upstream, upstreamToken, requestPath)
+                    let (upstreamStatus, upstreamBody) = fetchUpstream(upstream, upstreamToken, upstreamPath)
                     responseStatus = upstreamStatus
                     responseBody = upstreamBody
                     if (upstreamStatus == 200) {
@@ -69,7 +79,7 @@ class ProxyIndexHandler <: HttpRequestHandler {
                             let value = JsonValue.fromStr(line)
                             let object = value.asObject()
                             if (jsonString(object, "name") != expectedName ||
-                                !jsonString(object, "organization").isEmpty() ||
+                                jsonString(object, "organization") != metadataOrganization(organization) ||
                                 jsonString(object, "version").isEmpty() ||
                                 jsonString(object, "sha256sum").isEmpty()) {
                                 throw Exception("upstream returned an invalid package index")
@@ -89,7 +99,7 @@ class ProxyIndexHandler <: HttpRequestHandler {
                     }
                 }
             }
-            println("[proxy] path=${requestPath} fill=${cacheResult}")
+            println("[proxy] path=${upstreamPath} fill=${cacheResult}")
             proxyResponse(context, responseStatus, responseBody)
         } catch (e: Exception) {
             respondError(context, 502, "proxy index fetch failed: ${e.message}")
@@ -112,22 +122,28 @@ class ProxyArtifactHandler <: HttpRequestHandler {
     private let upstreamToken: String
     private let name: String
     private let version: String
+    private let organization: String
 
-    public init(storage: String, upstream: String, upstreamToken: String, name: String, version: String) {
+    public init(storage: String, upstream: String, upstreamToken: String, name: String, version: String,
+        organization: String) {
         this.storage = storage
         this.upstream = upstream
         this.upstreamToken = upstreamToken
         this.name = name
         this.version = version
+        this.organization = organization
     }
 
     public func handle(context: HttpContext): Unit {
-        let requestPath = "/pkg/${name}/${version}"
+        let basePath = "/pkg/${name}/${version}"
+        let requestPath = if (organization == "default") { basePath } else {
+            "${basePath}?organization=${organization}"
+        }
         println("[proxy] path=${requestPath} cache=MISS upstream=${upstream}")
         try {
             let cachePath = Path(storage)
                 .join("artifacts")
-                .join("default")
+                .join(organization)
                 .join(name)
                 .join(version)
                 .join("${name}-${version}.cjp")
@@ -143,7 +159,7 @@ class ProxyArtifactHandler <: HttpRequestHandler {
                     responseStatus = upstreamStatus
                     responseBody = upstreamBody
                     if (upstreamStatus == 200) {
-                        let expectedChecksum = checksumFromCachedIndex(storage, name, version)
+                        let expectedChecksum = checksumFromCachedIndex(storage, organization, name, version)
                         let sha256 = SHA256()
                         sha256.write(upstreamBody)
                         let actualChecksum = toHexString(sha256.finish())
@@ -186,10 +202,10 @@ func fetchUpstream(upstream: String, token: String, path: String): (UInt16, Arra
     }
 }
 
-func checksumFromCachedIndex(storage: String, name: String, version: String): String {
+func checksumFromCachedIndex(storage: String, organization: String, name: String, version: String): String {
     let firstLevel = name[..2]
     let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
-    let indexPath = Path(storage).join("index").join("default").join(firstLevel).join(secondLevel).join(name)
+    let indexPath = Path(storage).join("index").join(organization).join(firstLevel).join(secondLevel).join(name)
     if (!exists(indexPath)) {
         throw Exception("package index is not cached before artifact download")
     }
