@@ -101,4 +101,14 @@ python3 integration-tests/compatibility/maple_smoke.py \
 .\benchmark\proxy\run.ps1
 ```
 
-共享运行器不包含 Windows 部署或 Docker Compose：前者由 `integration-tests/deployment/run.ps1` 验证，后者由 `deployment/docker/doctor.ps1` 独立验证。完整官方 Maple HLT/LLT 也不属于该入口。
+## Docker 私有仓持久化专项
+
+先通过 `deployment/docker/up.ps1` 构建当前服务端镜像，然后在 Windows 上运行：
+
+```powershell
+python integration-tests/docker_persistence.py
+```
+
+脚本使用随机命名的独立 Compose 项目、端口、发布/读取令牌和命名卷，不修改正在运行的主项目容器或其数据。它验证无令牌读取/发布均为 401、授权发布后索引和制品可读、强制重建容器后数据及 SHA-256 保留、重复发布仍为 409；结束时只清理该测试项目及其卷。制品是合成字节，仅用于验证服务端协议和持久化，不替代真实 cjpm 打包/安装端到端测试。
+
+共享运行器不包含 Windows 部署或 Docker Compose：前者由 `integration-tests/deployment/run.ps1` 验证，Docker 健康/安全项由 `deployment/docker/doctor.ps1` 验证，持久化专项由上面的独立脚本验证。完整官方 Maple HLT/LLT 也不属于这些入口。
