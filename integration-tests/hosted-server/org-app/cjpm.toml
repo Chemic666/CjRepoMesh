@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "hosted_org_app"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh organization Hosted consumer fixture"
+
+[dependencies]
+"meshcorp::orgmeshdep" = "1.0.0"

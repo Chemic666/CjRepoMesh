@@ -92,6 +92,26 @@ private class DefaultNamespaceHandler <: HttpRequestHandler {
     }
 }
 
+private class HostedIndexHandler <: HttpRequestHandler {
+    private let storage: String
+    private let relative: String
+
+    public init(storage: String, relative: String) {
+        this.storage = storage
+        this.relative = relative
+    }
+
+    public func handle(context: HttpContext): Unit {
+        try {
+            let organization = requestedRegistryOrganization(context)
+            let indexPath = Path(storage).join("index").join(organization).join(relative).toString()
+            FileHandler(indexPath).handle(context)
+        } catch (e: Exception) {
+            respondError(context, 400, e.message)
+        }
+    }
+}
+
 private class ArtifactReadHandler <: HttpRequestHandler {
     private let storage: String
     private let upstream: String
@@ -111,9 +131,20 @@ private class ArtifactReadHandler <: HttpRequestHandler {
     }
 
     public func handle(context: HttpContext): Unit {
+        var organization = "default"
+        try {
+            organization = requestedRegistryOrganization(context)
+        } catch (e: Exception) {
+            respondError(context, 400, e.message)
+            return
+        }
+        if (!upstream.isEmpty() && organization != "default") {
+            respondError(context, 400, "organization proxying is not supported")
+            return
+        }
         let artifactPath = Path(storage)
             .join("artifacts")
-            .join("default")
+            .join(organization)
             .join(name)
             .join(version)
             .join("${name}-${version}.cjp")
@@ -135,8 +166,7 @@ private class ArtifactReadHandler <: HttpRequestHandler {
 /**
  * Resolves the cjpm registry routes without changing cjpm's wire contract.
  *
- * The first hosted slice intentionally serves only the default organization.
- * Organization-aware routing and publishing are the next protocol slices.
+ * Hosted storage is partitioned by organization; Proxy remains default-only.
  */
 private class RegistryDistributor <: HttpRequestDistributor {
     private let storage: String
@@ -171,12 +201,11 @@ private class RegistryDistributor <: HttpRequestDistributor {
         if (path.startsWith("/index/")) {
             let relative = path[7..]
             if (isSafeIndexPath(relative)) {
-                let indexPath = Path(storage).join("index").join("default").join(relative).toString()
                 if (!upstream.isEmpty()) {
                     return protectedRead(DefaultNamespaceHandler(ProxyIndexHandler(storage, upstream,
                         upstreamToken, relative, proxyTtlSeconds)))
                 }
-                return protectedRead(DefaultNamespaceHandler(FileHandler(indexPath)))
+                return protectedRead(HostedIndexHandler(storage, relative))
             }
         }
 
@@ -189,8 +218,8 @@ private class RegistryDistributor <: HttpRequestDistributor {
             if (segments.size == 2 && isSafeSegment(segments[0]) && isSafeSegment(segments[1])) {
                 let name = segments[0]
                 let version = segments[1]
-                return protectedRead(DefaultNamespaceHandler(ArtifactReadHandler(storage, upstream,
-                    upstreamToken, name, version, path)))
+                return protectedRead(ArtifactReadHandler(storage, upstream,
+                    upstreamToken, name, version, path))
             }
         }
 

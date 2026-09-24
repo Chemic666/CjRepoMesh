@@ -1,0 +1,7 @@
+[package]
+cjc-version = "1.0.0"
+name = "orgmeshdep"
+organization = "meshcorp"
+version = "1.0.0"
+output-type = "static"
+description = "CjRepoMesh organization Hosted fixture"

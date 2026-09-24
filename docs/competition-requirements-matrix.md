@@ -162,10 +162,10 @@ registry + organization + package + version
 - [x] 单仓 run/update/缓存布局兼容；
 - [x] Namespace exclusive routing（私有仓 404 时公共仓请求数仍为 0）；
 - [x] 仓颉原生私有仓 HTTP 服务骨架与健康检查；
-- [x] 默认 organization 的 Hosted Registry 发布、索引与制品下载；
+- [x] 默认与命名 organization 的 Hosted Registry 发布、索引与制品下载，存储按组织隔离；
 - [x] 发布鉴权、SHA-256 复核和重复版本 409；
 - [x] 可选的 Hosted/Proxy 私有读取鉴权，缺失或错误令牌在访问上游前返回 401；
-- [x] 未实现组织仓前显式拒绝仓库端点查询参数，避免 `?organization=...` 误读或误写默认仓；
+- [x] Hosted 仅接受合法 `?organization=<组织名>` 并校验元数据组织身份；其他查询参数拒绝，Proxy 组织查询拒绝；
 - [x] CjRepo Server → 增强版 cjpm → 编译运行的端到端测试；
 - [x] Proxy Cache MISS/HIT 与上游离线构建；
 - [x] Proxy 缓存前 SHA-256 校验，损坏制品不落盘；
@@ -183,7 +183,7 @@ registry + organization + package + version
 - [x] `repo doctor` 逐仓诊断元数据 API，并证明 401 认证错误禁止回退；
 - [x] Proxy Cold/Warm Benchmark 保留原始样本并报告 Median/P95；
 - [x] Windows 一键部署、Linux 原生运行和 Docker Compose 部署验证；
-- [ ] 私有中心仓 organization 和按包细粒度锁；读取鉴权已可选实现，默认仍公开；
+- [ ] Proxy/Mirror/Sync 组织仓、按包细粒度锁；Hosted 组织仓与可选读取鉴权已实现，默认仍公开；
 - [ ] Mirror/Sync 调度与断点恢复。
 
 如果某项受阻，按以下顺序降险：

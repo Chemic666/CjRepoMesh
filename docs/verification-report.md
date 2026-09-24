@@ -2,7 +2,7 @@
 
 > 执行日期：2026-09-23
 > 历史基线：Windows 五组 `8e33119`；最近 Linux 四组与 Docker 复核 `e5be054`
-> 结论：可选私有读取鉴权及“读私有、写匿名”配置拒绝加入后，服务端于 2026-09-24 通过 Linux 四组完整回归 4/4、189.09 秒；当前服务端二进制打包的 Docker 镜像诊断 9/9，并通过容器内私有读取专项。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另一个稳定化制品异常矩阵两版各 1/1 通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
+> 结论：Hosted 命名组织仓加入后，服务端于 2026-09-24 通过 Linux 四组完整回归 4/4、184.28 秒；追加的私有组织仓真实 cjpm 拉包运行专项通过。当前服务端二进制打包的 Docker 镜像诊断 9/9，并通过私有默认仓/组织仓隔离持久化专项。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另有本地打包、树与组织名选定批次通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
 
 ## 环境
 
@@ -72,7 +72,7 @@ Windows Smart App Control / Code Integrity 已知会阻止未签名的仓颉 LLV
 - Docker Compose 一键启动、真实发布、容器重建持久化和最小权限诊断已通过，详见 `docs/docker-verification.md`；
 - Docker 在后续修复过程中再次 9/9 通过且启动输出不再回显 Token；`de2da77` 的 SecureString/ACL 路径在当时尚未完成容器启动复测，后续 `c602c12` 的默认 Token/ACL 完整链路已复测，见文末与 `docs/docker-verification.md`；
 - 未执行依赖额外官方测试资产的完整 Maple HLT/LLT；
-- 未验证默认 organization 之外的服务端协议；
+- Hosted 命名 organization 已验证；Proxy/Mirror/Sync 组织仓尚未实现或验证；
 - 本报告不是长期稳定性、跨机网络或公网安全认证报告；
 - 性能数据见独立的 `benchmark/results/proxy-benchmark.md`，不由本功能回归推导。
 
@@ -193,3 +193,5 @@ Docker Compose 在 `b10ced9` 上执行 `up.ps1 → doctor.ps1 → down.ps1`，9 
 同日再运行官方本地 `tree` **17 项**、`organization` **12 项**，原版和增强版每批均全通过；34 份依赖树日志和 24 份组织名日志分别保存在外层 `test-runs/maple-tree/tree-1790224129-a37bb849/`、`test-runs/maple-organization/organization-1790224256-52fb157b/`。隔离临时目录已清理。组织名批次只覆盖本地路径依赖，不外推为服务端组织仓支持。
 
 组织名边界审查发现服务端原本仅按 URL path 分发，`?organization=demo` 被忽略，会把请求导向默认仓已有索引/制品。修复后默认仓的索引、制品和发布端点拒绝任何查询参数（400）；私有读取先验令牌，无令牌仍为 401。Hosted 测试覆盖明文、空值、编码组织名及其他查询参数，Proxy 测试确认拒绝后不访问上游。服务端真实重编译，SHA-256 `bd424b79d39ebd47d550a8130fa7d06a444babe62e2fe3496751796ed3c353af`；Linux 四组 **4/4 PASS、176.32s**（多仓 142.77s、Hosted 13.69s、Proxy 10.81s、Sync 5.51s）。当前二进制已打入 Docker 镜像，主项目容器诊断 **9/9 PASS**；在保留数据卷的容器上，同一默认仓包无查询请求为 200、带组织查询为 400。独立 Docker 私有仓持久化专项含组织查询断言再次 PASS。此修复是“未支持组织仓时拒绝错误路由”，并非实现组织仓。
+
+随后在 Hosted 模式实现命名 organization：仅接受合法 `?organization=<组织名>`，核对发布元数据和索引组织身份，并按组织分目录存储；默认仓继续使用无查询请求。Proxy 仍拒绝组织查询。使用真实增强版 cjpm 完成组织包 `bundle → publish → run`，并从启用读取鉴权的组织仓通过 `token-env` 拉包运行。Linux 四组回归 **4/4 PASS、184.28s**（多仓 140.19s、Hosted 24.43s、Proxy 10.65s、Sync 5.52s），随后仅追加私有组织仓客户端夹具，Hosted 专项 **PASS、43.10s**。服务端二进制 SHA-256 `9c9aac3ed913cbcb4fdb0a0728fb64dc652aed77af7beabb82a52a3036c97c50`；当前 Docker 镜像诊断 **9/9 PASS**，隔离容器内默认仓与同名同版本组织仓均能发布、隔离读取、容器重建后保留并分别拒绝重复发布（409）。

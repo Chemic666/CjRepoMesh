@@ -1,0 +1,9 @@
+[repository.cache]
+path = "./cache"
+
+[repository.home]
+registry = "http://127.0.0.1:39201"
+token-env = "CJREPOMESH_READ_TOKEN"
+
+[global]
+strict-tls = false

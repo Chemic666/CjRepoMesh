@@ -1,6 +1,6 @@
 # CjRepo Server
 
-仓颉原生的 CjRepoMesh 私有中心仓服务端。当前已提供健康检查，以及默认 organization 的 Hosted Registry 发布、索引和制品下载。发布过程兼容 cjpm framing，并校验令牌、包身份、SHA-256 和重复版本。
+仓颉原生的 CjRepoMesh 私有中心仓服务端。当前已提供健康检查，以及默认仓和命名 organization 的 Hosted Registry 发布、索引和制品下载。发布过程兼容 cjpm framing，并校验令牌、包身份、SHA-256 和重复版本。
 
 ## 本地运行
 
@@ -14,7 +14,7 @@ cjpm run
 
 可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。
 
-当前仅实现默认 organization。由于 HTTP 分发器只传入 URL path，索引、制品和发布端点会明确拒绝任何查询参数（400）；私有读取仍先鉴权（无令牌为 401）。因此 `?organization=...` 不会被静默当作默认仓请求处理。组织仓发布/读取尚未实现，不应把这项隔离措施误认为组织仓功能。
+Hosted 端点接受 cjpm 使用的 `?organization=<组织名>`，并按组织隔离索引和制品；不带查询参数使用默认仓。组织名必须符合 3–64 字符的仓颉标识符格式，其他查询参数、空值、编码别名和显式 `organization=default` 均返回 400，避免误读为默认仓。私有读取仍先鉴权（无令牌为 401）。Proxy、Mirror 和 Sync 当前只处理默认仓。
 
 健康检查：
 
@@ -26,8 +26,8 @@ GET /health
 
 ```text
 storage/
-├── index/default/<前两字符>/<随后字符>/<包名>
-└── artifacts/default/<包名>/<版本>/<包名>-<版本>.cjp
+├── index/<default 或组织名>/<前两字符>/<随后字符>/<包名>
+└── artifacts/<default 或组织名>/<包名>/<版本>/<包名>-<版本>.cjp
 ```
 
 当前兼容的 cjpm 请求：
@@ -37,6 +37,8 @@ POST /pkg/<包名>
 GET /index/<前两字符>/<随后字符>/<包名>
 GET /pkg/<包名>/<版本>
 ```
+
+命名组织仓使用相同路径并追加 `?organization=<组织名>`；发布元数据和索引中的 `organization` 必须与查询参数一致。默认仓的元数据组织名为空字符串。
 
 服务端会拒绝包含危险路径片段的请求；不存在的索引或制品返回 404。发布制品和索引均采用临时文件原子替换，并在进程级存储锁内复查重复版本；相同版本并发发布只允许一个成功。
 
@@ -97,4 +99,4 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 
 批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
 
-当前限制：仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
+当前限制：Proxy/Mirror/Sync 仅支持默认 organization；读取鉴权需显式配置，默认仍为公开读取；当前使用进程级全局存储锁，尚未细化为按包锁；Mirror/Sync 已支持显式批量清单但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。

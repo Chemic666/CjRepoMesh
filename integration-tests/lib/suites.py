@@ -95,7 +95,7 @@ class TestContext:
                 (root / "target", root / "cache", root / "cjpm.lock", root / "cjpm-provenance.json")
             )
         for suite in ("hosted-server", "proxy", "sync"):
-            apps = ("app", "private-app") if suite == "hosted-server" else ("app",)
+            apps = ("app", "private-app", "org-package", "org-app", "org-private-app") if suite == "hosted-server" else ("app",)
             for name in apps:
                 app = self.tests_root / suite / name
                 generated.extend((app / "target", app / "cache", app / "cjpm.lock", app / "cjpm-provenance.json"))
@@ -641,6 +641,12 @@ def run_hosted(context: TestContext) -> None:
     context.reset_app(app)
     private_app = context.tests_root / "hosted-server" / "private-app"
     context.reset_app(private_app)
+    org_package = context.tests_root / "hosted-server" / "org-package"
+    context.reset_app(org_package)
+    org_app = context.tests_root / "hosted-server" / "org-app"
+    context.reset_app(org_app)
+    org_private_app = context.tests_root / "hosted-server" / "org-private-app"
+    context.reset_app(org_private_app)
     storage = context.temp_root / "hosted-storage"
 
     metadata = (package_root / "target" / "meta-data.json").read_bytes()
@@ -717,23 +723,68 @@ def run_hosted(context: TestContext) -> None:
             raise TestFailure("Hosted artifact checksum mismatch")
         context.pass_message("hosted artifact download and checksum")
 
-        for query in ("organization=demo", "organization=", "%6Frganization=demo", "unused=x"):
+        for query in ("organization=", "%6Frganization=demo", "unused=x", "organization=default"):
             for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
                 assert_equal(
                     http_request("GET", f"{base}{path}?{query}").status,
                     400,
                     label=f"default namespace query rejection {path}?{query}",
                 )
+        organization = "meshcorp"
+        organization_query = f"?organization={organization}"
+        for path in ("/index/me/sh/meshdep", "/pkg/meshdep/2.0.0"):
+            assert_equal(
+                http_request("GET", base + path + organization_query).status,
+                404,
+                label=f"organization namespace starts empty {path}",
+            )
         assert_equal(
             http_request(
-                "POST", f"{base}/pkg/meshdep?organization=demo",
+                "POST", f"{base}/pkg/meshdep{organization_query}",
                 headers={"Authorization": "publish-token"},
                 body=publish_frame(metadata, artifact),
             ).status,
             400,
-            label="organization publish must not alias default namespace",
+            label="organization publish metadata must match query",
         )
-        context.pass_message("unsupported organization and other queries cannot alias default Hosted storage")
+        organization_metadata = json.loads(metadata)
+        organization_metadata["organization"] = organization
+        organization_metadata["index"]["organization"] = organization
+        organization_frame = publish_frame(json.dumps(organization_metadata).encode(), artifact)
+        assert_equal(
+            http_request(
+                "POST", f"{base}/pkg/meshdep{organization_query}",
+                headers={"Authorization": "publish-token"},
+                body=organization_frame,
+            ).status,
+            200,
+            label="organization publish status",
+        )
+        response = http_request("GET", f"{base}/index/me/sh/meshdep{organization_query}")
+        assert_equal(response.status, 200, label="organization index status")
+        assert_equal(json.loads(response.body)["organization"], organization, label="organization index identity")
+        response = http_request("GET", f"{base}/pkg/meshdep/2.0.0{organization_query}")
+        assert_equal(response.status, 200, label="organization artifact status")
+        if response.body != artifact:
+            raise TestFailure("Organization artifact checksum mismatch")
+        assert_equal(
+            http_request(
+                "POST", f"{base}/pkg/meshdep{organization_query}",
+                headers={"Authorization": "publish-token"},
+                body=organization_frame,
+            ).status,
+            409,
+            label="duplicate organization publish",
+        )
+        context.pass_message("Hosted organization publish, index and artifact are isolated from default storage")
+
+        context.cjpm_command(org_package, "bundle")
+        context.cjpm_command(
+            org_package, "publish", extra_env={"CJREPOMESH_PUBLISH_TOKEN": "publish-token"},
+        )
+        result = context.cjpm_command(org_app, "run")
+        assert_contains(result.output, "meshcorp-1.0.0")
+        context.pass_message("enhanced cjpm bundles, publishes and runs a Hosted organization package")
 
         result = context.cjpm_command(app, "run")
         assert_contains(result.output, "low-2.0.0")
@@ -786,17 +837,17 @@ def run_hosted(context: TestContext) -> None:
                 label=f"valid read token {path}",
             )
             assert_equal(
-                http_request("GET", private_base + path + "?organization=demo").status,
+                http_request("GET", private_base + path + organization_query).status,
                 401,
                 label=f"missing read token with organization query {path}",
             )
             assert_equal(
                 http_request(
-                    "GET", private_base + path + "?organization=demo",
+                    "GET", private_base + path + organization_query,
                     headers={"Authorization": "read-token"},
                 ).status,
-                400,
-                label=f"authorized unsupported organization query {path}",
+                200,
+                label=f"authorized organization query {path}",
             )
         context.pass_message("private Hosted index and artifact reject missing or invalid read tokens")
         result = context.cjpm_command(
@@ -806,6 +857,13 @@ def run_hosted(context: TestContext) -> None:
         )
         assert_contains(result.output, "low-2.0.0")
         context.pass_message("enhanced cjpm resolves private Hosted package via token-env")
+        result = context.cjpm_command(
+            org_private_app,
+            "run",
+            extra_env={"CJREPOMESH_READ_TOKEN": "read-token"},
+        )
+        assert_contains(result.output, "meshcorp-1.0.0")
+        context.pass_message("enhanced cjpm resolves private Hosted organization package via token-env")
     wait_for_ports_closed((port, private_port, 39202))
 
 

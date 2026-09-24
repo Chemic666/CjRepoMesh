@@ -15,6 +15,26 @@ import stdx.encoding.json.*
 
 private let FRAME_VERSION: UInt8 = 1
 
+// cjpm sends organization in a query parameter, while the HTTP distributor
+// receives only the path. Accept exactly that one parameter to prevent aliases.
+func requestedRegistryOrganization(context: HttpContext): String {
+    if (let Some(raw) <- context.request.url.rawQuery) {
+        if (!Regex("^organization=_*[A-Za-z][_A-Za-z0-9]*$").matches(raw)) {
+            throw Exception("invalid registry organization query")
+        }
+        let organization = raw[13..]
+        if (organization.size < 3 || organization.size > 64 || organization.toAsciiLower() == "default") {
+            throw Exception("invalid registry organization")
+        }
+        return organization
+    }
+    return "default"
+}
+
+func metadataOrganization(storageOrganization: String): String {
+    return if (storageOrganization == "default") { "" } else { storageOrganization }
+}
+
 class PublishHandler <: HttpRequestHandler {
     private let storage: String
     private let routeName: String
@@ -36,12 +56,9 @@ class PublishHandler <: HttpRequestHandler {
             respondError(context, 401, "authentication failed")
             return
         }
-        if (let Some(_) <- context.request.url.rawQuery) {
-            respondError(context, 400, "query parameters are not supported by the default registry")
-            return
-        }
 
         try {
+            let storageOrganization = requestedRegistryOrganization(context)
             let frameBuffer = ArrayList<UInt8>()
             while (true) {
                 let chunk = Array<UInt8>(64 * 1024, repeat: 0)
@@ -57,12 +74,9 @@ class PublishHandler <: HttpRequestHandler {
             let metadata = JsonValue.fromStr(metadataJson).asObject()
             let name = requiredString(metadata, "name")
             let version = requiredString(metadata, "version")
-            let organization = requiredString(metadata, "organization")
+            let packageOrganization = requiredString(metadata, "organization")
             if (name != routeName) {
                 throw Exception("request package name does not match metadata")
-            }
-            if (!organization.isEmpty()) {
-                throw Exception("organization publishing is not supported by this server slice")
             }
             if (!isSafePackageSegment(name) || !isSafePackageSegment(version) || name.size < 3) {
                 throw Exception("invalid package name or version")
@@ -72,7 +86,8 @@ class PublishHandler <: HttpRequestHandler {
             let indexObject = indexValue.asObject()
             if (requiredString(indexObject, "name") != name ||
                 requiredString(indexObject, "version") != version ||
-                !requiredString(indexObject, "organization").isEmpty()) {
+                requiredString(indexObject, "organization") != metadataOrganization(storageOrganization) ||
+                packageOrganization != metadataOrganization(storageOrganization)) {
                 throw Exception("metadata index identity does not match package identity")
             }
 
@@ -86,13 +101,13 @@ class PublishHandler <: HttpRequestHandler {
 
             let artifactDir = Path(storage)
                 .join("artifacts")
-                .join("default")
+                .join(storageOrganization)
                 .join(name)
                 .join(version)
             let artifactPath = artifactDir.join("${name}-${version}.cjp")
             let firstLevel = name[..2]
             let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
-            let indexDir = Path(storage).join("index").join("default").join(firstLevel).join(secondLevel)
+            let indexDir = Path(storage).join("index").join(storageOrganization).join(firstLevel).join(secondLevel)
             let indexPath = indexDir.join(name)
 
             let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")

@@ -84,6 +84,8 @@ def main() -> None:
     metadata = {
         "name": package, "version": version, "organization": "", "index": index,
     }
+    organization = "meshcorp"
+    organization_query = f"?organization={organization}"
     metadata_bytes = json.dumps(metadata, separators=(",", ":")).encode()
     frame = b"\x01" + struct.pack("<I", len(metadata_bytes)) + metadata_bytes
     frame += b"\x01" + struct.pack("<I", len(artifact)) + artifact
@@ -116,13 +118,34 @@ def main() -> None:
             if downloaded != artifact:
                 raise AssertionError("published artifact differs from uploaded bytes")
             for path in (index_path, artifact_path):
-                expect(request(base, path + "?organization=other")[0], 401,
+                expect(request(base, path + organization_query)[0], 401,
                        "unauthorized organization query")
-                expect(request(base, path + "?organization=other", token=read_token)[0], 400,
-                       "organization query must not alias default storage")
-            expect(request(base, f"/pkg/{package}?organization=other",
+                expect(request(base, path + organization_query, token=read_token)[0], 404,
+                       "organization storage starts empty")
+                expect(request(base, path + "?unused=x", token=read_token)[0], 400,
+                       "invalid query must not alias default storage")
+            expect(request(base, f"/pkg/{package}{organization_query}",
                            token=publish_token, body=frame)[0], 400,
-                   "organization publish must not alias default storage")
+                   "organization publish requires matching metadata")
+            organization_artifact_bytes = b"CjRepoMesh organization persistence probe\n" + secrets.token_bytes(16)
+            organization_checksum = hashlib.sha256(organization_artifact_bytes).hexdigest()
+            organization_index = dict(index, organization=organization, sha256sum=organization_checksum)
+            organization_metadata = dict(metadata, organization=organization, index=organization_index)
+            organization_metadata_bytes = json.dumps(organization_metadata, separators=(",", ":")).encode()
+            organization_frame = b"\x01" + struct.pack("<I", len(organization_metadata_bytes))
+            organization_frame += organization_metadata_bytes
+            organization_frame += b"\x01" + struct.pack("<I", len(organization_artifact_bytes))
+            organization_frame += organization_artifact_bytes
+            expect(request(base, f"/pkg/{package}{organization_query}",
+                           token=publish_token, body=organization_frame)[0], 200,
+                   "organization publish")
+            expect(request(base, index_path + organization_query, token=read_token)[0], 200,
+                   "organization index")
+            status, organization_downloaded = request(base, artifact_path + organization_query,
+                                                      token=read_token)
+            expect(status, 200, "organization artifact")
+            if organization_downloaded != organization_artifact_bytes:
+                raise AssertionError("organization artifact differs from uploaded bytes")
             compose(project, env_file, env, "up", "-d", "--no-build", "--force-recreate")
             healthy(base)
             expect(request(base, index_path)[0], 401, "private index after recreation")
@@ -130,13 +153,21 @@ def main() -> None:
             expect(request(base, index_path, token=read_token)[0], 200, "persisted index")
             status, downloaded = request(base, artifact_path, token=read_token)
             expect(status, 200, "persisted artifact")
-            expect(request(base, artifact_path + "?organization=other", token=read_token)[0],
-                   400, "organization query after recreation")
+            expect(request(base, index_path + organization_query, token=read_token)[0],
+                   200, "persisted organization index")
+            status, organization_artifact = request(base, artifact_path + organization_query,
+                                                    token=read_token)
+            expect(status, 200, "persisted organization artifact")
+            if hashlib.sha256(organization_artifact).hexdigest() != organization_checksum:
+                raise AssertionError("persisted organization artifact SHA-256 mismatch")
             if hashlib.sha256(downloaded).hexdigest() != checksum:
                 raise AssertionError("persisted artifact SHA-256 mismatch")
             expect(request(base, f"/pkg/{package}", token=publish_token, body=frame)[0],
                    409, "duplicate publish after recreation")
-            print("PASS: private auth, namespace isolation, publish, persistence, duplicate 409")
+            expect(request(base, f"/pkg/{package}{organization_query}", token=publish_token,
+                           body=organization_frame)[0], 409,
+                   "duplicate organization publish after recreation")
+            print("PASS: private auth, organization isolation, publish, persistence, duplicate 409")
         finally:
             # The generated project name scopes this removal to this test's container and volume.
             compose(project, env_file, env, "down", "-v", "--remove-orphans")

@@ -97,7 +97,7 @@ python3 integration-tests/compatibility/maple_smoke.py \
 
 另有 `integration-tests/compatibility/maple_local_bundle.py` 专门运行官方 `LLT/Tools/cjpm/CJNATIVE/repo/bundle` 下的 23 个本地打包用例。它先检查用例数量及命令未变，再逐例以隔离 `HOME` 对照原版和增强版，并将 46 份日志写到指定 `--results-dir`；不运行外部发布用例。参数为 `--framework`、`--bundle-suite`、`--test-config`、`--official-cjpm`、`--enhanced-cjpm`、`--results-dir`，路径含义与上述入口一致。
 
-同样可用 `maple_local_tree.py --tree-suite <官方 CJNATIVE/tree 目录>` 和 `maple_local_organization.py --organization-suite <官方 CJNATIVE/organization 目录>` 运行 17 个本地依赖树及 12 个本地组织名用例；其余参数与打包入口相同。三个入口分别检查用例数和执行命令，组织名入口还拒绝非本地依赖。它们验证的是 cjpm 本地行为，不表示服务端已经实现组织仓发布，也不等同于完整 Maple。
+同样可用 `maple_local_tree.py --tree-suite <官方 CJNATIVE/tree 目录>` 和 `maple_local_organization.py --organization-suite <官方 CJNATIVE/organization 目录>` 运行 17 个本地依赖树及 12 个本地组织名用例；其余参数与打包入口相同。三个入口分别检查用例数和执行命令，组织名入口还拒绝非本地依赖。它们只验证 cjpm 本地行为；Hosted 组织仓发布、解析和私有读取另由 `hosted-server/org-package`、`org-app`、`org-private-app` 夹具验证，不等同于完整 Maple。
 
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
