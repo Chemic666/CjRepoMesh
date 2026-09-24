@@ -27,7 +27,7 @@ from .harness import (
 )
 
 
-CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307, 39401, 39501, 39502, 39503)
+CORE_PORTS = tuple(range(39141, 39148)) + (39200, 39201, 39202, 39300, 39301, 39302, 39303, 39304, 39305, 39306, 39307, 39401, 39501, 39502, 39503, 39504)
 
 
 class TestContext:
@@ -1082,7 +1082,7 @@ def run_proxy(context: TestContext) -> None:
 
 
 def run_sync(context: TestContext) -> None:
-    ports = (39401, 39501, 39502, 39503)
+    ports = (39401, 39501, 39502, 39503, 39504)
     assert_ports_available(ports)
     context.bundle("meshdep-v1-high")
     context.bundle("meshdep-v1-low")
@@ -1240,6 +1240,66 @@ def run_sync(context: TestContext) -> None:
         )
         assert_contains(private_destination_again.output, "result=SKIP reason=already-valid")
         context.pass_message("private destination Sync requires separate read and publish tokens")
+
+        invalid_watch = run_command(
+            (context.server, "sync-watch", "http://127.0.0.1:39501",
+             "http://127.0.0.1:39502", manifest, "0"),
+            cwd=context.server_root, env=sync_env, expect_success=False,
+        )
+        assert_contains(invalid_watch.output, "watch interval must be an integer")
+        watch_manifest = context.temp_root / "watch-manifest.txt"
+        watch_manifest.write_text("meshdep 1.0.0\n", encoding="utf-8")
+        watch_mirror_storage = context.temp_root / "watch-mirror-storage"
+        watch_mirror_env = dict(mirror_env)
+        watch_mirror_env["CJREPO_STORAGE"] = str(watch_mirror_storage)
+        watch_mirror_env["CJREPO_UPSTREAM_TOKEN"] = "source-read-token"
+        mirror_watch = processes.start(
+            (context.server, "mirror-watch", "http://127.0.0.1:39501", watch_manifest, "1"),
+            cwd=context.server_root, env=watch_mirror_env,
+            output_path=context.temp_root / "mirror-watch.log",
+        )
+        watch_artifact_root = watch_mirror_storage / "artifacts" / "default" / "meshdep"
+        for version in ("1.0.0", "2.0.0"):
+            if version == "2.0.0":
+                watch_manifest.write_text("meshdep 1.0.0\nmeshdep 2.0.0\n", encoding="utf-8")
+            artifact = watch_artifact_root / version / f"meshdep-{version}.cjp"
+            for _ in range(120):
+                if artifact.exists():
+                    break
+                if mirror_watch.poll() is not None:
+                    raise TestFailure(f"mirror-watch exited early: {mirror_watch.returncode}")
+                time.sleep(0.25)
+            else:
+                raise TestFailure(f"mirror-watch did not mirror {version}")
+        processes.stop(mirror_watch)
+
+        _start_server(
+            context, processes, port=39504, storage=context.temp_root / "watch-destination-storage",
+            publish_token="watch-token", output_name="sync-watch-destination.log",
+        )
+        watch_manifest.write_text("meshdep 1.0.0\n", encoding="utf-8")
+        watch_sync_env = dict(sync_env)
+        watch_sync_env["CJREPO_SYNC_DESTINATION_TOKEN"] = "watch-token"
+        sync_watch = processes.start(
+            (context.server, "sync-watch", "http://127.0.0.1:39501",
+             "http://127.0.0.1:39504", watch_manifest, "1"),
+            cwd=context.server_root, env=watch_sync_env,
+            output_path=context.temp_root / "sync-watch.log",
+        )
+        for version in ("1.0.0", "2.0.0"):
+            if version == "2.0.0":
+                watch_manifest.write_text("meshdep 1.0.0\nmeshdep 2.0.0\n", encoding="utf-8")
+            artifact_url = f"http://127.0.0.1:39504/pkg/meshdep/{version}"
+            for _ in range(120):
+                if http_request("GET", artifact_url).status == 200:
+                    break
+                if sync_watch.poll() is not None:
+                    raise TestFailure(f"sync-watch exited early: {sync_watch.returncode}")
+                time.sleep(0.25)
+            else:
+                raise TestFailure(f"sync-watch did not transfer {version}")
+        processes.stop(sync_watch)
+        context.pass_message("watchers rerun changed manifests, synchronize new versions, and stop cleanly")
 
         org_package = context.tests_root / "hosted-server" / "org-package"
         context.reset_app(org_package)

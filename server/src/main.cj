@@ -220,10 +220,12 @@ main(): Int64 {
         match (arguments[0]) {
             case "mirror" => return if (runMirror(arguments[1..])) { 0 } else { 1 }
             case "mirror-manifest" => return if (runMirrorManifest(arguments[1..])) { 0 } else { 1 }
+            case "mirror-watch" => return if (runMirrorWatch(arguments[1..])) { 0 } else { 1 }
             case "sync" => return if (runSync(arguments[1..])) { 0 } else { 1 }
             case "sync-manifest" => return if (runSyncManifest(arguments[1..])) { 0 } else { 1 }
+            case "sync-watch" => return if (runSyncWatch(arguments[1..])) { 0 } else { 1 }
             case _ =>
-                eprintln("Usage: cjrepo [mirror <upstream> <package> <version> | mirror-manifest <upstream> <file> | sync <source> <destination> <package> <version> | sync-manifest <source> <destination> <file>]")
+                eprintln("Usage: cjrepo [mirror <upstream> <package> <version> | mirror-manifest <upstream> <file> | mirror-watch <upstream> <file> <interval-seconds> | sync <source> <destination> <package> <version> | sync-manifest <source> <destination> <file> | sync-watch <source> <destination> <file> <interval-seconds>]")
                 return 2
         }
     }

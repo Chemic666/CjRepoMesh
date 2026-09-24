@@ -82,6 +82,8 @@ main.exe mirror-manifest https://upstream.example.com mirror.txt
 
 命令会继续处理清单中的后续条目，并在结尾输出 `total`、`succeeded`、`failed` 汇总；任一条目失败或清单为空时返回非零状态。重复执行已经完整缓存的清单只输出 `SKIP`，不访问上游。
 
+持续镜像清单可使用 `main.exe mirror-watch https://upstream.example.com mirror.txt 60`；末尾为 1–86400 秒的轮询间隔。每轮重新读取清单，新版本会镜像，已缓存版本跳过；失败轮次会在下一轮重试。用进程管理器托管此命令，停止进程即可停止轮询。
+
 ## Repository Sync
 
 将一个 CjRepo 中的指定版本增量同步到另一个 CjRepo；命名组织仓同样使用 `<组织名>::<包名>`：
@@ -93,7 +95,7 @@ main.exe sync http://source:8080 http://destination:8080 meshdep 2.0.0
 
 同步先读取 Source 与 Destination 的索引并比较指定版本的 SHA-256：目标已有相同版本时直接 `SKIP`，不下载源制品；同版本校验和不同则报冲突，不覆盖目标。只有缺失版本才下载、校验并发布制品。并发发布导致 409 时会重新读取目标索引，只有校验和相同才视为幂等跳过。
 
-如果目标仓启用了私有读取，还须另设 `CJREPO_SYNC_DESTINATION_READ_TOKEN`；它与用于写入的 `CJREPO_SYNC_DESTINATION_TOKEN` 是独立令牌。清单中途失败后可重新运行：已成功且校验和相同的版本会跳过制品传输；当前尚无持久化进度游标或自动重试调度。
+如果目标仓启用了私有读取，还须另设 `CJREPO_SYNC_DESTINATION_READ_TOKEN`；它与用于写入的 `CJREPO_SYNC_DESTINATION_TOKEN` 是独立令牌。清单中途失败后可重新运行：已成功且校验和相同的版本会跳过制品传输；当前尚无持久化进度游标。
 
 批量同步复用 Mirror 的 `package version` 清单格式，包括可选的组织名前缀：
 
@@ -104,4 +106,6 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 
 批量命令会继续执行后续条目并输出成功/失败汇总；任一条目失败或清单为空时返回非零状态。
 
-当前限制：读取鉴权需显式配置，默认仍为公开读取；存储锁为按包键固定分片，并非每包独占锁；Mirror/Sync 已支持默认仓和命名组织仓的显式批量清单，但尚无调度和断点续传。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
+持续同步清单可使用 `main.exe sync-watch http://source:8080 http://destination:8080 mirror.txt 60`。它按间隔运行同一增量同步逻辑，每轮重新读取清单，失败轮次下轮重试；需由外部进程管理器负责开机启动和进程异常重启。多个 watcher 同时处理同一清单不提供分布式租约或协调。
+
+当前限制：读取鉴权需显式配置，默认仍为公开读取；存储锁为按包键固定分片，并非每包独占锁；Mirror/Sync 已支持默认仓和命名组织仓的显式批量清单与单进程周期轮询，但无持久化游标、字节级断点续传或分布式协调。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。

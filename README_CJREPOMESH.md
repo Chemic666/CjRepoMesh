@@ -165,6 +165,8 @@ $env:CJREPO_SYNC_DESTINATION_TOKEN = "destination-publish-token"
 
 Sync 先比较 Source 和 Destination 索引的指定版本与 SHA-256：相同则直接 `SKIP`、不下载制品；缺失才下载、校验并发布；同版本校验和不同则报冲突，不覆盖目标。私有目标仓的读取和发布可分别使用 `CJREPO_SYNC_DESTINATION_READ_TOKEN`、`CJREPO_SYNC_DESTINATION_TOKEN`。清单中断后可重跑并跳过已完整同步项，但尚无持久化进度游标。
 
+需要持续运行时，`mirror-watch <upstream> <清单> <间隔秒>` 和 `sync-watch <source> <destination> <清单> <间隔秒>` 每隔 1–86400 秒重新读取清单。新增版本会被处理，失败项下一轮重试，已有相同校验和的 Sync 版本不会再次下载。进程开机启动与异常重启需由外部管理器负责；不提供字节级断点续传或多实例协调。
+
 ## 验证
 
 Windows 一条命令顺序执行四组共享核心测试与一组平台部署测试：
@@ -231,7 +233,7 @@ docs/                 架构、验收、报告、演示和提交材料
 
 - Hosted 与 Proxy 服务端支持默认仓与命名 organization 的读取，Hosted 可发布；Mirror、Sync 接受 `组织名::包名` 的单项命令和清单，索引/制品按组织隔离；读取鉴权需显式配置，默认仍公开读取；
 - 当前使用按仓库、组织和包名定位的固定锁分片；同包串行，不同包通常并行，但哈希碰撞时仍会串行；
-- Mirror/Sync 尚无调度和断点续传；
+- Mirror/Sync 有单进程周期轮询，但尚无持久化游标、字节级断点续传或多实例协调；
 - Linux 原生构建与四组共享核心回归已验证；Windows 一键部署和 Docker Compose 分别保留平台专属验证入口；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT；
 - `cjpm-provenance.json` 是独立审计文件，不是官方 lockfile 新格式。

@@ -6,6 +6,7 @@ package cjrepo
 import std.collection.*
 import std.env.*
 import std.fs.*
+import std.convert.*
 import stdx.net.http.*
 import stdx.crypto.digest.*
 import stdx.encoding.hex.*
@@ -291,6 +292,50 @@ func runSyncManifest(arguments: Array<String>): Bool {
         return false
     }
     return failed == 0
+}
+
+func runMirrorWatch(arguments: Array<String>): Bool {
+    return runManifestWatch(arguments, false)
+}
+
+func runSyncWatch(arguments: Array<String>): Bool {
+    return runManifestWatch(arguments, true)
+}
+
+private func runManifestWatch(arguments: Array<String>, syncMode: Bool): Bool {
+    let expectedArguments: Int64 = if (syncMode) { 4 } else { 3 }
+    if (arguments.size != expectedArguments) {
+        eprintln(if (syncMode) {
+            "Usage: cjrepo sync-watch <source> <destination> <file> <interval-seconds>"
+        } else {
+            "Usage: cjrepo mirror-watch <upstream> <file> <interval-seconds>"
+        })
+        return false
+    }
+    let interval = try {
+        Int64.parse(arguments[arguments.size - 1])
+    } catch (_: Exception) {
+        eprintln("Error: watch interval must be an integer from 1 to 86400 seconds")
+        return false
+    }
+    if (interval < 1 || interval > 86400) {
+        eprintln("Error: watch interval must be an integer from 1 to 86400 seconds")
+        return false
+    }
+
+    var cycle: Int64 = 0
+    while (true) {
+        cycle += 1
+        let succeeded = if (syncMode) {
+            runSyncManifest(arguments[..3])
+        } else {
+            runMirrorManifest(arguments[..2])
+        }
+        let mode = if (syncMode) { "sync-watch" } else { "mirror-watch" }
+        println("[${mode}] cycle=${cycle} result=${if (succeeded) { "PASS" } else { "FAILED" }} next-in=${interval}s")
+        sleep(interval * Duration.second)
+    }
+    return false
 }
 
 private func fetchIndexVersion(upstream: String, token: String, organization: String, name: String,
