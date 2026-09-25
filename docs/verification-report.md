@@ -1,8 +1,32 @@
 # CjRepoMesh 全量验证报告
 
-> 最近执行日期：2026-09-24
+> 最近执行日期：2026-09-25
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
-> 结论：Hosted/Proxy/Mirror/Sync 命名组织仓、有界按包键锁分片及增量 Sync 预检查加入后，最新服务端通过 Linux 四组完整回归 4/4、1212.36 秒；本轮耗时包含偏慢的 WSL 夹具编译，不能据此推导服务性能。Docker 9/9 诊断和私有默认仓/组织仓隔离持久化专项通过。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 框架的三十九个选定 cjpm LLT 用例在原版与增强版上各 39/39 通过，另有本地打包、树与组织名选定批次通过。Windows 当前构建被系统 Application Control 阻断，完整 Maple HLT/LLT 尚未运行。
+> 结论：2026-09-25 从当前源码重建服务端后，Linux 四组完整回归 4/4、255.51 秒；Docker 9/9 诊断和此前的私有默认仓/组织仓隔离持久化专项通过。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+
+## 2026-09-25 当前源码复核
+
+在 WSL 2 / Ubuntu 22.04.5、Cangjie 1.1.3、stdx 1.1.3.1 上，增强版 cjpm 使用 SHA-256
+`6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a`。
+从本工作区源码重新 `cjpm build` 的服务端 SHA-256 为
+`9347140e8436183114c01e79c97a795508b695dd84fe455d2b6d05a47d65d87b`，
+与运行中的 Docker 镜像内 `/usr/local/bin/cjrepo` 一致。统一入口未跳过服务端构建，结果为：
+
+| 测试组 | 结果 | 耗时 |
+| --- | --- | ---: |
+| Multi-repository cjpm | PASS | 157.92s |
+| Hosted repository | PASS | 33.13s |
+| Proxy repository | PASS | 36.87s |
+| Repository sync | PASS | 22.98s |
+| **合计** | **4/4 PASS** | **255.51s** |
+
+原始 `script` 终端输出、经典时间记录和 `.cast` 回放文件保存在外层
+`test-runs/video/linux-core-current-2026-09-25/`。`output.log` SHA-256 为
+`4fde30eab17a3f8d85538cfbb2dff1dbf9016451ea0b2edfdf09e78b63d09c8f`。
+重放是终端记录，不是屏幕无剪切录像。Docker Doctor 当天重跑 9 项与 Overall 均 PASS。
+
+同日首次复跑误指定了 9 月 23 日的旧服务端二进制；多仓组 PASS 后，Hosted 的不安全配置拒绝用例因旧二进制持续运行而超时，整轮记为 FAIL。该失败日志保留在
+`test-runs/video/linux-core-full-2026-09-25/`，没有与上述成功轮次合并或删除。
 
 ## 环境
 

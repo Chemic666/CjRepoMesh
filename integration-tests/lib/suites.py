@@ -445,7 +445,7 @@ def run_multirepo(context: TestContext) -> None:
                 f"{status} security barrier failed: lower-priority repository was accessed"
             )
         assert_contains(result.output, f"status {status}")
-        context.pass_message(f"{status} blocks fallback")
+        context.pass_message(f"{status} blocks fallback; lower-priority requests=0")
 
         # Doctor diagnoses each configured candidate independently; its probes are not resolution fallback.
         context.reset_app(auth_app)
@@ -480,7 +480,10 @@ def run_multirepo(context: TestContext) -> None:
             raise TestFailure(f"{status} artifact barrier fell back to a lower-priority artifact")
         if (pinned_app / "cjpm-provenance.json").exists():
             raise TestFailure(f"{status} artifact failure wrote a successful provenance record")
-        context.pass_message(f"{status} artifact denial preserves the chosen repository source")
+        context.pass_message(
+            f"{status} artifact denial preserves the chosen repository source; "
+            "lower-priority artifact requests=0"
+        )
 
     context.reset_app(pinned_app)
     remove_within(low_log, (context.tests_root,))
@@ -579,8 +582,10 @@ def run_multirepo(context: TestContext) -> None:
             raise TestFailure(
                 f"Exclusive namespace route accessed the public repository after {status}"
             )
-        context.pass_message(f"exclusive namespace blocks public fallback after {status}")
-    context.pass_message("exclusive namespace dependency-confusion protection")
+        context.pass_message(
+            f"exclusive namespace blocks public fallback after {status}; public requests=0"
+        )
+    context.pass_message("exclusive namespace dependency-confusion protection; public requests=0")
 
     legacy_app = context.multirepo_root / "app-legacy"
     context.reset_app(legacy_app)

@@ -6,9 +6,18 @@
 >
 > 状态：这是待录制脚本，不表示视频已经完成。证据以录制时的提交号和当次结果为准。
 
+### 已生成的辅助片段（不能替代原始录像）
+
+2026-09-25 已用 `submission/render_doctor_clip.py` 对当次重新运行的 Docker Doctor
+9/9 PASS 输出生成 44 秒、1280×720 的演示重放。素材留在外层
+`test-runs/video/doctor-proof-2026-09-25.mp4`，未入 Git；画面明确标注“实测输出重放 / 非连续屏幕录像”。
+它可以作为主视频中的说明性镜头，但不能充当无剪切验证视频，也不能证明片段外的功能。
+脚本每次会重新执行 Doctor，任何一项不是 PASS 就不生成片段；编码器通过 `--ffmpeg` 指定，
+输出通过 `--output` 指定。
+
 ## 证据边界与录制顺序
 
-截至 2026-09-25，产品代码提交 `a1eb894` 的 Linux 四组核心回归 **4/4 PASS、1267.28 秒**；同一服务端二进制的 Docker 镜像诊断 **9/9 PASS**，隔离私有仓与组织仓持久化专项通过。官方 Maple 框架在原版与增强版分别跑通选定的 39 项，以及独立批次的本地打包 23、依赖树 17、组织名 12、workspace 52 项；各批分别通过，未统一运行，不能合称完整 HLT/LLT。另有制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-25，产品代码提交 `a1eb894` 的 Linux 四组核心回归曾 **4/4 PASS、1267.28 秒**；当天从当前源码重建服务端后再次 **4/4 PASS、255.51 秒**，Docker 镜像内二进制与新构建产物 SHA-256 一致，Doctor **9/9 PASS**。隔离私有仓与组织仓持久化专项此前通过。官方 Maple 框架在原版与增强版分别跑通选定的 39 项，以及独立批次的本地打包 23、依赖树 17、组织名 12、workspace 52 项；各批分别通过，未统一运行，不能合称完整 HLT/LLT。另有制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 
