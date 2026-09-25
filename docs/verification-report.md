@@ -2,7 +2,23 @@
 
 > 最近执行日期：2026-09-25
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
-> 结论：2026-09-25 在 AtomGit 公开提交 `31567a61` 上，Linux 四组完整回归 4/4、230.19 秒，随后 Docker Doctor 9/9；同日较早的当前源码重建轮次 4/4、255.51 秒也保留原始记录。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+> 结论：2026-09-25 在 AtomGit 公开提交 `31567a61` 上，Linux 四组完整回归 4/4、230.19 秒，随后 Docker Doctor 9/9；另在加入 Unix 脚本 LF 属性的干净 Windows 检出 `6c4dbc8a` 上再次 4/4、230.47 秒。同日较早的当前源码重建轮次 4/4、255.51 秒也保留原始记录。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+
+## 2026-09-25 Windows 干净检出换行修复
+
+在 Windows 全局 `core.autocrlf=true` 的条件下，匿名克隆 AtomGit 提交 `71e5cc80` 后，检出的 `integration-tests/run-linux.sh` 为 CRLF，WSL 直接执行报 `/usr/bin/env: ‘bash\r’: No such file or directory`。这是仓库缺少 Unix 脚本换行约束导致的实际可移植性故障；失败日志保存在外层 `test-runs/anonymous-final-core-71e5cc8-2026-09-25/output.log`，SHA-256 为 `522c643721fbbdfdae12839349b4bb7d4192aac23dfc9bcdb03574792afa1cf8`。
+
+提交 `6c4dbc8a` 增加 `.gitattributes`，对 `*.sh` 和 `*.py` 明确 `eol=lf`。在同一 Windows Git 设置下创建的独立工作树显示 `integration-tests/run-linux.sh` 为 `i/lf w/lf attr/text eol=lf`；从该干净检出实际重建服务端并运行四组，结果为：
+
+| 测试组 | 结果 | 耗时 |
+| --- | --- | ---: |
+| Multi-repository cjpm | PASS | 140.69s |
+| Hosted repository | PASS | 31.49s |
+| Proxy repository | PASS | 33.56s |
+| Repository sync | PASS | 20.46s |
+| **合计** | **4/4 PASS** | **230.47s** |
+
+该检出的服务端产物 SHA-256 为 `bb3afe5d728328574f8775d537e43312b9216efbea267bdb253eae287d12055b`；原始输出保存在外层 `test-runs/lf-core-6c4dbc8-2026-09-25/output.log`，SHA-256 为 `25891c7048c972320e603ac82427194da49deba911f13da473ae0e5cb46310d7`。测试临时目录与固定端口无残留，项目 Docker Doctor 9/9。此轮使用干净的本地 Git 工作树；修复推到 AtomGit 后仍需用新的匿名克隆核对公开检出换行。
 
 ## 2026-09-25 AtomGit 公开提交复核
 

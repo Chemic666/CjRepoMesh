@@ -71,6 +71,8 @@
 - [x] 2026-09-24 独立 Docker 私有仓持久化专项通过：授权发布、私有读取、容器重建后索引/制品及 SHA-256 保留、重复发布 409；临时卷清理，原项目服务诊断仍 9/9；
 - [x] 2026-09-25 当前源码重建服务端 SHA-256 `9347140e8436183114c01e79c97a795508b695dd84fe455d2b6d05a47d65d87b`，与运行中 Docker 镜像内二进制一致；Linux 四组 4/4、255.51s，带时间戳原始输出、`.cast` 回放及先前误用旧二进制的失败日志均保留在外层 `test-runs/video/`；Docker Doctor 9/9；
 - [x] AtomGit 公开提交 `31567a61` 上再次重建并运行 Linux 四组 4/4、230.19s；原始日志及 SHA-256、测试端口和临时目录清理、Docker Doctor 9/9 见 `docs/verification-report.md`；
+- [x] 匿名 Windows 克隆暴露 `core.autocrlf=true` 造成 Unix 脚本 CRLF；`6c4dbc8a` 加入 `.gitattributes` 后，干净工作树的 `run-linux.sh` 为 LF，Linux 四组 4/4、230.47s，失败与成功日志均保留；
+- [ ] LF 修复推到 AtomGit 后，再从无凭据的新克隆核对公开 `main` 的脚本换行；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；

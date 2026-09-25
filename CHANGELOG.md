@@ -15,6 +15,7 @@
 
 ### Security and reliability
 
+- 通过 `.gitattributes` 固定 Unix Shell 和 Python 入口为 LF，避免 Windows `core.autocrlf=true` 检出后 WSL 因 `bash\r` 无法启动脚本。
 - 401/403 认证或授权失败时阻止跨仓回退；独占命名空间下缺包或上游故障时不访问公共仓。
 - 发布和代理缓存校验 SHA-256；并发首次填充按有界包键锁分片；Sync 在传输前比较索引与制品校验和，Mirror 只公开已验证的本地版本。
 - Docker 服务默认非 root、只读根文件系统、丢弃 Linux capabilities，仅绑定本机端口并使用持久化命名卷。
@@ -22,6 +23,7 @@
 ### Verification
 
 - 2026-09-25：从当前源码重建服务端后，Linux 四组核心回归 4/4 PASS、255.51 秒；Docker Doctor 9 项及 Overall PASS。完整时间戳终端记录保存在本地外层 `test-runs/video/`，详见 `docs/verification-report.md`。
+- 在公开提交 `31567a61` 上四组 4/4、230.19 秒；修复换行后在 Windows 干净工作树 `6c4dbc8a` 上再次四组 4/4、230.47 秒，失败和成功日志分别保留在外层 `test-runs/`。
 - 官方 Maple 仅选定本地子集分别通过，未运行完整 HLT/LLT；当前 Windows 原生复测受系统 Code Integrity 对未签名 SDK 的拦截限制。历史结果与当前结果分开列示，不合并宣称。
 
 ### Known limits
