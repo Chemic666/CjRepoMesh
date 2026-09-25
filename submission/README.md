@@ -19,3 +19,11 @@
 
 这些工具生成的是清楚标注的**实测输出重放**，不是实际屏幕的连续录像。素材保留在工作区外层 `test-runs/video/`，未入 Git；主视频与无剪切验证视频仍须完成，并核对画面、字幕和隐私信息。
 当前审阅草稿为外层 `test-runs/video/main-review-draft-2026-09-25.mp4`（7:00.42，1280×720，无音轨）。
+
+## 官方统一作品模板
+
+官方模板来自 [cj-codelabs/docs](https://atomgit.com/cj-codelabs/docs)，下载件 SHA-256 为
+`e680d2b9e5a2fdde08c93ae786de2cadc1b67e2f6f77e5278f304f41c14effc1`。
+`official-form-content.md` 已按模板十个部分准备项目技术内容，但它不是官方 DOCX/PDF。
+队伍身份、联系信息、公开仓库与视频链接及本人签字仍须补齐。当前环境缺少文档渲染器，
+未把未经逐页视觉核验的 DOCX 冒充可提交成品；签字后 PDF 和发送回执也尚未取得。
