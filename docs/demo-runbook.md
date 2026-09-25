@@ -24,7 +24,7 @@
 
 ## 证据边界与录制顺序
 
-截至 2026-09-25，产品代码提交 `a1eb894` 的 Linux 四组核心回归曾 **4/4 PASS、1267.28 秒**；当天从当前源码重建服务端后再次 **4/4 PASS、255.51 秒**，Docker 镜像内二进制与新构建产物 SHA-256 一致，Doctor **9/9 PASS**。隔离私有仓与组织仓持久化专项此前通过。官方 Maple 框架在原版与增强版分别跑通选定的 39 项，以及独立批次的本地打包 23、依赖树 17、组织名 12、workspace 52 项；各批分别通过，未统一运行，不能合称完整 HLT/LLT。另有制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-25，产品代码提交 `a1eb894` 的 Linux 四组核心回归曾 **4/4 PASS、1267.28 秒**；当天从当前源码重建服务端后 **4/4 PASS、255.51 秒**，又在 AtomGit 公开提交 `31567a61` 上重建并复核 **4/4 PASS、230.19 秒**，Docker 镜像内二进制与新构建产物 SHA-256 一致，Doctor **9/9 PASS**。隔离私有仓与组织仓持久化专项此前通过。官方 Maple 框架在原版与增强版分别跑通选定的 39 项，以及独立批次的本地打包 23、依赖树 17、组织名 12、workspace 52 项；各批分别通过，未统一运行，不能合称完整 HLT/LLT。另有制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 

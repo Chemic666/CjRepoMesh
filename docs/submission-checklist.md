@@ -70,6 +70,7 @@
 - [x] 新服务端可选私有读取鉴权及不安全配置拒绝已在 Linux Hosted、Proxy 和 Sync 端到端验证；2026-09-24 四组共享核心 4/4、189.09s，当前二进制 Docker 镜像诊断 9/9，容器私有读取开关专项通过并已恢复原配置；
 - [x] 2026-09-24 独立 Docker 私有仓持久化专项通过：授权发布、私有读取、容器重建后索引/制品及 SHA-256 保留、重复发布 409；临时卷清理，原项目服务诊断仍 9/9；
 - [x] 2026-09-25 当前源码重建服务端 SHA-256 `9347140e8436183114c01e79c97a795508b695dd84fe455d2b6d05a47d65d87b`，与运行中 Docker 镜像内二进制一致；Linux 四组 4/4、255.51s，带时间戳原始输出、`.cast` 回放及先前误用旧二进制的失败日志均保留在外层 `test-runs/video/`；Docker Doctor 9/9；
+- [x] AtomGit 公开提交 `31567a61` 上再次重建并运行 Linux 四组 4/4、230.19s；原始日志及 SHA-256、测试端口和临时目录清理、Docker Doctor 9/9 见 `docs/verification-report.md`；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；

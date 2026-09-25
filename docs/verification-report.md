@@ -2,7 +2,21 @@
 
 > 最近执行日期：2026-09-25
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
-> 结论：2026-09-25 从当前源码重建服务端后，Linux 四组完整回归 4/4、255.51 秒；Docker 9/9 诊断和此前的私有默认仓/组织仓隔离持久化专项通过。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+> 结论：2026-09-25 在 AtomGit 公开提交 `31567a61` 上，Linux 四组完整回归 4/4、230.19 秒，随后 Docker Doctor 9/9；同日较早的当前源码重建轮次 4/4、255.51 秒也保留原始记录。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+
+## 2026-09-25 AtomGit 公开提交复核
+
+从可匿名克隆的 AtomGit `main` 核对提交 `31567a61782c73b45026dd666044cccdb5ac6986`，在相同 Windows 工作区的 WSL 2 / Ubuntu 22.04.5 中运行 `integration-tests/run-linux.sh`，没有使用 `--skip-server-build`。增强版 Linux cjpm SHA-256 为 `6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a`，当次重建服务端 SHA-256 为 `9347140e8436183114c01e79c97a795508b695dd84fe455d2b6d05a47d65d87b`；后者与前一轮及 Docker 镜像内二进制一致。四组结果：
+
+| 测试组 | 结果 | 耗时 |
+| --- | --- | ---: |
+| Multi-repository cjpm | PASS | 141.76s |
+| Hosted repository | PASS | 29.48s |
+| Proxy repository | PASS | 33.49s |
+| Repository sync | PASS | 21.12s |
+| **合计** | **4/4 PASS** | **230.19s** |
+
+原始输出保存在工作区外层 `test-runs/final-core-31567a61-2026-09-25/output.log`，SHA-256 为 `e162f9c0312009999d922ca07f00478ab2d4c38fa315de2b2f89a1a8bd82386f`。运行器返回 0；测试临时目录不存在，检查的固定测试端口未监听，未发现测试进程残留。随后项目 Docker Doctor 9 项及 Overall 均 PASS。此轮没有运行完整 Maple HLT/LLT 或 Windows 原生五组，不能据此宣称二者通过。
 
 ## 2026-09-25 当前源码复核
 
