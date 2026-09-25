@@ -1,0 +1,4 @@
+# Keep Unix entry points executable after a Windows checkout with core.autocrlf=true.
+.gitattributes text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
