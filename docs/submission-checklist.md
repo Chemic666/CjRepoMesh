@@ -33,7 +33,7 @@
 赛事页面要求在「赛题发布」提交作品仓库链接及演示视频链接，并勾选将作品同步到 `cj-codelabs` 组织用于评分。
 旧《参加大赛流程》截图中的组织文字与当前活动页不一致，以实际提交页面显示为准。
 
-- [x] 已在个人 AtomGit 账号下创建 [CjRepoMesh 参赛仓库](https://atomgit.com/Chemic666/CjRepoMesh)，`main` 为 `1f4b0db`，禁用凭据助手后仍可匿名读取 Git 分支；本地 `origin` 仍是上游 `Cangjie/cangjie_tools`，参赛仓为独立 `atomgit` 远端；
+- [x] 已在个人 AtomGit 账号下创建 [CjRepoMesh 参赛仓库](https://atomgit.com/Chemic666/CjRepoMesh)，`main` 为 `1f4b0db`；禁用凭据助手后的独立浅克隆成功，根目录 `README.md`、`README.OpenSource`、`LICENSE`、`CHANGELOG.md` 和测试入口均可读取；本地 `origin` 仍是上游 `Cangjie/cangjie_tools`，参赛仓为独立 `atomgit` 远端；
 - [ ] 演示视频上传至可匿名访问的位置，在平台填写有效视频链接；PPT 只是可选材料；
 - [x] 已下载并核对组委会统一 DOCX 模板；`submission/official-form-content.md` 已准备技术部分草稿；
 - [ ] 参赛者自行补齐队伍名称、负责人、成员、电话和邮箱，审阅原创开源承诺并本人签字；公开仓库链接已确认，视频链接仍待上传；
