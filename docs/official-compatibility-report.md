@@ -88,11 +88,13 @@ python3 integration-tests/compatibility/run.py \
 
 ## 尚未覆盖
 
-- 官方 Maple 框架已跑通上述三十九个选定的 cjpm LLT 用例，另有一个稳定化制品异常矩阵通过；`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原始制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
+- 官方 Maple 框架已跑通上述三十九个选定的 cjpm LLT 用例；后续还分别通过本地打包、依赖树、组织名和 workspace 子集（见下文），另有一个稳定化制品异常矩阵通过。`pexpect`、`fasteners` 尚未安装，也没有运行完整官方 HLT/LLT。原始制品异常矩阵仍有动态 gzip 时间戳波动，本报告不把子集通过外推为整套通过。
 - 当前本地官方测试快照的 CJNATIVE cjpm LLT 有 773 个 `.info`，HLT cjpm 有 157 个 `.info`；这些数量是文件计数，不等于可直接运行或已通过数。部分 HLT 发布用例配置了外部中心仓地址与测试凭据，并会执行 `cjpm publish`；未获外部仓写入授权前不运行，也不把其中的凭据复制到报告或演示材料。
 
 2026-09-24 追加官方 `repo/bundle` 的 **23 个本地 LLT 用例**，原版和增强版在隔离 `HOME` 下分别 **23/23 PASS**，共保留 46 份逐例日志于 `test-runs/maple-bundle/bundle-1790223696-c5626f35/`。入口预先核对用例数量和执行命令，只运行本地 `cjpm bundle`，不触及外部发布仓。两版二进制 SHA-256 仍为 `2f624cbe5493fcc686611e22eef7eb30e317c1ec589c18980dd88892875d9646` 和 `6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a`。该 23 项与此前 39 项是不同选定用例，但未在同一统一入口连续运行，不能称为整套 62/62，更不能称完整 HLT/LLT 通过。
 
 同日继续运行官方 `tree` 下 **17 项**和 `organization` 下 **12 项**本地 LLT：原版、增强版分别 17/17 与 12/12 通过。依赖树日志 34 份位于 `test-runs/maple-tree/tree-1790224129-a37bb849/`，组织名日志 24 份位于 `test-runs/maple-organization/organization-1790224256-52fb157b/`。组织名夹具仅含本地路径依赖；结果证明 cjpm 本地组织名构建/运行兼容，不证明 CjRepo Server 支持组织仓发布。这些批次未在同一入口连续执行，仍不是完整 Maple。
+
+2026-09-25 新增 `maple_local_workspace.py`，对官方 `CJNATIVE/workspace` 的 **52 个本地 LLT 用例**逐例执行原版与增强版对照，两版分别 **52/52 PASS**。入口先核对 52 个 `.info`、所有执行命令及配置文件没有外部 URL/发布操作，随后使用每版独立临时 `HOME`；104 份逐例日志保存在工作区外层 `test-runs/maple-workspace/workspace-1790309933-28de5678/`。原版和增强版二进制 SHA-256 分别为 `2f624cbe5493fcc686611e22eef7eb30e317c1ec589c18980dd88892875d9646`、`6336f0bd1c973c4128717d7684ab13cdc3dce0840b9b8793aa5e599a00dca62a`。两版运行先后与文件缓存不同，逐例耗时不用于性能比较；该批仅证明本地 workspace 子集兼容，不等于完整官方 HLT/LLT。
 - 单仓差分已覆盖两个桥接包版本造成的传递约束收敛与不可解冲突，以及旧锁文件的保留和更新；更大规模的传递依赖图、跨仓冲突、其他官方夹具仍待扩展。
 - Windows 本轮 `cjpm bundle` 在执行 `cjc -v` 时被 Application Control 阻止，故最新 Windows 五组结果为环境阻断；没有关闭或绕过该策略。

@@ -8,7 +8,7 @@
 
 ## 证据边界与录制顺序
 
-截至 2026-09-24，加入可选私有读取鉴权及不安全配置拒绝的新服务端，在 Linux 四组核心回归中 **4/4 PASS，189.09 秒**；当前二进制打包的 Docker 镜像诊断 **9/9 PASS**，临时开启读取令牌的容器专项亦通过并已恢复原配置。三十九个选定官方 cjpm LLT 用例经 Maple 框架在原版与增强版上各 **39/39 PASS**；另有制品异常矩阵在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**，完整 HLT/LLT 尚未运行。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
+截至 2026-09-25，产品代码提交 `a1eb894` 的 Linux 四组核心回归 **4/4 PASS、1267.28 秒**；同一服务端二进制的 Docker 镜像诊断 **9/9 PASS**，隔离私有仓与组织仓持久化专项通过。官方 Maple 框架在原版与增强版分别跑通选定的 39 项，以及独立批次的本地打包 23、依赖树 17、组织名 12、workspace 52 项；各批分别通过，未统一运行，不能合称完整 HLT/LLT。另有制品异常矩阵仅在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**。历史 Windows 五组曾 **5/5 PASS**，当前 Windows Code Integrity 拦截未签名 `cjc.exe`，不能宣称最新提交的 Windows 五组已通过。详见 [全量验证报告](verification-report.md)、[Docker 验证](docker-verification.md) 和 [官方兼容性报告](official-compatibility-report.md)。
 
 先定稿并记录提交号，再录制完整无剪切验证过程，最后从同一次验证中剪出主视频片段。剪辑中的等待、跳转要明显标注；主视频中的 PASS、耗时与提交号必须能在无剪切录像或报告中找到对应证据。若最终提交后只改文档，也应明确验证所对应的代码提交，不把历史运行冒充最终提交复测。
 
@@ -40,7 +40,7 @@
 
 > 独占命名空间缺包必须失败；仓库认证失败也不能回退。可用性机制不能越过安全边界。
 
-> 当前 Linux 四组和 Docker 9 项诊断已通过，容器私有读取开关亦有实测。Maple 跑通三十九个选定官方 LLT 用例，另有一个仅在稳定化测试副本上通过。Windows 最新复测受本机代码完整性策略阻断，完整 Maple 套件未运行，我们不会把这些缺口包装成通过。
+> 当前 Linux 四组和 Docker 9 项诊断已通过，私有仓持久化也有实测。Maple 的 39 项选定用例及另批本地打包、依赖树、组织名、workspace 子集分别通过，但完整套件未运行。Windows 最新复测受本机代码完整性策略阻断，我们不会把这些缺口包装成通过。
 
 ## 演示画面与命令
 
@@ -59,9 +59,9 @@ Linux 核心回归从已配置的 WSL Bash 中执行，环境准备见 [Linux �
 ./integration-tests/run-linux.sh
 ```
 
-四组耗时受本机环境影响很大，最近一次为 161.42 秒（复用服务端构建）；录制时要标明当次真实耗时及是否重编译服务端。主视频只截取相关断言与汇总，完整输出留在无剪切录像中。可展示 `highest compatible version across repositories`、`cross-repository diamond converges on one audited meshdep source`、`exclusive namespace dependency-confusion protection` 等 PASS 行；不要把报告中的旧行当作当次运行画面。Explain/Doctor/Recorded 的语义由测试夹具和报告支撑；录屏应展示实际输出，不只展示命令文字。
+四组耗时受本机环境影响很大，最近一次完整重编译回归为 1267.28 秒；录制时要标明当次真实耗时及是否重编译服务端。主视频只截取相关断言与汇总，完整输出留在无剪切录像中。可展示 `highest compatible version across repositories`、`cross-repository diamond converges on one audited meshdep source`、`exclusive namespace dependency-confusion protection` 等 PASS 行；不要把报告中的旧行当作当次运行画面。Explain/Doctor/Recorded 的语义由测试夹具和报告支撑；录屏应展示实际输出，不只展示命令文字。
 
-Proxy 基准报告中的 Cold Median **62.76 ms**（10 轮）、Warm Median **33.102 ms**（50 轮）、Median **1.9x** 均来自 2026-09-22 本机 HTTP 微基准，不代表公网官方仓或跨机延迟。Mirror 是显式清单镜像，不宣称完整复制官方中心仓；Sync 不宣称调度或断点续传。
+Proxy 基准报告中的 Cold Median **62.76 ms**（10 轮）、Warm Median **33.102 ms**（50 轮）、Median **1.9x** 均来自 2026-09-22 本机 HTTP 微基准，不代表公网官方仓或跨机延迟。Mirror 是显式清单镜像，不宣称完整复制官方中心仓；Mirror/Sync 仅有单进程周期轮询，不宣称持久化游标、字节级断点续传或多实例协调。
 
 只关闭本次确实启动的 Compose 服务：
 

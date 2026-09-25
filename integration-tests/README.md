@@ -99,6 +99,18 @@ python3 integration-tests/compatibility/maple_smoke.py \
 
 同样可用 `maple_local_tree.py --tree-suite <官方 CJNATIVE/tree 目录>` 和 `maple_local_organization.py --organization-suite <官方 CJNATIVE/organization 目录>` 运行 17 个本地依赖树及 12 个本地组织名用例；其余参数与打包入口相同。三个入口分别检查用例数和执行命令，组织名入口还拒绝非本地依赖。它们只验证 cjpm 本地行为；Hosted 组织仓发布、解析和私有读取另由 `hosted-server/org-package`、`org-app`、`org-private-app` 夹具验证，Proxy 组织仓拉包和离线缓存由 `proxy/org-app` 验证，Mirror/Sync 组织仓由 `sync/org-manifest.txt` 与 `sync/org-app` 验证，不等同于完整 Maple。
 
+`maple_local_workspace.py --workspace-suite <官方 CJNATIVE/workspace 目录>` 对照运行 52 个本地 workspace 用例；其他参数与上述入口相同。入口先核对用例数量、执行命令与配置文件，拒绝外部 URL/发布操作；每例在隔离临时 `HOME` 下分别以原版和增强版运行。它只覆盖 workspace 子集，不代表完整官方 HLT/LLT。
+
+```bash
+python3 integration-tests/compatibility/maple_local_workspace.py \
+  --framework /path/to/cangjie_test_framework \
+  --workspace-suite /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/CJNATIVE/workspace \
+  --test-config /path/to/cangjie_test/testsuites/LLT/Tools/cjpm/test.cfg \
+  --official-cjpm /path/to/official/cjpm \
+  --enhanced-cjpm /path/to/enhanced/cjpm \
+  --results-dir /path/to/test-runs/maple-workspace
+```
+
 脚本遇到子测试抛出的第一处失败即停止，全部通过后打印每组耗时汇总。部分安全测试会故意执行应当失败的客户端命令，因此统一入口以测试断言结果而不是最后一个原生命令的退出码判断整组状态。Proxy 性能测试不纳入功能回归，需独立运行：
 
 ```powershell
