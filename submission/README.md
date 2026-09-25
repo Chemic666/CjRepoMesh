@@ -14,5 +14,6 @@
 - `render_doctor_clip.py` 每次重新执行本项目 Docker Doctor，仅在 9 项和 Overall 全部 PASS 后生成 44 秒重放片段；提供本机 `--ffmpeg` 与 `--output` 路径。
 - `render_security_clip.py` 从完整通过的 Linux 四组时间戳日志提取安全断言，只有 401/403 阻断、独占命名空间 404/401/403/500 的公共仓请求数均为 0，且整轮 4/4 PASS 时才生成 64 秒片段。
 - `typescript_to_cast.py` 将 `script -m classic -T timing.log -O output.log` 的原始字节和时间记录转换为 asciinema v2 `.cast`，便于原样回放终端输出。
+- `render_cast_video.py` 将完整 4/4 PASS 的 `.cast` 逐事件、按原始连续时间轴渲染为 MP4；没有跳过或加速等待段，但它依然只是终端输出回放，不是屏幕捕获。
 
 这些工具生成的是清楚标注的**实测输出重放**，不是实际屏幕的连续录像。素材保留在工作区外层 `test-runs/video/`，未入 Git；主视频与无剪切验证视频仍须完成，并核对画面、字幕和隐私信息。

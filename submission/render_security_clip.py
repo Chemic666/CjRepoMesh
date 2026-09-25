@@ -34,7 +34,7 @@ def verify_log(path: pathlib.Path) -> str:
     first = raw.splitlines()[0]
     if not first.startswith("Script started on "):
         raise ValueError("Expected a util-linux script recording")
-    return first.removeprefix("Script started on ").split(" ", 1)[0]
+    return first.removeprefix("Script started on ").split(" [", 1)[0]
 
 
 def frame_at(t: float, commit: str, recorded_at: str) -> bytes:

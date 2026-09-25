@@ -33,7 +33,7 @@ def main() -> None:
         raise ValueError("Output log lacks the util-linux script header")
     header_end = recorded.index(b"\n") + 1
     started_line = recorded[:header_end].decode("utf-8", errors="strict")
-    started_match = re.match(r"Script started on (\S+)", started_line)
+    started_match = re.match(r"Script started on (.+?) \[", started_line)
     if started_match is None:
         raise ValueError("Could not parse the script recording start time")
     started_at = dt.datetime.fromisoformat(started_match.group(1))
