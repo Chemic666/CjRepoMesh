@@ -1,11 +1,12 @@
 # CjRepoMesh 答辩材料
 
+- `CjRepoMesh-official-form-draft-2026-09-26.docx`：基于组委会统一模板回填的 5 页技术草稿。已用 Microsoft Word 打开、导出并逐页检查；项目技术内容、作品类型、使用环境和“不申请仓颉 AI 生态贡献加分”已填写。队伍名称、负责人、成员、电话、邮箱、正式视频链接、签字和日期保留为参赛者操作，不能直接当作已签字提交件。
 - `CjRepoMesh-technical-defense-redesign-2026-09-23.pptx`：推荐预览的重设计版，8 页可编辑文字，封面和安全案例使用概念插画。插画仅用于视觉表达，不是部署截图或测试证据。
 - `CjRepoMesh-technical-defense-2026-09-23.pptx`：8 页可编辑技术答辩稿，按约 7 分钟讲述设计。每页的演讲者备注列出证据文档、讲述重点与建议时间。
 - 源文件：`../tools/build-technical-defense-redesign.mjs` 和 `../tools/build-technical-defense.mjs`。它们使用随附的演示文稿运行时制作，不下载项目依赖。重新生成前须将同名 PPTX 和验证回执移至归档位置；最终校验器不会覆盖现有输出。
 - 重设计版图片资产保存在 `assets/`，完整生成提示词见 `assets/prompts.md`；两张图片均不含文本和数据。
 
-本稿的数字均为指定提交与环境上的实测记录，并非最终提交的自动验收：Linux 4/4 和 Docker 9/9 最近一次复核对应 `0f0e076`；官方原版差分 7/7、HTTP LLT 夹具两版各 16/16 对应此前记录。完整 Maple HLT/LLT 和当前 Windows 全量构建仍未完成。第 7 页是**拟录制**的视频路线，不是已完成的视频。
+本稿的数字均为指定提交与环境上的实测记录，并非最终提交的自动验收：公开代码提交 `31567a61` 上 Linux 四组 4/4、230.19 秒，加入 Unix 换行约束后的干净检出 `6c4dbc8a` 上再次 4/4、230.47 秒，两轮之后均核对 Docker Doctor 9/9；当前双公开仓库 `main` 为仅增加验证文档的 `8cd4a821`，已于 2026-09-26 分别匿名检出。官方原版差分 7/7、HTTP LLT 夹具两版各 16/16 对应此前记录。完整 Maple HLT/LLT 和当前 Windows 全量构建仍未完成。第 7 页是**拟录制**的视频路线，不是已完成的视频。
 
 提交前仍需按照 `../docs/submission-checklist.md` 复核最终提交号、平台要求、仓库可访问性，并实际录制主视频和无剪切验证视频。
 
@@ -24,6 +25,6 @@
 
 官方模板来自 [cj-codelabs/docs](https://atomgit.com/cj-codelabs/docs)，下载件 SHA-256 为
 `e680d2b9e5a2fdde08c93ae786de2cadc1b67e2f6f77e5278f304f41c14effc1`。
-`official-form-content.md` 已按模板十个部分准备项目技术内容，但它不是官方 DOCX/PDF。
-队伍身份、联系信息、公开仓库与视频链接及本人签字仍须补齐。当前环境缺少文档渲染器，
-未把未经逐页视觉核验的 DOCX 冒充可提交成品；签字后 PDF 和发送回执也尚未取得。
+`official-form-content.md` 保留十个部分的可审阅技术底稿；`CjRepoMesh-official-form-draft-2026-09-26.docx`
+已把这些内容回填到官方模板，并用本机 Microsoft Word 完成 5 页逐页视觉核验。队伍身份、联系信息、
+正式视频链接及本人签字仍须补齐；参赛者审阅签字后的 PDF、赛事邮箱确认和发送回执尚未取得。

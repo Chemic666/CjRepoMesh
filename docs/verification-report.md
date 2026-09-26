@@ -1,8 +1,22 @@
 # CjRepoMesh 全量验证报告
 
-> 最近执行日期：2026-09-25
+> 最近执行日期：2026-09-26
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
-> 结论：2026-09-25 在 AtomGit 公开提交 `31567a61` 上，Linux 四组完整回归 4/4、230.19 秒，随后 Docker Doctor 9/9；另在加入 Unix 脚本 LF 属性的干净 Windows 检出 `6c4dbc8a` 上再次 4/4、230.47 秒。同日较早的当前源码重建轮次 4/4、255.51 秒也保留原始记录。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+> 结论：2026-09-25 在 AtomGit 公开提交 `31567a61` 上，Linux 四组完整回归 4/4、230.19 秒，随后 Docker Doctor 9/9；另在加入 Unix 脚本 LF 属性的干净 Windows 检出 `6c4dbc8a` 上再次 4/4、230.47 秒。同日较早的当前源码重建轮次 4/4、255.51 秒也保留原始记录。2026-09-26，AtomGit 与 GitHub 的公开 `main` 均为仅增加验证文档的提交 `8cd4a821`，两边匿名部分克隆成功且 Unix 入口为 LF。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+
+## 2026-09-26 Docker 运行状态复核
+
+Docker Desktop 从停止状态启动后，现有 `cjrepomesh-cjrepo-1` 使用原镜像、配置和命名卷自动恢复，状态为 `healthy`，仍只绑定 `127.0.0.1:8080`。`deployment/docker/doctor.ps1` 的容器运行、Docker 健康、非 root、只读根文件系统、丢弃 capabilities、禁止新增权限、本机绑定、持久化卷和 Registry API 九项及 Overall 全部 PASS。
+
+本轮没有重建镜像、重新核对容器内二进制 SHA-256、运行隔离持久化专项或重跑 Linux 四组；它只证明当天既有部署的恢复状态和 Doctor 诊断，不替代 2026-09-25 的完整回归记录。
+
+## 2026-09-26 双公开仓库匿名复核
+
+只读 `git ls-remote` 确认 AtomGit `Chemic666/CjRepoMesh` 与 GitHub `zhan-cm/CjRepoMesh` 的 `refs/heads/main` 均指向 `8cd4a82130e23e3ec0701c7e3791d1d953280cac`。分别禁用凭据助手并使用部分克隆建立新的匿名检出，结果均为干净的 `main...origin/main`，HEAD 与远端一致。
+
+两个检出均可读取根目录 `README.md`、`README.OpenSource`、`LICENSE`、`CHANGELOG.md`、`.gitattributes` 和 `integration-tests/README.md`。在本机全局 `core.autocrlf=true` 条件下，`git ls-files --eol` 显示 `integration-tests/run-linux.sh` 及受管 Python 入口均为 `i/lf w/lf attr/text eol=lf`。证据目录分别为外层 `test-runs/atomgit-anonymous-lf-8cd4a821-2026-09-26/` 与 `test-runs/github-anonymous-8cd4a821-2026-09-26/`。
+
+`8cd4a821` 相对已完成 Linux 4/4 的 `6c4dbc8a` 只修改 `CHANGELOG.md`、`docs/submission-checklist.md` 和 `docs/verification-report.md`，未改产品源码、部署脚本或测试入口。因此本节证明最终公开提交与检出可用性，不把它表述为在 `8cd4a821` 上重新执行了 Linux、Docker 或 Windows 回归。
 
 ## 2026-09-25 Windows 干净检出换行修复
 

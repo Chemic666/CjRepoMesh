@@ -23,7 +23,7 @@
 - [x] 项目自有 Markdown 的本地相对链接目标已核对，根 README 的空链接占位已清理；
 - [ ] 赛前在无登录环境复核外部链接与锚点；
 - [ ] 默认配置不包含真实企业地址或凭据；
-- [ ] 最终 Tag/提交号已记录，AtomGit 仓库可匿名读取；当前公开 `main` 已匿名核对为 `1f4b0db`，后续材料修订后仍须复核最终提交；
+- [x] 当前公开提交号已记录；2026-09-26 只读查询和全新匿名部分克隆均确认 AtomGit、GitHub 的 `main` 为 `8cd4a821`，必交根文件可读且 Unix 入口保持 LF；若后续再提交，仍须对新的最终提交复核；
 - [ ] 比赛平台填写的仓库地址指向参赛仓，而不是官方上游仓。
 
 ## B2. 官方活动页必交材料
@@ -33,9 +33,9 @@
 赛事页面要求在「赛题发布」提交作品仓库链接及演示视频链接，并勾选将作品同步到 `cj-codelabs` 组织用于评分。
 旧《参加大赛流程》截图中的组织文字与当前活动页不一致，以实际提交页面显示为准。
 
-- [x] 已在个人 AtomGit 账号下创建 [CjRepoMesh 参赛仓库](https://atomgit.com/Chemic666/CjRepoMesh)，`main` 为 `1f4b0db`；禁用凭据助手后的独立浅克隆成功，根目录 `README.md`、`README.OpenSource`、`LICENSE`、`CHANGELOG.md` 和测试入口均可读取；本地 `origin` 仍是上游 `Cangjie/cangjie_tools`，参赛仓为独立 `atomgit` 远端；
+- [x] 已在个人 AtomGit 账号下创建 [CjRepoMesh 参赛仓库](https://atomgit.com/Chemic666/CjRepoMesh)，并同步到 [GitHub 镜像](https://github.com/zhan-cm/CjRepoMesh)；2026-09-26 两边 `main` 均为 `8cd4a821`，禁用凭据助手后的独立匿名部分克隆成功，根目录 `README.md`、`README.OpenSource`、`LICENSE`、`CHANGELOG.md` 和测试入口均可读取；本地 `origin` 仍是上游 `Cangjie/cangjie_tools`，未向其推送；
 - [ ] 演示视频上传至可匿名访问的位置，在平台填写有效视频链接；PPT 只是可选材料；
-- [x] 已下载并核对组委会统一 DOCX 模板；`submission/official-form-content.md` 已准备技术部分草稿；
+- [x] 已下载并核对组委会统一 DOCX 模板；`submission/official-form-content.md` 保留技术底稿，`submission/CjRepoMesh-official-form-draft-2026-09-26.docx` 已回填技术内容并用 Microsoft Word 完成 5 页逐页检查；个人信息、视频链接、签字和日期仍待参赛者填写；
 - [ ] 参赛者自行补齐队伍名称、负责人、成员、电话和邮箱，审阅原创开源承诺并本人签字；公开仓库链接已确认，视频链接仍待上传；
 - [ ] 将填好的官方模板转换为 PDF，按活动页要求的主题、附件名与正文内容发送至页面指定邮箱，并保留发送回执；
 - [ ] 活动页的邮箱链接可见文字与 `mailto:` 目标域名不一致，发送前向组委会或页面最新公告核准收件地址，不能仅凭链接自动发信；
@@ -72,9 +72,10 @@
 - [x] 2026-09-25 当前源码重建服务端 SHA-256 `9347140e8436183114c01e79c97a795508b695dd84fe455d2b6d05a47d65d87b`，与运行中 Docker 镜像内二进制一致；Linux 四组 4/4、255.51s，带时间戳原始输出、`.cast` 回放及先前误用旧二进制的失败日志均保留在外层 `test-runs/video/`；Docker Doctor 9/9；
 - [x] AtomGit 公开提交 `31567a61` 上再次重建并运行 Linux 四组 4/4、230.19s；原始日志及 SHA-256、测试端口和临时目录清理、Docker Doctor 9/9 见 `docs/verification-report.md`；
 - [x] 匿名 Windows 克隆暴露 `core.autocrlf=true` 造成 Unix 脚本 CRLF；`6c4dbc8a` 加入 `.gitattributes` 后，干净工作树的 `run-linux.sh` 为 LF，Linux 四组 4/4、230.47s，失败与成功日志均保留；
-- [ ] LF 修复推到 AtomGit 后，再从无凭据的新克隆核对公开 `main` 的脚本换行；
+- [x] LF 修复推送后已从 AtomGit 和 GitHub 分别建立无凭据新克隆；两边当前 `main` 均为 `8cd4a821`，`run-linux.sh` 和受管 Python 入口均检出为 LF；
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
+- [x] 2026-09-26 Docker Desktop 从停止状态启动后，既有项目容器自动恢复为 healthy，Doctor 9/9 与 Overall PASS；本轮未重建镜像或重跑隔离持久化专项；
 - [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
 - [ ] 未运行完整 Maple HLT/LLT 时继续明确标注，不写“全部官方测试通过”；
 - [ ] HLT 发布用例先确认隔离测试仓与写入授权；不要直接使用测试快照中的外部仓地址和凭据运行；
@@ -95,7 +96,7 @@
 - [x] 已准备 8 页可编辑技术答辩稿及重设计版 `submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx`；重设计版已校验结构和版式、逐页检查，实测来源在演讲者备注中；第 7 页明确为拟录制路线；
 - [x] 参赛者反馈重设计版 PPT「目前还行」；
 - [x] 已生成 Docker Doctor 44 秒、安全边界 64 秒实测输出重放片段，并保存本轮 Linux 四组终端时间记录与约 4 分 04 秒连续终端回放；画面明确标注非屏幕录制，不冒充主视频或实际屏幕无剪切验证视频；
-- [x] 已拼成 7:00.42、1280×720 的无旁白主视频审阅草稿；三段证据画面明确标注重放性质，全片解码通过；尚需正式旁白与真实屏幕素材后才可定稿；
+- [x] 已拼成 7:00.42、1280×720 的无旁白主视频审阅草稿；三段证据画面明确标注重放性质；2026-09-26 复核 SHA-256 `255bd063...4d28c7a`，H.264 全片 5046 帧解码通过且确认无音轨/字幕；画面仍引用历史证据提交，尚需正式旁白与当前提交真实屏幕素材后才可定稿；
 - [ ] 讲述节奏待录制时确认；
 - [ ] 按 `docs/demo-runbook.md` 完成 6～8 分钟主视频；
 - [ ] 同时保留一份完整无剪切验证视频；
