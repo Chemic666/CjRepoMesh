@@ -4,13 +4,13 @@
 
 ## A. 官方要求闭环
 
-- [ ] 多仓配置、优先级和旧 `repository.home` 兼容测试在最终提交通过；
-- [ ] 跨仓版本聚合后仍由原 cjpm 求解器选择版本；
-- [ ] 同版本来源冲突、`[replace]`、404/5xx 回退和 401/403 阻断有证据；
-- [ ] 私有中心仓能够由一条命令部署、诊断、停止和持久化重启；
-- [ ] Hosted 发布、索引、下载、鉴权、SHA-256 和重复版本行为通过；
-- [ ] Proxy MISS/HIT、TTL、离线命中、并发填充和损坏拒绝通过；
-- [ ] 批量 Mirror 与批量 CjRepo-to-CjRepo Sync 通过；
+- [x] 多仓配置、优先级和旧 `repository.home` 兼容测试在本地交付材料提交 `98e9f849` 通过；
+- [x] 跨仓版本聚合后仍由原 cjpm 求解器选择版本；
+- [x] 同版本来源冲突、`[replace]`、404/5xx 回退和 401/403 阻断有证据；
+- [x] 私有中心仓的一键部署、诊断、停止和持久化重启已有自动化证据；2026-09-26 既有容器自动恢复并 Doctor 9/9；
+- [x] Hosted 发布、索引、下载、鉴权、SHA-256 和重复版本行为在 `98e9f849` 通过；
+- [x] Proxy MISS/HIT、TTL、离线命中、并发填充和损坏拒绝在 `98e9f849` 通过；
+- [x] 批量 Mirror 与批量 CjRepo-to-CjRepo Sync 在 `98e9f849` 通过；
 - [ ] 完整五组端到端测试在最终提交号上连续通过。
 
 ## B. 代码与仓库卫生
@@ -43,7 +43,7 @@
 
 ## C. 验证材料
 
-- [ ] `docs/verification-report.md` 使用最终提交号和最终一次真实耗时；
+- [x] `docs/verification-report.md` 已记录本地交付材料提交 `98e9f849` 的最终一次 Linux 四组真实耗时 252.01s；后续验证记录提交只改文档和表格；公开仓若更新仍须记录最终公开提交号；
 - [x] `benchmark/results/proxy-benchmark.json` 保留 Cold 10 次、Warm 50 次原始样本；
 - [x] 已按运行脚本的 Median/P95/Average 算法复算，Benchmark Markdown 与 JSON 的统计值一致；
 - [ ] Windows 一键部署在干净数据目录重新验证；
@@ -76,7 +76,7 @@
 - [ ] Windows 最新入口被 Application Control 拦截 `cjc -v`，尚无当前提交五组通过证据；
 - [x] Docker 基础镜像摘要、命令、持久化和安全诊断已记录在 `docs/docker-verification.md`；
 - [x] 2026-09-26 Docker Desktop 从停止状态启动后，既有项目容器自动恢复为 healthy，Doctor 9/9 与 Overall PASS；本轮未重建镜像或重跑隔离持久化专项；
-- [ ] 基于最终提交重跑 Linux 与 Docker 关键链路；
+- [x] 本地交付材料提交 `98e9f849` 已重跑 Linux 四组 4/4、252.01s，前后 Docker Doctor 9/9；本轮未重跑隔离持久化专项；
 - [ ] 未运行完整 Maple HLT/LLT 时继续明确标注，不写“全部官方测试通过”；
 - [ ] HLT 发布用例先确认隔离测试仓与写入授权；不要直接使用测试快照中的外部仓地址和凭据运行；
 - [x] 本轮四组结束后测试端口、模拟服务和临时数据无残留；项目 Docker 主容器按用户要求继续健康运行。

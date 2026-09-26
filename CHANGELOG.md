@@ -25,7 +25,7 @@
 
 - 2026-09-25：从当前源码重建服务端后，Linux 四组核心回归 4/4 PASS、255.51 秒；Docker Doctor 9 项及 Overall PASS。完整时间戳终端记录保存在本地外层 `test-runs/video/`，详见 `docs/verification-report.md`。
 - 在公开提交 `31567a61` 上四组 4/4、230.19 秒；修复换行后在 Windows 干净工作树 `6c4dbc8a` 上再次四组 4/4、230.47 秒，失败和成功日志分别保留在外层 `test-runs/`。
-- 2026-09-26：AtomGit 与 GitHub 的公开 `main` 均只读确认为 `8cd4a821`，两边全新匿名部分克隆成功，必交文件可读且 Unix 入口检出为 LF；Docker Desktop 启动后既有项目容器自动恢复，Doctor 9/9；7:00.42 无旁白审阅草稿重新完整解码 5046 帧，确认只有 H.264 1280×720 视频流。
+- 2026-09-26：本地交付材料提交 `98e9f849` 重编译服务端并通过 Linux 四组 4/4、252.01 秒，随后 Docker Doctor 9/9；AtomGit 与 GitHub 的公开 `main` 均只读确认为 `8cd4a821`，两边全新匿名部分克隆成功，必交文件可读且 Unix 入口检出为 LF；7:00.42 无旁白审阅草稿重新完整解码 5046 帧，确认只有 H.264 1280×720 视频流。
 - 官方 Maple 仅选定本地子集分别通过，未运行完整 HLT/LLT；当前 Windows 原生复测受系统 Code Integrity 对未签名 SDK 的拦截限制。历史结果与当前结果分开列示，不合并宣称。
 
 ### Known limits
