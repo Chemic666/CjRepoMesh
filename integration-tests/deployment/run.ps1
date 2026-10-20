@@ -6,13 +6,17 @@ param(
 $ErrorActionPreference = "Stop"
 $testRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $testRoot "..\.."))
-$deploymentRoot = Join-Path $projectRoot "deployment\windows"
+$deploymentSource = Join-Path $projectRoot "deployment\windows"
+$temporaryParent = [IO.Path]::GetFullPath((Join-Path $testRoot "..\.tmp"))
+$runRoot = Join-Path $temporaryParent ("deployment-" + [Guid]::NewGuid().ToString("N"))
+$deploymentRoot = Join-Path $runRoot "deployment\windows"
 $startScript = Join-Path $deploymentRoot "start.ps1"
 $stopScript = Join-Path $deploymentRoot "stop.ps1"
 $doctorScript = Join-Path $deploymentRoot "doctor.ps1"
-$packageRoot = Join-Path $projectRoot "integration-tests\multirepo\packages\meshdep-v2-low"
-$storage = Join-Path $testRoot "storage"
-$download = Join-Path $testRoot "downloaded.cjp"
+$packageSource = Join-Path $projectRoot "integration-tests\multirepo\packages\meshdep-v2-low"
+$packageRoot = Join-Path $runRoot "fixture"
+$storage = Join-Path $runRoot "storage"
+$download = Join-Path $runRoot "downloaded.cjp"
 $port = 39600
 
 if ([string]::IsNullOrWhiteSpace($Cjpm)) {
@@ -27,49 +31,53 @@ if (-not $env:CANGJIE_STDX_PATH) {
 if (-not (Test-Path -LiteralPath $Cjpm)) {
     throw "cjpm executable not found: $Cjpm"
 }
+$Cjpm = (Resolve-Path -LiteralPath $Cjpm).Path
 
-function Remove-TestOutput([string]$path) {
-    $resolved = [IO.Path]::GetFullPath($path)
-    if (-not $resolved.StartsWith($testRoot + [IO.Path]::DirectorySeparatorChar,
-        [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove path outside test root: $resolved"
-    }
-    if (Test-Path -LiteralPath $resolved) {
-        Remove-Item -LiteralPath $resolved -Recurse -Force
-    }
+$serverSource = Join-Path $projectRoot "server\target\release\bin\main.exe"
+if (-not (Test-Path -LiteralPath $serverSource)) { throw "Build the server before running deployment tests." }
+$resolvedRunRoot = [IO.Path]::GetFullPath($runRoot)
+if (-not $resolvedRunRoot.StartsWith($temporaryParent + [IO.Path]::DirectorySeparatorChar,
+    [StringComparison]::OrdinalIgnoreCase)) { throw "Invalid isolated deployment test root." }
+
+New-Item -ItemType Directory -Force -Path $deploymentRoot, $packageRoot,
+    (Join-Path $runRoot "server\target\release\bin") | Out-Null
+Get-ChildItem -LiteralPath $deploymentSource -Filter *.ps1 | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $deploymentRoot
 }
-
-& $stopScript | Out-Null
-Remove-TestOutput $storage
-Remove-TestOutput $download
-
-Push-Location $packageRoot
-try {
-    & $Cjpm bundle
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to bundle deployment fixture"
-    }
-} finally {
-    Pop-Location
-}
-
-$metadataBytes = [IO.File]::ReadAllBytes((Join-Path $packageRoot "target\meta-data.json"))
-$artifactPath = Join-Path $packageRoot "target\meshdep-2.0.0.cjp"
-$artifactBytes = [IO.File]::ReadAllBytes($artifactPath)
-$frame = [IO.MemoryStream]::new()
-try {
-    $frame.WriteByte(1)
-    $frame.Write([BitConverter]::GetBytes([int]$metadataBytes.Length))
-    $frame.Write($metadataBytes)
-    $frame.WriteByte(1)
-    $frame.Write([BitConverter]::GetBytes([int]$artifactBytes.Length))
-    $frame.Write($artifactBytes)
-    $publishBody = $frame.ToArray()
-} finally {
-    $frame.Dispose()
-}
+Copy-Item -LiteralPath $serverSource -Destination (Join-Path $runRoot "server\target\release\bin\main.exe")
+Copy-Item -LiteralPath (Join-Path $packageSource "src") -Destination $packageRoot -Recurse
+Copy-Item -LiteralPath (Join-Path $packageSource "cjpm.toml") -Destination $packageRoot
+Copy-Item -LiteralPath (Join-Path $packageSource "README.md") -Destination $packageRoot
 
 try {
+    Push-Location $packageRoot
+    try {
+        & $Cjpm bundle
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to bundle deployment fixture"
+        }
+    } finally {
+        Pop-Location
+    }
+
+    $metadataBytes = [IO.File]::ReadAllBytes((Join-Path $packageRoot "target\meta-data.json"))
+    $artifactPath = Join-Path $packageRoot "target\meshdep-2.0.0.cjp"
+    $artifactBytes = [IO.File]::ReadAllBytes($artifactPath)
+    $frame = [IO.MemoryStream]::new()
+    try {
+        $frame.WriteByte(1)
+        $lengthBytes = [BitConverter]::GetBytes([int]$metadataBytes.Length)
+        $frame.Write($lengthBytes, 0, $lengthBytes.Length)
+        $frame.Write($metadataBytes, 0, $metadataBytes.Length)
+        $frame.WriteByte(1)
+        $lengthBytes = [BitConverter]::GetBytes([int]$artifactBytes.Length)
+        $frame.Write($lengthBytes, 0, $lengthBytes.Length)
+        $frame.Write($artifactBytes, 0, $artifactBytes.Length)
+        $publishBody = $frame.ToArray()
+    } finally {
+        $frame.Dispose()
+    }
+
     & $startScript -Port $port -Storage $storage -PublishToken "deployment-token" -NoBuild
     & $doctorScript
     if ($LASTEXITCODE -ne 0) {
@@ -92,5 +100,10 @@ try {
     Write-Host "PASS registry data survives stop and restart"
     Write-Host "All one-command deployment integration tests passed."
 } finally {
-    & $stopScript -ErrorAction SilentlyContinue | Out-Null
+    # If stopping fails, leave the isolated state and logs available for inspection.
+    & $stopScript | Out-Null
+    Remove-Item -LiteralPath $resolvedRunRoot -Recurse -Force
+    if (@(Get-ChildItem -LiteralPath $temporaryParent -Force).Count -eq 0) {
+        Remove-Item -LiteralPath $temporaryParent -Force
+    }
 }

@@ -29,7 +29,9 @@ func packageStorageLock(storage: String, organization: String, name: String): Mu
 }
 
 func writeFileAtomically(path: Path, body: Array<UInt8>): Unit {
-    let temporary = Path(path.toString() + ".tmp")
+    // A public package may itself end in '.tmp'. Prefixing with '.' keeps
+    // temporary index names outside the registry's accepted path segments.
+    let temporary = path.parent.join(".${path.fileName}.tmp")
     try {
         File.writeTo(temporary, body)
         rename(temporary, to: path, overwrite: true)

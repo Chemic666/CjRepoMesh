@@ -61,6 +61,29 @@ export CJREPOMESH_SERVER=/path/to/cjrepo
 
 ## 官方原版兼容性差分
 
+服务端发布中断、残留临时文件与仓间同步另有 [恢复专项](recovery/README.md)：
+
+```cmd
+python integration-tests\recovery\run.py
+python integration-tests\recovery\sync.py
+```
+
+仓库配置类型校验有独立的 Python 标准库回归入口，使用已有 SDK 环境和增强版 cjpm；只访问临时本机 HTTP 夹具，不需要公共仓服务：
+
+```cmd
+python integration-tests\compatibility\config_validation.py --cjpm cjpm\target\release\bin\cjpm.exe
+```
+
+它覆盖错误类型在网络请求前被拒绝、TOML 日期/时间不能冒充字符串、危险 URL 与历史来源记录的凭据回显阻断、合法独占路由和旧单仓缺省配置。
+
+多仓网络回退边界另用本机 HTTP 夹具验证；默认 14 项，加 `--include-timeout` 可覆盖真实客户端读取超时，额外耗时约 60 秒：
+
+```cmd
+python integration-tests\compatibility\network_boundaries.py --cjpm cjpm\target\release\bin\cjpm.exe
+```
+
+Windows 部署脚本的隔离回归见 [部署测试说明](deployment/README.md)。
+
 在 Linux 上准备同一源码基线的官方原版 cjpm 后，可比较旧单仓配置的直接与传递依赖版本、冲突、锁文件转换、依赖树与缓存，并运行本地官方 HTTP 状态 LLT 夹具：
 
 ```bash

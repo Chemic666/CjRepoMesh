@@ -32,6 +32,26 @@ let tcpSocketConnector = {
         return socket
 }
 
+// Registry bases are also persisted in provenance and printed by repo explain.
+// Keep credentials in the Authorization header rather than in those addresses.
+public func safeRegistryAddress(address: String): Bool {
+    let lower = address.toAsciiLower()
+    let prefixSize = if (lower.startsWith("https://")) { 8 } else if (lower.startsWith("http://")) { 7 } else {
+        return false
+    }
+    if (address.size <= prefixSize || address.contains("?") || address.contains("#") ||
+        address.contains("\\")) {
+        return false
+    }
+    for (byte in address.toArray()) {
+        if (byte <= 32 || byte == 127) {
+            return false
+        }
+    }
+    let authority = address[prefixSize..].split("/", removeEmpty: false)[0]
+    return !authority.isEmpty() && !authority.contains("@") && !authority.contains("%")
+}
+
 public class Depot {
     public var registryName: String = REPO_HOME_NAME
     public var baseUrl: String = ""
@@ -87,6 +107,12 @@ public class Depot {
 
         if (baseUrl.isEmpty()) {
             eprintln("${alertLevel}: get registry of [repository.${repositoryName}] failed, please check if cangjie-repo.toml is set up correctly")
+            return false
+        }
+        if (!safeRegistryAddress(baseUrl)) {
+            eprintln("${alertLevel}: registry URL must use HTTP(S) without embedded credentials, " +
+                "query parameters, fragments or whitespace in [repository.${repositoryName}]; " +
+                "use token-env for authentication")
             return false
         }
 

@@ -1,8 +1,153 @@
-# CjRepoMesh 全量验证报告
+# CjRepoMesh 验证记录与范围
 
-> 最近执行日期：2026-09-26
+> 最近执行日期：2026-10-20
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
-> 结论：2026-09-26 在本地交付材料提交 `98e9f849` 上，从 Windows 工作区挂载路径真实重编译服务端并运行 Linux 四组，4/4 PASS、252.01 秒，随后 Docker Doctor 9/9。该提交相对已公开的 `8cd4a821` 只改文档与官方表格草稿，产品代码仍与先前通过的 `6c4dbc8a` 相同。AtomGit 与 GitHub 的公开 `main` 均为 `8cd4a821`，两边匿名部分克隆成功且 Unix 入口为 LF。真实 cjpm 组织包发布、代理拉包、镜像同步、离线构建及私有 Hosted 拉包均有证据。官方 Maple 的选定本地子集分别通过，但完整 HLT/LLT 尚未运行。Windows 当前构建被系统 Application Control 阻断。
+> 历史结论（2026-09-26）：在本地交付材料提交 `98e9f849` 上，从 Windows 工作区挂载路径真实重编译服务端并运行 Linux 四组，4/4 PASS、252.01 秒，随后 Docker Doctor 9/9。当时 Windows 原生构建被 Application Control 阻断；该限制不代表 2026-10-20 的实际环境。历史远端 HEAD、视频及 Maple 子集记录见各日期章节，不作为当前远端或最终产物的验收声明。
+
+## 2026-10-20 当前候选的固定源码验收
+
+本轮从 Windows 源码工作区固定了 245 个客户端、服务端与测试源文件，逐文件计算 SHA-256 并归档为 `source.tar`。在新的 Linux 验证目录解包，先核对全部摘要，再用已有 SDK/stdx 与本地静态库构建；未安装或下载依赖。证据目录为外层 `test-runs/candidate-20261020-hardening-420fee1a/`，源码清单为 `source-sha256.json`，归档 SHA-256 为 `6e8ebf6e13ad65a460f96cf17fac1a6a986b03a32b82081dd707179126335583`。
+
+| 产物 | SHA-256 |
+| --- | --- |
+| Windows cjpm | `20f3ce0c534c981a755388bc5b4b73e79e9e07a83d76336391130fb10570355d` |
+| Windows Server | `df0ebfe6d5e7c935d15d01e1ee0167dbaf81978d29603f698da2f70443c3a05f` |
+| Linux cjpm | `7e29eaa7e02885ba6d9ae998a6d2787170db5b17b28741bb61d613e02b330abf` |
+| Linux Server | `d0d7fd99f568a7006903b8d43f4fa31dc7c60e39d014ddad831bdec4c76862e2` |
+
+### 当前产物核心集成
+
+| 测试组 | Windows | Linux |
+| --- | ---: | ---: |
+| Multi-repository cjpm | PASS 63.62s | PASS 127.93s |
+| Hosted repository | PASS 11.77s | PASS 35.68s |
+| Proxy repository | PASS 19.45s | PASS 40.72s |
+| Repository sync | PASS 14.34s | PASS 20.74s |
+| 四组编排合计 | **4/4，109.36s** | **4/4，225.24s** |
+
+Windows 同次综合入口在进入第五组时暴露测试脚本缺陷：相对 `-Cjpm` 路径在切换到隔离夹具目录后失效。将路径在切换前解析为绝对路径后，仅单独复验部署组并通过实际构建包、启动、Doctor、发布、停止/重启和下载校验；没有重复四组，也不宣称原来那次五组入口全通过。输出分别为 `windows-core.log` 和 `windows-deployment-relative-path.log`。
+
+冻结之后只补 Windows 测试入口路径、Maple 夹具端口释放等待、相应单元回归及测试说明；提交前另清理一处 PowerShell 测试文件末尾空行，生产源码和上述二进制未变化。四个已存在测试/说明文件及一个新增单元测试以 `test-overlay/`、`test-overlays-sha256.json` 单独保留，不覆盖原归档；Windows 部署脚本另有 `windows-deployment-source-sha256.json`。
+
+### 恢复、配置与容器
+
+- Linux 当前产物另完成 Hosted 恢复 **23/23**、Sync 恢复 **12/12**、配置/诊断 **36/36**、网络边界默认集合 **14/14**，输出为 `linux-*-recovery.log`、`linux-config.log`、`linux-network.log`。
+- Windows 当前客户端配置/诊断 **36/36**，输出为 `windows-config.log`。真实读取超时的独立测试及对应候选边界见下一节。
+- Docker 基于新 Linux Server 和现有运行时创建独立本地候选镜像，使用已缓存 Ubuntu 22.04，禁用拉取和构建网络。没有覆盖默认 `cjrepomesh:local` 镜像，也没有操作正式部署 `.env` 或卷。
+- 原 Docker Doctor **9/9 PASS**；独立随机 Compose 项目完成私有读取、匿名发布拒绝、默认/命名组织发布下载、容器重建持久化与重复 409，之后仅回收本测试容器和卷。
+- 容器内 `/usr/local/bin/cjrepo` 摘要与上述新 Linux Server 一致，候选镜像 ID 为 `sha256:fc24453eb2a0212439ec21099adf56656b38644f62e180b35e520bf137fe0fef`；运行摘要及输出见 `docker-running-binary-sha256.txt`、`docker-doctor.log`、`docker-persistence.log`。
+
+### 官方原版对照与选定 Maple
+
+同一 Linux 候选与原版 cjpm（SHA-256 `2f624cbe5493fcc686611e22eef7eb30e317c1ec589c18980dd88892875d9646`）的单仓差分 **7/7 PASS**，覆盖固定/范围/混合依赖、传递约束与最新版、不可解冲突、锁文件更新转换及旧缓存布局。
+
+Maple 选定用例两版各 **39/39 PASS**；另外的稳定化 `repository_archive_matrix` 两版各 **1/1 PASS**。稳定化仅在测试副本固定 gzip mtime，保留原始/调整脚本摘要，不表述为未经调整的官方矩阵通过。
+
+首次 Maple 在原版 34 项已经通过后，因前一夹具端口瞬时存活而被入口拦截，报错时第二次探测已为空。入口改为最多约 5 秒等待端口释放，不结束未知进程；持续占用仍拒绝。两个单元回归在旧入口均失败，修复后 Windows/Linux 均 **2/2 PASS**。为避免重复测试，续跑按同一原版二进制摘要及每组实际 Maple 日志核对、复用上述 34 项，只新增执行原版剩余 5 项与稳定化矩阵，以及增强版全部 39 项与稳定化矩阵；不声称两版在一次全新调用中各重跑全部。
+
+原始输出为 `official-differential.log`、首次 `maple-summary.log` 与 `maple/`；续跑记录为 `maple-resumed-summary.log`、`maple-resumed/run-1792499862-c6981720/` 和 `maple-reused-results.json`。官方夹具源未修改，测试使用隔离 HOME 和临时副本。独立收口源码审查未发现需要处理的真实问题，未代替上述实测。
+
+本地官方 cjpm 测试目录另有 LLT 1202 个、HLT 157 个 `.info` 文件（文件清点，不等于本轮运行数）。完整 HLT/LLT 未执行，不能把选定集合当作全量。断电持久性、跨进程共享存储及独立备份灾难恢复演练也不在上述通过结论内。
+
+验收结束、推送前，AtomGit 与 GitHub 的 `refs/heads/main` 在关闭凭据辅助器及额外认证头后均可匿名读取，提交同为 `73efda2602088928fb7dcc8b823adaae7b192731`。这些验证在该 HEAD 的未提交工作区完成，未读写私有签字与个人材料。参赛者随后授权本批 Commit 并推送到两个参赛仓库；最终提交以远端 Git 记录为准，不向 `origin` 推送，不创建 Release。
+
+## 2026-10-20 客户端地址安全与网络失败分类
+
+新增 URL 回归在此前客户端上为 **25/32**：内嵌凭据、查询参数和片段会实际触网，其余非法地址也缺少统一且不回显值的诊断。`Depot.loadConfiguration` 现在在请求、在线 explain 和来源写入前拒绝不安全地址，认证使用 `token-env`。只允许 HTTP(S) 基地址，拒绝 userinfo、查询参数、片段、反斜线及 ASCII 控制/空白；authority 中的 `%` 也拒绝，所以不支持带 zone identifier 的 IPv6 地址。
+
+独立审查确认新请求路径未提前输出不安全地址，同时指出历史来源仍会被离线 explain 原样显示。新增三项合成历史记录后为 **33/36**，修复后最终 Windows 配置与诊断专项 **36/36 PASS**：`--recorded` 在显示前使用相同约束，拒绝不安全记录但不自动改写原文件。普通历史记录、旧单仓缺省值及合法独占路由控制均通过。
+
+- 最终 Windows 客户端 SHA-256：`20f3ce0c534c981a755388bc5b4b73e79e9e07a83d76336391130fb10570355d`。
+- 初次 URL 修复候选的真实多仓单组 **PASS 63.30s**；之后仅补历史记录显示检查，最终候选的综合验收另见本文首节。
+- 网络边界专项 Windows **15/15 PASS**，包括实际客户端读取超时、连接拒绝/重置、截断响应、损坏索引、HTTP 状态与独占路由。超时测试当时使用地址检查补充前的客户端，未把该结果冒充后续所有客户端的重新执行。
+- 404 与 5xx 可回退；400/401/403/429、传输失败、读取超时和损坏索引停止；独占路由始终不跨出目标仓。
+- 原始证据：外层 `test-runs/registry-url-baseline-20261020-*/`、`test-runs/registry-url-fixed-20261020-201643/`、`test-runs/recorded-url-baseline-20261020-*/`、`test-runs/url-final-multirepo-20261020-201642/` 和 `test-runs/network-timeout-20261020-*/`；最终配置输出见候选证据目录 `windows-config.log`。
+
+缓存继续以仓库配置名隔离；更改同名仓地址指向无关服务不会自动清空旧缓存，操作约束见多仓说明。上述检查不等于对全部远端错误文本的全面脱敏审计。
+
+## 2026-10-20 Sync 目标完整性与中断重跑
+
+此前 Sync 只根据目标索引的版本与 SHA-256 判断是否跳过，导致索引存在而制品缺失、损坏或读取被拒绝时仍报告成功。新增 `integration-tests/recovery/sync.py`，旧服务端 **8/12**：默认/命名组织的缺失制品、损坏制品和制品 403 四项错误通过。
+
+修复只位于 `destinationHasVersion`：索引匹配后读取并验证目标制品；404 进入 Hosted 缺失制品补齐，其余非 200 与摘要不符明确失败。相同检查也用于并发发布 409 后确认；不会覆盖已存冲突内容。代价是已存在版本需额外读取一次目标制品，但仍不下载源制品。
+
+- 最终服务端 SHA-256：`df0ebfe6d5e7c935d15d01e1ee0167dbaf81978d29603f698da2f70443c3a05f`。
+- 恢复专项 **12/12 PASS**，含索引/制品单边残留、提交失败回滚重试、冲突拒绝、读取权限及三种真实进程终止。
+- 原真实包 Sync 单组 **PASS 21.88s**，编排合计 21.97s，覆盖清单、私有源/目标、watcher、组织隔离和离线构建。
+- 原始输出与哈希：外层 `test-runs/sync-recovery-baseline-20261020-195142/`、`test-runs/sync-recovery-fixed-20261020-195226/`、`test-runs/sync-core-fixed-20261020-195227/`。
+- 独立源码审查未发现本轮生产逻辑缺陷；审查没有重新运行测试，实测结果来自上述执行记录。
+
+三种真实终止分别发生于：源响应尚未完整发送、目标提交后代理暂扣响应、代理向目标 socket 发送部分请求后。最后一种只证明发送调用完成，未观测目标 handler 已消费多少字节，不宣称终止发生在磁盘写入或两次 rename 之间。目标残留用确定性磁盘注入；专项使用合成协议负载，真实包由 Sync 单组验证。未宣称断电恢复、字节级续传、跨进程共享存储互斥或所有时序穷举。该候选产物未重新执行完整 Windows 五组、Linux/Docker 或完整 Maple。
+
+## 2026-10-20 Hosted 发布中断恢复与临时文件隔离
+
+继续在 HEAD `73efda26` 的本地未提交工作区实施，仅修改服务端发布与原子写入逻辑；增强版 cjpm 未再变化。
+
+### 已修复的实际故障
+
+1. 制品已落盘但索引未提交时，重发被误判为完整重复；现在只在磁盘制品校验和与上传匹配时补索引，不重写已有制品。
+2. 索引存在但制品缺失时，重发会追加重复版本，甚至为不同校验和版本写入制品；现在匹配原索引时只补制品、保留索引字节，冲突仍为 409。
+3. 已存索引的重复记录、错误身份、非法版本或 SHA-256 格式会在任何写入前阻断；完整版本仍保持不可变。
+4. 原子写入的 `<包名>.tmp` 会与合法的同名包索引冲突：先发布 `recoverneighbor.tmp`，再发布 `recoverneighbor` 可使前者索引丢失。现在使用点号开头的内部临时名，API 不接受该路径，正式存储布局不变，也不擅自清理有歧义的旧 `.tmp` 文件。
+
+所有恢复仍在原有鉴权、上传 SHA 校验及包锁内执行，200 响应格式保持兼容。恢复成功增加不含令牌的 `result=RECOVERED` 日志。
+
+### 最终产物与实测结果
+
+- 服务端 SHA-256：`57c86835be35e4492a8e0683db7e6fd7e42879b736a6ea25a77ef4586c7b43a6`。
+- 客户端沿用前一配置修复产物：`6361b12850144f0f21b70fc28bdf26cdfbc9b666710e01d1ce636813aae230d4`。
+- `integration-tests/recovery/run.py` **23/23 PASS**，包括两类并发恢复、索引提交失败时的不同回滚行为、旧记录格式损坏、组织隔离、临时文件名碰撞及半上传时强制终止自有进程后的重启。
+- 该最终服务端执行真实集成：Hosted **PASS 16.41s**、Proxy **PASS 21.70s**、Sync **PASS 14.08s**，合计 **52.30s**。复用已构建产物，未重复无关客户端多仓套件或整套 Windows 验收。
+- 原始输出与源码/产物哈希位于外层 `test-runs/hosted-recovery-storage-20261020-171721/`、`test-runs/storage-recovery-integration-20261020-171804/`。
+
+独立审查指出的损坏 SHA 检查遗漏已通过“截断/非 hex 校验和 × 新发布/孤立制品/缺失制品”六种故障复现后修复，并完成复核。最初未修复版本的恢复矩阵为 3/10，后续格式遗漏为 14/21，临时文件碰撞为 21/22；这些失败仓库的 21、44、42 个文件分别完整移至外层 `test-runs/hosted-recovery-{baseline,index-validation,temp-collision}-failure-20261020/`，未丢弃失败证据。
+
+### 验证边界
+
+两个文件提交之间的磁盘状态通过确定性注入验证，不宣称把真实 kill 精确落在两次 rename 之间；真实进程终止用例覆盖未完成 HTTP 上传及之后的重启。专项使用小型合成协议制品，真实 cjpm 包与构建由上述三组集成另行验证。本轮没有验证断电持久性、fsync、跨进程共享存储互斥、完整仓间 Sync 进程中断矩阵，或新的 Linux/Docker/完整 Maple 结果。
+
+## 2026-10-20 Windows 部署与配置安全补强
+
+本轮在 `cjrepomesh-multirepo` 分支、HEAD `73efda26` 上的未提交工作区实施；未 Commit、Push 或发布。使用已安装的 Windows SDK（Cangjie Compiler 1.1.3）、stdx 1.1.3.1 和已有 C++ 静态库，实际重建服务端及增强版 cjpm，未下载依赖或改变系统安全策略。
+
+### 部署脚本与真实运行
+
+- Windows PowerShell / Pester 3.4 隔离回归 **22/22 PASS**：外部监听地址覆盖、环境恢复、端口占用与归属、PID 复用、旧状态、停止超时、时间戳精度及不安全上游 URL。
+- PowerShell 7 和 Windows PowerShell 5.1 分别完成真实隔离部署：启动、Doctor、发布真实制品、停止/重启、下载与 SHA-256 核对均通过。
+- 部署集成测试改为复制脚本、服务端与测试包到唯一测试目录，不操作正式部署实例。成功路径只清理自己的目录；停止失败时保留状态和日志。
+- 原始输出位于外层 `test-runs/windows-deployment-hardening-20261020-161648/` 和 `test-runs/windows-powershell51-deployment-20261020-161819/`。
+
+### 日期类型检查补充前的候选产物五组验收
+
+使用客户端 SHA-256 `83ecd2e862ca9e644b352e27f2dbb976275ec50768383f5afc21eb759553c4ff`，服务端 SHA-256 `5919de1a3f5a3e912b928ad2f09e30a93a50436c77ad2579cb33a44d69f98b67`。这时已包含字段类型检查，尚未加入之后发现的原始 TOML 日期/时间检查。
+
+| 测试组 | 结果 | 耗时 |
+| --- | --- | ---: |
+| Multi-repository cjpm | PASS | 122.55s |
+| Hosted repository | PASS | 866.39s |
+| Proxy repository | PASS | 19.92s |
+| Repository sync | PASS | 13.99s |
+| Windows deployment | PASS | 8.31s |
+| **五组合计（含编排开销）** | **5/5 PASS** | **1032.22s** |
+
+入口为 `integration-tests/run-all.ps1 -SkipServerBuild`，服务端复用本轮刚构建的上述产物。原始输出及二进制哈希保存在外层 `test-runs/windows-core-hardening-20261020-162533/`。
+
+### 最终配置修复产物的针对性复验
+
+独立审查发现公共 `DataModel.fromToml` 会将 TOML 日期/时间转换为字符串。本轮仅在 `readConfigToml` 内、共享转换之前检查仓库与路由的原始字符串类型，未改变其他配置文件的转换规则。
+
+- 该阶段最终客户端 SHA-256：`6361b12850144f0f21b70fc28bdf26cdfbc9b666710e01d1ce636813aae230d4`；当时服务端仍为上节五组验收所用产物。后续服务端恢复补强的独立结果见本文首节。
+- 配置回归 **25/25 PASS**：22 项非法配置均非零退出、给出字段类型错误且 HTTP 请求数为 0；3 项合法控制保留独占路由、旧单仓默认值和带引号的日期字符串行为。补充前同一扩展矩阵为 16/25，四种时间类型的路由值可导致错误触网。
+- 最终客户端重新执行受影响的多仓单组 **PASS，60.75s**，覆盖传递依赖、菱形冲突、替换、来源记录、完整性拒绝、401/403、独占路由与旧单仓兼容。
+- 原始证据分别位于外层 `test-runs/config-temporal-hardening-20261020-164723/` 与 `test-runs/windows-final-multirepo-20261020-164743/`。
+
+后续补充仅收紧错误 TOML 类型的处理；未重复其余昂贵测试。因此不能表述为“最终客户端又完成一次五组全量”。本轮也未重跑 Linux 四组、Docker 验收或完整 Maple HLT/LLT，历史证据与本轮结果继续分开记录。
+
+### 保留的失败记录与限制
+
+测试包隔离最初漏复制 README，导致 bundle 正确拒绝；随后补齐。PowerShell 7 自动将状态时间戳转换为 DateTime，最初的字符串比较丢失精度；改为 UTC ticks 比较后，在真实实例上完成身份确认与安全停止，并补回归。该失败实例的 24 个文件已移至外层 `test-runs/windows-deployment-identity-failure-20261020/`，失败日志和编译诊断未删除。
+
+旧状态不含精确启动时间时，新脚本拒绝自动停止仍存活的 PID；人工核对迁移方式见 `deployment/windows/README.md`。完整官方兼容性、进程中断恢复专项、最终跨平台验收和公开发布仍是后续工作。
 
 ## 2026-09-26 本地交付材料提交回归
 

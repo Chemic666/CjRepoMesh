@@ -3,6 +3,8 @@ param()
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = [IO.Path]::GetFullPath($PSScriptRoot)
+. (Join-Path $scriptRoot "common.ps1")
+$serverExe = [IO.Path]::GetFullPath((Join-Path $scriptRoot "..\..\server\target\release\bin\main.exe"))
 $statePath = Join-Path $scriptRoot "run\cjrepo.json"
 
 if (-not (Test-Path -LiteralPath $statePath)) {
@@ -18,13 +20,13 @@ if ($null -eq $process) {
     exit 0
 }
 
-$expectedPath = [IO.Path]::GetFullPath([string]$state.executable)
-$actualPath = if ($process.Path) { [IO.Path]::GetFullPath($process.Path) } else { "" }
-if (-not $actualPath.Equals($expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to stop PID $($state.pid): executable path does not match CjRepo ($actualPath)."
+if (-not (Test-CjRepoProcessIdentity $process $state $serverExe)) {
+    throw "Refusing to stop PID $($state.pid): process identity does not match CjRepo. Inspect legacy or stale state manually."
 }
 
-Stop-Process -Id $process.Id -Force
-$process.WaitForExit(5000) | Out-Null
+Stop-Process -InputObject $process -Force
+if (-not $process.WaitForExit(5000)) {
+    throw "CjRepo did not exit within 5 seconds. Deployment state has been preserved."
+}
 Remove-Item -LiteralPath $statePath -Force
 Write-Host "CjRepo stopped (PID $($state.pid)). Data remains at $($state.storage)."

@@ -314,7 +314,21 @@ private func destinationHasVersion(destination: String, token: String, organizat
     if (!sawEntry) {
         throw Exception("destination returned an empty package index")
     }
-    return found
+    if (!found) {
+        return false
+    }
+    // An index record alone does not prove that an interrupted destination
+    // still has the artifact. Only a verified download may be skipped.
+    let (artifactStatus, artifact) = fetchUpstream(destination, token,
+        organizationRequestPath("/pkg/${name}/${version}", organization))
+    if (artifactStatus == 404) {
+        return false
+    }
+    if (artifactStatus != 200) {
+        throw Exception("destination artifact returned status ${artifactStatus}")
+    }
+    verifyChecksum(artifact, expectedChecksum)
+    return true
 }
 
 /**

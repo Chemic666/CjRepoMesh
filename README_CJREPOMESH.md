@@ -56,7 +56,7 @@ Original cjpm Dependency Resolver
       └──────────────── Atomic Filesystem ───────────┘
 ```
 
-完整组件关系、决策流程和代码地图见 [架构说明](docs/architecture.md)。
+完整组件关系、决策流程和代码地图见 [架构说明](docs/architecture.md)。首次使用、升级前保留项、故障恢复与卸载保留数据见 [操作说明](docs/operations.md)，当前产物的实测范围见 [验证报告](docs/verification-report.md)。
 
 ## 多仓配置示例
 

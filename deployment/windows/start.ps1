@@ -15,6 +15,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = [IO.Path]::GetFullPath($PSScriptRoot)
+. (Join-Path $scriptRoot "common.ps1")
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $scriptRoot "..\.."))
 $serverRoot = Join-Path $projectRoot "server"
 $serverExe = Join-Path $serverRoot "target\release\bin\main.exe"
@@ -26,28 +27,34 @@ if (-not [string]::IsNullOrEmpty($ReadToken) -and [string]::IsNullOrEmpty($Publi
     throw "PublishToken is required when ReadToken is set."
 }
 
+if (-not [string]::IsNullOrEmpty($Upstream)) {
+    $upstreamUri = $null
+    if (-not [Uri]::TryCreate($Upstream, [UriKind]::Absolute, [ref]$upstreamUri) -or
+        $upstreamUri.Scheme -notin @("http", "https") -or
+        $upstreamUri.UserInfo -or $upstreamUri.Query -or $upstreamUri.Fragment) {
+        throw "Upstream must be an absolute HTTP(S) URL without embedded credentials, query parameters or fragments. Use -UpstreamToken for authentication."
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Storage)) {
     $Storage = Join-Path $scriptRoot "data"
 }
 $Storage = [IO.Path]::GetFullPath($Storage)
 
-function Get-ProcessPath([int]$ProcessId) {
-    try {
-        return (Get-Process -Id $ProcessId -ErrorAction Stop).Path
-    } catch {
-        return $null
-    }
-}
-
 if (Test-Path -LiteralPath $statePath) {
     $previous = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-    $actualPath = Get-ProcessPath ([int]$previous.pid)
-    if ($actualPath -and
-        [IO.Path]::GetFullPath($actualPath).Equals([IO.Path]::GetFullPath([string]$previous.executable),
-            [StringComparison]::OrdinalIgnoreCase)) {
-        throw "CjRepo is already running (PID $($previous.pid), port $($previous.port)). Run stop.ps1 first."
+    $previousProcess = Get-Process -Id ([int]$previous.pid) -ErrorAction SilentlyContinue
+    if ($null -ne $previousProcess) {
+        if (Test-CjRepoProcessIdentity $previousProcess $previous $serverExe) {
+            throw "CjRepo is already running (PID $($previous.pid), port $($previous.port)). Run stop.ps1 first."
+        }
+        throw "Deployment process identity cannot be verified (PID $($previous.pid)). Inspect the process and state file manually; refusing to overwrite state."
     }
     Remove-Item -LiteralPath $statePath -Force
+}
+
+if (@(Get-CjRepoPortListener $Port).Count -ne 0) {
+    throw "Port $Port is already in use. Choose another port or stop its owner before starting CjRepo."
 }
 
 if ([string]::IsNullOrWhiteSpace($EnvSetup)) {
@@ -90,6 +97,7 @@ $stdoutPath = Join-Path $logRoot "cjrepo.out.log"
 $stderrPath = Join-Path $logRoot "cjrepo.err.log"
 
 $environmentNames = @(
+    "CJREPO_ADDRESS",
     "CJREPO_PORT",
     "CJREPO_STORAGE",
     "CJREPO_PUBLISH_TOKEN",
@@ -105,6 +113,8 @@ foreach ($name in $environmentNames) {
 
 $process = $null
 try {
+    # This deployment entry point is local-only, regardless of inherited SDK or shell settings.
+    $env:CJREPO_ADDRESS = "127.0.0.1"
     $env:CJREPO_PORT = [string]$Port
     $env:CJREPO_STORAGE = $Storage
     $env:CJREPO_PUBLISH_TOKEN = $PublishToken
@@ -134,15 +144,25 @@ try {
         if ($process.HasExited) {
             throw "CjRepo exited during startup with code $($process.ExitCode). See $stderrPath"
         }
+        $health = $null
         try {
             $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 1
-            if ($health.status -eq "ok" -and $health.service -eq "cjrepo") {
+        } catch {
+            # The process can still be starting; retry within the bounded readiness loop.
+        }
+        if ($health.status -eq "ok" -and $health.service -eq "cjrepo") {
+            $listeners = @(Get-CjRepoPortListener $Port)
+            if (@($listeners | Where-Object { $_.OwningProcess -ne $process.Id }).Count -ne 0) {
+                throw "Health endpoint belongs to another process. Refusing to adopt port $Port."
+            }
+            $process.Refresh()
+            if (-not $process.HasExited -and
+                @($listeners | Where-Object { $_.LocalAddress -eq "127.0.0.1" -and $_.OwningProcess -eq $process.Id }).Count -ne 0) {
                 $ready = $true
                 break
             }
-        } catch {
-            Start-Sleep -Milliseconds 100
         }
+        Start-Sleep -Milliseconds 100
     }
     if (-not $ready) {
         throw "CjRepo did not become healthy. See $stderrPath"
@@ -151,6 +171,7 @@ try {
     [ordered]@{
         pid = $process.Id
         executable = [IO.Path]::GetFullPath($serverExe)
+        processStartTimeUtc = $process.StartTime.ToUniversalTime().ToString("o")
         port = $Port
         storage = $Storage
         upstream = $Upstream
@@ -159,7 +180,7 @@ try {
     } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 } catch {
     if ($null -ne $process -and -not $process.HasExited) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        Stop-Process -InputObject $process -Force -ErrorAction SilentlyContinue
     }
     throw
 }

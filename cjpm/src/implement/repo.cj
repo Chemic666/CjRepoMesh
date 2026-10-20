@@ -100,6 +100,11 @@ public func doRepoExplainRecorded(fullName: String): Bool {
     }
     for (entry in provenance.packages) {
         if (entry.packageName == fullName) {
+            if (!safeRegistryAddress(entry.registry)) {
+                eprintln("Error: recorded registry URL is unsafe; regenerate provenance using a " +
+                    "credential-free HTTP(S) registry address and token-env")
+                return false
+            }
             println("Recorded resolution:")
             println("  package: ${entry.packageName}")
             println("  version: ${entry.version}")

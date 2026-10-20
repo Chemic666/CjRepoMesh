@@ -118,11 +118,38 @@ class PublishHandler <: HttpRequestHandler {
 
             let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
             var duplicate = false
+            var recovered = false
             synchronized(packageStorageLock(storage, storageOrganization, name)) {
                 // Recheck while holding the lock so concurrent publishes cannot
-                // both pass the duplicate test or interleave index records.
-                if (exists(artifactPath)) {
-                    duplicate = true
+                // interleave records or race another retry repairing crash state.
+                let previousIndex = if (exists(indexPath)) {
+                    String.fromUtf8(File.readFrom(indexPath))
+                } else {
+                    ""
+                }
+                let indexedChecksum = storedHostedChecksum(previousIndex, storageOrganization, name, version)
+                if (let Some(storedChecksum) <- indexedChecksum) {
+                    if (storedChecksum != expectedChecksum || exists(artifactPath)) {
+                        duplicate = true
+                    } else {
+                        // Restore only the missing artifact; published metadata
+                        // remains byte-for-byte unchanged, including dependencies.
+                        ensureParent(artifactPath)
+                        writeFileAtomically(artifactPath, payload.artifact)
+                        recovered = true
+                    }
+                } else if (exists(artifactPath)) {
+                    // An abrupt exit can leave verified bytes without an index.
+                    // Never replace those bytes merely because metadata is absent.
+                    let storedDigest = SHA256()
+                    storedDigest.write(File.readFrom(artifactPath))
+                    if (toHexString(storedDigest.finish()) != expectedChecksum) {
+                        duplicate = true
+                    } else {
+                        ensureParent(indexPath)
+                        writeFileAtomically(indexPath, appendHostedIndex(previousIndex, indexLine))
+                        recovered = true
+                    }
                 } else {
                     if (!exists(artifactDir)) {
                         Directory.create(artifactDir, recursive: true)
@@ -133,12 +160,7 @@ class PublishHandler <: HttpRequestHandler {
 
                     writeFileAtomically(artifactPath, payload.artifact)
                     try {
-                        let previousIndex = if (exists(indexPath)) {
-                            String.fromUtf8(File.readFrom(indexPath))
-                        } else {
-                            ""
-                        }
-                        writeFileAtomically(indexPath, "${previousIndex}${indexLine}\n".toArray())
+                        writeFileAtomically(indexPath, appendHostedIndex(previousIndex, indexLine))
                     } catch (e: Exception) {
                         removeIfExists(artifactPath)
                         throw e
@@ -149,6 +171,9 @@ class PublishHandler <: HttpRequestHandler {
                 respondError(context, 409, "artifact with the same name and version already exists")
                 return
             }
+            if (recovered) {
+                println("[hosted] organization=${storageOrganization} package=${name} version=${version} result=RECOVERED")
+            }
 
             context.responseBuilder
                 .status(200)
@@ -158,6 +183,39 @@ class PublishHandler <: HttpRequestHandler {
             respondError(context, 400, e.message)
         }
     }
+}
+
+private func appendHostedIndex(previous: String, line: String): Array<UInt8> {
+    let separator = if (previous.isEmpty() || previous.endsWith("\n")) { "" } else { "\n" }
+    return "${previous}${separator}${line}\n".toArray()
+}
+
+private func storedHostedChecksum(index: String, organization: String, name: String,
+    version: String): Option<String> {
+    var selected: Option<String> = None
+    let versions = HashSet<String>()
+    for (line in index.lines()) {
+        if (line.trimAscii().isEmpty()) {
+            continue
+        }
+        let object = JsonValue.fromStr(line).asObject()
+        let recordedVersion = requiredString(object, "version")
+        let recordedChecksum = requiredString(object, "sha256sum")
+        if (requiredString(object, "name") != name ||
+            requiredString(object, "organization") != metadataOrganization(organization) ||
+            !isSafePackageSegment(recordedVersion) ||
+            !Regex("^[0-9a-fA-F]{64}$").matches(recordedChecksum)) {
+            throw Exception("stored package index has invalid identity, version or SHA-256")
+        }
+        if (versions.contains(recordedVersion)) {
+            throw Exception("stored package index contains duplicate version")
+        }
+        versions.add(recordedVersion)
+        if (recordedVersion == version) {
+            selected = Some(recordedChecksum)
+        }
+    }
+    return selected
 }
 
 private class PublishPayload {

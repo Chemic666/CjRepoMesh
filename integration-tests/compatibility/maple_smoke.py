@@ -95,8 +95,9 @@ def run_case(
     test_config: Path, target: Path, expected_count: int,
     staging: Path, results: Path, isolate_home: bool = False,
 ) -> None:
-    if occupied_ports():
-        raise RuntimeError(f"Fixture ports in use before {label} run: {occupied_ports()}")
+    # A previous fixture's child can finish releasing its listener just after
+    # Maple exits. Wait boundedly, but never kill an unknown port owner.
+    wait_for_port_release()
     env = dict(os.environ)
     for key in tuple(env):
         if key.startswith("CJREPO_") or key.startswith("CJREPOMESH_"):

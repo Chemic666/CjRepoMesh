@@ -24,6 +24,84 @@ public let REPO_PRIORITY = "priority"
 public let REPO_ENABLED = "enabled"
 public let REPO_ROUTE = "route"
 
+// Defaults apply only to absent fields. Mistyped routing/security settings must
+// fail before the router can access a registry, rather than weaken its policy.
+private func repositoryStringField(data: DataModelStruct, name: String, fallback: String): String {
+    match (data.get(name)) {
+        case _: DataModelNull => fallback
+        case value: DataModelString => String.deserialize(value)
+        case _ => throw Exception("repository configuration field '${name}' must be a string")
+    }
+}
+
+private func repositoryBoolField(data: DataModelStruct, name: String, fallback: Bool): Bool {
+    match (data.get(name)) {
+        case _: DataModelNull => fallback
+        case value: DataModelBool => Bool.deserialize(value)
+        case _ => throw Exception("repository configuration field '${name}' must be a boolean")
+    }
+}
+
+private func repositoryIntField(data: DataModelStruct, name: String, fallback: Int64): Int64 {
+    match (data.get(name)) {
+        case _: DataModelNull => fallback
+        case value: DataModelInt => Int64.deserialize(value)
+        case _ => throw Exception("repository configuration field '${name}' must be an integer")
+    }
+}
+
+private func repositoryTableField(data: DataModelStruct, name: String): DataModelStruct {
+    match (data.get(name)) {
+        case _: DataModelNull => DataModelStruct()
+        case value: DataModelStruct => value
+        case _ => throw Exception("repository configuration field '${name}' must be a table")
+    }
+}
+
+private func repositoryArrayField(data: DataModelStruct, name: String): DataModelSeq {
+    match (data.get(name)) {
+        case _: DataModelNull => DataModelSeq()
+        case value: DataModelSeq => value
+        case _ => throw Exception("repository configuration field '${name}' must be an array")
+    }
+}
+
+private func requireRepositoryTomlString(table: TomlObject, name: String): Unit {
+    if (let Some(value) <- table.get(name)) {
+        if (!(value is TomlString)) {
+            throw Exception("repository configuration field '${name}' must be a string")
+        }
+    }
+}
+
+// The shared converter represents TOML dates/times as strings for other cjpm
+// configuration. Inspect repository string fields before that type information
+// is lost; do not change conversion semantics for unrelated configuration.
+private func validateRepositoryTomlStrings(root: TomlValue): Unit {
+    let config = root.asObject()
+    if (let Some(value) <- config.get("repository")) {
+        if (let Some(repositories) <- (value as TomlObject)) {
+            for ((_, entry) in repositories.value) {
+                if (let Some(repository) <- (entry as TomlObject)) {
+                    for (name in ["path", "registry", "token", REPO_TOKEN_ENV]) {
+                        requireRepositoryTomlString(repository, name)
+                    }
+                }
+            }
+        }
+    }
+    if (let Some(value) <- config.get(REPO_ROUTE)) {
+        if (let Some(routes) <- (value as TomlArray)) {
+            for (entry in routes.value) {
+                if (let Some(route) <- (entry as TomlObject)) {
+                    requireRepositoryTomlString(route, "namespace")
+                    requireRepositoryTomlString(route, "registry")
+                }
+            }
+        }
+    }
+}
+
 public class RepositoryRoute <: Serializable<RepositoryRoute> {
     public RepositoryRoute(
         public var namespace!: String = "",
@@ -41,9 +119,9 @@ public class RepositoryRoute <: Serializable<RepositoryRoute> {
             case _ => throw Exception("repository route is not a table")
         }
         return RepositoryRoute(
-            namespace: String.deserialize((dms.get("namespace") as DataModelString) ?? DataModelString("")),
-            registry: String.deserialize((dms.get("registry") as DataModelString) ?? DataModelString("")),
-            exclusive: Bool.deserialize((dms.get("exclusive") as DataModelBool) ?? DataModelBool(false))
+            namespace: repositoryStringField(dms, "namespace", ""),
+            registry: repositoryStringField(dms, "registry", ""),
+            exclusive: repositoryBoolField(dms, "exclusive", false)
         )
     }
 
@@ -75,12 +153,12 @@ public class RepositoryInfo <: Serializable<RepositoryInfo> {
             case _ => throw Exception("this data is not DataModelStruct")
         }
         var result = RepositoryInfo()
-        result.path = String.deserialize((dms.get("path") as DataModelString) ?? DataModelString(""))
-        result.registry = String.deserialize((dms.get("registry") as DataModelString) ?? DataModelString(""))
-        result.token = String.deserialize((dms.get("token") as DataModelString) ?? DataModelString(""))
-        result.tokenEnv = String.deserialize((dms.get(REPO_TOKEN_ENV) as DataModelString) ?? DataModelString(""))
-        result.priority = Int64.deserialize((dms.get(REPO_PRIORITY) as DataModelInt) ?? DataModelInt(0))
-        result.enabled = Bool.deserialize((dms.get(REPO_ENABLED) as DataModelBool) ?? DataModelBool(true))
+        result.path = repositoryStringField(dms, "path", "")
+        result.registry = repositoryStringField(dms, "registry", "")
+        result.token = repositoryStringField(dms, "token", "")
+        result.tokenEnv = repositoryStringField(dms, REPO_TOKEN_ENV, "")
+        result.priority = repositoryIntField(dms, REPO_PRIORITY, 0)
+        result.enabled = repositoryBoolField(dms, REPO_ENABLED, true)
         return result
     }
 }
@@ -98,7 +176,7 @@ public class GlobalRepoConfig <: Serializable<GlobalRepoConfig> {
             case _ => throw Exception("Wrong format of GlobalRepoConfig")
         }
         var result = GlobalRepoConfig()
-        result.strictTls = Bool.deserialize((dms.get(GLOBAL_STRICT_TLS) as DataModelBool) ?? DataModelBool(true))
+        result.strictTls = repositoryBoolField(dms, GLOBAL_STRICT_TLS, true)
         return result
     }
 }
@@ -151,9 +229,9 @@ public class SettingsConfig <: Serializable<SettingsConfig> {
             case _ => throw Exception("this data is not DataModelStruct")
         }
         var result = SettingsConfig()
-        result.global = GlobalRepoConfig.deserialize((dms.get("global") as DataModelStruct) ?? DataModelStruct())
-        result.repository = HashMap<String, RepositoryInfo>.deserialize((dms.get("repository") as DataModelStruct) ?? DataModelStruct())
-        result.routes = ArrayList<RepositoryRoute>.deserialize((dms.get(REPO_ROUTE) as DataModelSeq) ?? DataModelSeq())
+        result.global = GlobalRepoConfig.deserialize(repositoryTableField(dms, "global"))
+        result.repository = HashMap<String, RepositoryInfo>.deserialize(repositoryTableField(dms, "repository"))
+        result.routes = ArrayList<RepositoryRoute>.deserialize(repositoryArrayField(dms, REPO_ROUTE))
 
         if (!result.repository.contains(REPO_CACHE_NAME)) {
             result.repository.add(REPO_CACHE_NAME, RepositoryInfo())
@@ -173,6 +251,7 @@ public func readConfigToml(file: Path): SettingsConfig {
     try {
         let de = DecoderToml(File.readFrom(file))
         let to = de.decode()
+        validateRepositoryTomlStrings(to)
         res = SettingsConfig.deserialize(DataModel.fromToml(to))
     } catch (e: Exception) {
         eprintln(e.message)
