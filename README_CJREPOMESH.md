@@ -2,7 +2,19 @@
 
 > 面向仓颉与 cjpm 的原生多仓依赖和轻量企业私有仓基础设施
 
-2026-10-21 本批代码已交付 AtomGit 与 GitHub，两端内容一致、保留各自历史。提交号与验收边界见[本批交付记录](docs/delivery-record.md)。
+2026-10-21 已交付基线同步至 AtomGit 与 GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。当前工作区另有客户端可靠性修复、离线服务端交付及开发者/CI示例，尚未提交推送，各产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
+
+接收方已有离线包时，见[离线服务端交付](deployment/portable/README.md)：只用Python 3与Docker Compose即可导入、校验、配置和启动，服务端运行不依赖源码/仓颉SDK/开发机WSL。当前仅Linux amd64容器、本机监听与实例级读写令牌；不据此宣称内网HTTPS或完整企业生产验收已完成。
+
+[开发者发布与只读CI示例](examples/team/README.md)提供独立任务目录：发布者构建上传私有包，消费任务仅用读取令牌编译运行，并记录实际来源与摘要。任务机需已有Linux仓颉工具链及增强版cjpm；服务端离线包不包含这些开发工具。
+
+维护时参考[单实例升级与回滚](docs/upgrade-and-rollback.md)：停服快照恢复至新卷，并核对包内容、凭据和产物身份。两个固定Linux镜像已有隔离演练；从旧快照恢复会丢弃快照之后的发布，不承诺任意版本无损回退。
+
+[容量样本](docs/capacity-report.md)提供固定资源下的并发、延迟、内存和数据完整性记录，帮助规划实际试用验证；当前是64包/256版本的本机合成热路径样本，不换算团队人数或生产容量上限。
+
+HTTPS准备见[客户端身份与CA说明](docs/https-client.md)：本地修订核对DNS名称或IP SAN，并禁止自动跳转，已有真实CJP下载构建验证；成熟网关及跨主机HTTPS部署仍待验收。
+
+当前Linux客户端 `af3516e8…` 修复保留target换仓仍运行旧程序的问题，覆盖源码路径身份、静态库内容指纹及传递静态链接；四组受控时间戳/三包回归和旧热缓存升级各7/7。同一产物另通过核心4/4、配置40/40、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38项通过，刷新项就绪调整1项及归档稳定化1项分列。[Linux客户端离线包](deployment/client/README.md)已完成隔离接收验证，接收者无需编译cjpm，构建项目等大多数命令仍需匹配SDK。结果和摘要见[最新验证记录](docs/verification-report.md)。旧 `06ae2c1b…` 的HLT95/95只属于旧产物，本候选未重跑HLT；完整HLT/LLT及当前Windows原生验收仍未完成，后续批次尚未提交推送。
 
 CjRepoMesh 对应仓颉生态创新开发挑战赛推荐技术课题 **#6 仓颉中心仓多仓配置与私有化体系建设**。项目在不重写 cjpm 版本求解器的前提下，增加公共仓、私有仓、代理仓和镜像仓之间的路由、优先级、安全回退、来源审计与同步能力，并提供仓颉原生的私有中心仓服务端。
 
@@ -204,9 +216,9 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
 
-当前官方原版与增强版的单仓差分 **7/7 PASS**、Maple 选定 LLT 两版各 **39/39 PASS**，另一个制品异常矩阵只在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**；原版复用同批 34 项日志的细节见报告。历史本地打包、依赖树、组织名和 workspace 子集不与当前批次相加宣称完整官方覆盖。产物摘要、实际日志及未验证边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+当前Linux客户端 `af3516e8…` 与官方原版单仓差分 **7/7 PASS**；增强版Maple **38项原断言通过**，刷新就绪调整 **1/1** 及归档稳定化 **1/1** 分列。原刷新连接拒绝失败保留，不称39项未经调整通过；本轮Maple只执行增强版，原版仍为历史结果。旧06ae产物的HLT95/95及历史本地打包、依赖树、组织名和workspace子集，不移算给当前客户端或相加宣称完整覆盖。产物摘要、实际日志及边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
-后续使用隔离 HOME/USERPROFILE 的入口执行官方 HLT 来源离线打包子集：101 个中选择 95 个，原版与当前增强版各 **95/95 PASS**，保留 190 份真实 Maple 日志；使用既有官方 Linux 工具配置，没有执行远程发布等用例，仍不代表完整 HLT/LLT。
+历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批均非当前af35的复验，也不代表完整HLT/LLT。
 
 上述核心回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。正式视频和签字 PDF 等材料已由参赛者完成提交，状态见 [提交检查表](docs/submission-checklist.md)；另保留 [早期可编辑技术答辩参考稿](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)。
 
@@ -226,7 +238,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | 认证失败后错误回退 | 401/403 立即失败 |
 | 私有仓未授权读取 | 可选读取令牌保护 Hosted/Proxy 索引与制品，在访问缓存或上游前返回 401 |
 | 制品篡改 | cjpm、Proxy、Mirror、Sync 全链路 SHA-256 |
-| 跨仓同名同版本污染 | 缓存键和来源记录包含仓库身份 |
+| 跨仓同名同版本污染 | 命名/多仓缓存包含配置名与原始URL摘要；旧单仓home保留兼容布局，改地址须换缓存根 |
 | 静默强制替换 | 显式 `[replace]`，Explain 显示决策 |
 | 来源不可追溯 | 原子写入独立 Provenance 文件 |
 | Token 泄漏 | 从环境变量读取，不写入部署状态 |
@@ -248,6 +260,7 @@ docs/                 架构、验收、报告、演示和提交材料
 
 - Hosted 与 Proxy 服务端支持默认仓与命名 organization 的读取，Hosted 可发布；Mirror、Sync 接受 `组织名::包名` 的单项命令和清单，索引/制品按组织隔离；读取鉴权需显式配置，默认仍公开读取；
 - 当前使用按仓库、组织和包名定位的固定锁分片；同包串行，不同包通常并行，但哈希碰撞时仍会串行；
+- 命名/多仓客户端缓存按配置名和原始URL摘要分区；升级后旧名称缓存不自动迁移，首次需联网预热。仅单个 `home` 保留旧布局，其URL变化仍须使用新的缓存根目录；
 - Mirror/Sync 有单进程周期轮询，但尚无持久化游标、字节级断点续传或多实例协调；
 - Linux 原生构建与四组共享核心回归已验证；Windows 一键部署和 Docker Compose 分别保留平台专属验证入口；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT；

@@ -1,0 +1,45 @@
+# 开发者发布与只读CI接入示例
+
+本例提供可复制的私有库发布任务与消费任务。服务端可用[离线服务端包](../../deployment/portable/README.md)启动；任务执行机仍需现有Linux仓颉SDK（含cjlint）、匹配的增强版cjpm及本机归档/链接工具和开发链接文件（如ar、ld、GCC/系统启动对象）。准备目录只需要Python 3.10+，`run.sh`为Linux/Bash任务入口，不安装工具链、不下载依赖。Windows原生仓颉执行当前暂停，示例的真实编译验收在Linux容器中进行。
+
+## 任务角色
+
+发布者构建并发布 `company::teamhello 1.0.0`，使用发布令牌；消费端以独占路由读取该私有包，编译运行应用，只使用读取令牌。本版凭据是实例级读写区分，不提供逐用户或逐组织授权。只读CI不应配置发布凭据。
+
+## 准备发布目录
+
+在源码根目录运行；Linux将 `python` 换成 `python3`。地址按实际接入填写，这里假定服务与任务在同机：
+
+```console
+python examples/team/prepare.py --role publisher --registry http://127.0.0.1:8080 --output ../team-publisher
+```
+
+通过CI的受保护变量或本机受保护会话设置 `CJREPO_PUBLISH_TOKEN`，并将 `CJREPOMESH_CJPM` 设置为已有增强版可执行文件路径。加载现有SDK环境后，在生成目录执行：
+
+```bash
+bash run.sh
+```
+
+任务会执行真实 `bundle` 与 `publish`。再次发布同一版本会返回冲突；需要改代码时应修改包版本和消费依赖，不把冲突当成发布成功。不要将发布令牌放在URL或命令行参数中。
+
+## 准备独立消费任务
+
+```console
+python examples/team/prepare.py --role consumer --registry http://127.0.0.1:8080 --output ../team-ci-job
+```
+
+在消费任务的受保护变量中仅配置 `CJREPO_READ_TOKEN` 和增强版 `CJREPOMESH_CJPM` 路径，加载SDK环境，然后在生成目录执行：
+
+```bash
+bash run.sh
+```
+
+任务先执行 `cjpm build`，再直接运行本例默认产物 `target/release/bin/main`；两步均成功后才离线解释解析记录，输出应含 `CjRepoMesh team 1.0.0: CI`。直接执行产物可保留应用非零退出码，避免当前上游 `cjpm run` 忽略子进程失败的问题。每个任务拥有自己的 `.home` 和 `cache`；不同任务使用不同新目录。目录准备器不读取令牌，不生成凭据文件，不覆盖已有目录；脚本关闭命令回显并移除本例另一个角色的令牌变量。
+
+## 接入CI
+
+在已经有工具链的自托管Linux任务机上，依次检出源码、生成新的消费目录、由CI注入读取秘密、加载SDK环境并执行 `bash run.sh`。当前示例不依赖某家CI服务，也不创建远端流水线。让任务执行失败时直接保留非零退出状态。
+
+可在CI内部保存锁文件、`cjpm-provenance.json`和编译日志以定位依赖来源；解析记录不证明整个编译成功，应同时检查任务退出状态和运行输出。报告和日志可能包含内部仓库地址与工作路径，按团队的内部材料保管。
+
+默认同机地址不是跨主机方案。任务在容器网络内时可以使用该网络中的服务名地址；跨机器接入和HTTPS需另行设置及验证。本例不证明公有云CI、全新主机、容量或升级恢复已验收。

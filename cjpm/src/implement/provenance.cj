@@ -62,8 +62,12 @@ public class RepositoryProvenance <: Serializable<RepositoryProvenance> {
             case data: DataModelStruct => data
             case _ => throw Exception("invalid repository provenance document")
         }
+        let formatVersion = Int64.deserialize(dms.get("formatVersion"))
+        if (formatVersion != 1) {
+            throw Exception("unsupported repository provenance format version; supported version is 1")
+        }
         return RepositoryProvenance(
-            formatVersion: Int64.deserialize(dms.get("formatVersion")),
+            formatVersion: formatVersion,
             packages: ArrayList<RepositoryProvenanceEntry>.deserialize(dms.get("packages"))
         )
     }

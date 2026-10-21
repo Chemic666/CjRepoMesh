@@ -19,8 +19,10 @@ import stdx.crypto.digest.*
 import stdx.encoding.hex.*
 import stdx.serialization.serialization.*
 import stdx.encoding.json.*
+import stdx.encoding.url.*
 import cjpm.config.*
 import stdx.crypto.common.CryptoException
+import stdx.crypto.x509.X509Certificate
 
 const CONNECT_TIMEOUT = 30
 const READ_TIMEOUT = 60
@@ -30,6 +32,69 @@ let tcpSocketConnector = {
         let socket = TcpSocket(sa)
         socket.connect(timeout: Duration.second * CONNECT_TIMEOUT)
         return socket
+}
+
+private func registryTlsConfiguration(address: String, strict: Bool): TlsClientConfig {
+    var config = TlsClientConfig()
+    if (!strict) {
+        config.verifyMode = TrustAll
+    } else {
+        let url = URL.parse(address)
+        if (url.scheme == "https" && IPAddress.tryParse(url.hostName).isNone()) {
+            config.serverName = Some(url.hostName)
+        }
+    }
+    return config
+}
+
+private func registrySocketConnector(address: String, strict: Bool,
+    config: TlsClientConfig): (SocketAddress) -> StreamingSocket {
+    let url = URL.parse(address)
+    let ip = IPAddress.tryParse(url.hostName)
+    if (!strict || url.scheme != "https" || ip.isNone()) {
+        return tcpSocketConnector
+    }
+    let expected = ip.getOrThrow().getAddressBytes()
+    return { sa: SocketAddress =>
+        let socket = tcpSocketConnector(sa)
+        let tls = try {
+            TlsSocket.client(socket, clientConfig: config)
+        } catch (e: Exception) {
+            socket.close()
+            throw e
+        }
+        try {
+            // Keep OpenSSL's default chain, time and server-purpose checks.
+            // stdx 1.1.3's serverName uses DNS-only set1_host, so IP identity
+            // is checked against the authenticated leaf's binary IP SANs.
+            let result = tls.handshake(timeout: Some(Duration.second * CONNECT_TIMEOUT))
+            if (result.peerCertificate.isEmpty()) {
+                throw TlsException("TLS server certificate is missing")
+            }
+            let certificate = result.peerCertificate[0] as X509Certificate ??
+                throw TlsException("TLS server certificate type is unsupported")
+            var matches = false
+            for (candidate in certificate.IPAddresses) {
+                if (candidate.size == expected.size) {
+                    var equal = true
+                    for (i in 0..expected.size) {
+                        if (candidate[i] != expected[i]) {
+                            equal = false
+                            break
+                        }
+                    }
+                    matches = matches || equal
+                }
+            }
+            if (!matches) {
+                throw TlsException("TLS server IP identity mismatch")
+            }
+            return tls
+        } catch (e: Exception) {
+            tls.close()
+            throw e
+        }
+    }
 }
 
 // Registry bases are also persisted in provenance and printed by repo explain.
@@ -95,16 +160,6 @@ public class Depot {
         } else {
             this.token = repositoryInfo.token
         }
-        let repositoryRoot = Path(FINAL_CJPM_CONFIG_INFO.repository[REPO_CACHE_NAME].path).join("repository")
-        let registryNames = FINAL_CJPM_CONFIG_INFO.getRegistryNames()
-        this.localRepo = if (registryNames.size == 1 && repositoryName == REPO_HOME_NAME) {
-            // Preserve the exact cache layout for existing single-registry users.
-            repositoryRoot.toString()
-        } else {
-            // Registry identity is required to prevent same-name artifacts from colliding.
-            repositoryRoot.join("registries").join(repositoryName).toString()
-        }
-
         if (baseUrl.isEmpty()) {
             eprintln("${alertLevel}: get registry of [repository.${repositoryName}] failed, please check if cangjie-repo.toml is set up correctly")
             return false
@@ -114,6 +169,20 @@ public class Depot {
                 "query parameters, fragments or whitespace in [repository.${repositoryName}]; " +
                 "use token-env for authentication")
             return false
+        }
+
+        let repositoryRoot = Path(FINAL_CJPM_CONFIG_INFO.repository[REPO_CACHE_NAME].path).join("repository")
+        let registryNames = FINAL_CJPM_CONFIG_INFO.getRegistryNames()
+        this.localRepo = if (registryNames.size == 1 && repositoryName == REPO_HOME_NAME) {
+            // Preserve the exact cache layout for existing single-registry users.
+            repositoryRoot.toString()
+        } else {
+            // A configuration name can be repointed to another registry. Bind
+            // both index and extracted source caches to its validated address.
+            let addressHash = SHA256()
+            addressHash.write(this.baseUrl.toArray())
+            repositoryRoot.join("registries").join(repositoryName).
+                join(toHexString(addressHash.finish())).toString()
         }
 
         this.global = FINAL_CJPM_CONFIG_INFO.global
@@ -150,12 +219,10 @@ public class Depot {
         }
 
         // building client
-        var tlsConfig = TlsClientConfig()
-        if (!this.global.strictTls) {
-            tlsConfig.verifyMode = TrustAll
-        }
+        let tlsConfig = registryTlsConfiguration(this.baseUrl, this.global.strictTls)
         let client = ClientBuilder().
-            connector(tcpSocketConnector).
+            connector(registrySocketConnector(this.baseUrl, this.global.strictTls, tlsConfig)).
+            autoRedirect(false).
             noProxy().
             readTimeout(Duration.second * READ_TIMEOUT).
             tlsConfig(tlsConfig).
@@ -199,12 +266,10 @@ public class Depot {
         }
 
         // building client
-        var tlsConfig = TlsClientConfig()
-        if (!this.global.strictTls) {
-            tlsConfig.verifyMode = TrustAll
-        }
+        let tlsConfig = registryTlsConfiguration(this.baseUrl, this.global.strictTls)
         let client = ClientBuilder().
-            connector(tcpSocketConnector).
+            connector(registrySocketConnector(this.baseUrl, this.global.strictTls, tlsConfig)).
+            autoRedirect(false).
             noProxy().
             readTimeout(Duration.second * READ_TIMEOUT).
             tlsConfig(tlsConfig).
@@ -308,12 +373,10 @@ public class Depot {
         }
 
         // building client
-        var tlsConfig = TlsClientConfig()
-        if (!this.global.strictTls) {
-            tlsConfig.verifyMode = TrustAll
-        }
+        let tlsConfig = registryTlsConfiguration(this.baseUrl, this.global.strictTls)
         let client = ClientBuilder().
-            connector(tcpSocketConnector).
+            connector(registrySocketConnector(this.baseUrl, this.global.strictTls, tlsConfig)).
+            autoRedirect(false).
             noProxy().
             readTimeout(Duration.second * READ_TIMEOUT).
             tlsConfig(tlsConfig).
@@ -384,7 +447,11 @@ public class Depot {
         return flag
     }
 
-    private static func extractErrorMessage(resp: HttpResponse): String {
+    private func redactToken(message: String): String {
+        return if (this.token.isEmpty()) { message } else { message.replace(this.token, "[REDACTED]") }
+    }
+
+    private func extractErrorMessage(resp: HttpResponse): String {
         let buffer = ArrayList<UInt8>()
         while (true) {
             let buf = Array<UInt8>(1024, repeat: 0)
@@ -400,14 +467,14 @@ public class Depot {
                 let errArray = errorsVal.asArray()
                 for (idx in 0..errArray.size()) {
                     if (let Some(msgVal) <- errArray[idx].asObject().get("message")) {
-                        return msgVal.asString().getValue()
+                        return redactToken(msgVal.asString().getValue())
                     }
                 }
             }
         } catch (e: Exception) {
-            eprintln("Warning: failed to parse response: ${e.message}")
+            eprintln("Warning: failed to parse response: ${redactToken(e.message)}")
         }
-        return respMsg
+        return redactToken(respMsg)
     }
 
     // get index file

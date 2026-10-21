@@ -15,7 +15,7 @@ from maple_smoke import file_sha256, require_file, run_case
 
 EXPECTED_CASES = 23
 HLT_EXCLUDED = {
-    "bundle_build_03", "bundle_build_04", "bundle_build_06",  # no Linux EXEC directive
+    "bundle_build_03", "bundle_build_04", "bundle_build_06",  # conditional EXEC outside this conservative selection
     "bundle_include_23", "bundle_include_28",  # separate Python-generated fixture setup
     "bundle_verify_03",  # dependency lookup outside this offline subset
 }

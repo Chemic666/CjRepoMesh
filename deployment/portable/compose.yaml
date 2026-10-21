@@ -1,0 +1,29 @@
+services:
+  cjrepo:
+    image: @IMAGE@
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - ': "$${CJREPO_PUBLISH_TOKEN:?publish token must be configured}"; : "$${CJREPO_READ_TOKEN:?read token must be configured}"; exec /usr/local/bin/cjrepo'
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    ports:
+      - "127.0.0.1:${CJREPO_HOST_PORT:-8080}:8080"
+    env_file: .env
+    environment:
+      CJREPO_ADDRESS: 0.0.0.0
+      CJREPO_PORT: 8080
+      CJREPO_STORAGE: /var/lib/cjrepo
+    labels:
+      io.cjrepomesh.distribution: @IMAGE@
+    volumes:
+      - cjrepo-data:/var/lib/cjrepo
+volumes:
+  cjrepo-data:
+    labels:
+      io.cjrepomesh.distribution: @IMAGE@

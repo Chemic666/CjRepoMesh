@@ -1,5 +1,7 @@
 # Docker Compose 部署
 
+如果接收方已有离线交付包，按[离线服务端交付说明](../portable/README.md)导入镜像并启动；运行服务只需Python 3与Docker Compose，不需要源码仓库、仓颉SDK或开发机WSL。下文仍为制作开发镜像的现有流程。
+
 该部署把 WSL 中已经编译的 Linux CjRepo Server 与两项必要的仓颉运行时库打包进最小运行镜像。最终容器不包含编译器、stdx 源文件或完整 SDK，并以非 root 用户、只读根文件系统和无 Linux capabilities 运行。
 
 ## 前置条件

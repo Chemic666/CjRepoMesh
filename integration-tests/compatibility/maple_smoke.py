@@ -64,6 +64,42 @@ def normalized_fixture(source: Path, destination: Path, name: str) -> Path:
     return target / f"{name}.info"
 
 
+def stabilized_refresh_fixture(source: Path, destination: Path) -> tuple[Path, Path]:
+    info = normalized_fixture(source, destination, "local_index_refresh")
+    script = info.parent / "run_refresh.sh"
+    original = script.read_text(encoding="utf-8")
+    launcher = "python3 server.py 39138 >/dev/null 2>&1 &"
+    if original.count(launcher) != 1 or original.count("sleep 1\n") != 1:
+        raise ValueError("Official refresh fixture changed; review readiness before running")
+    # Keep the original server, cjpm command and ASSERTs. Only the per-run
+    # copy waits for the real listener, retaining startup errors on failure.
+    readiness = '''if ! python3 - "$server_pid" <<'PY_READY'
+import os, socket, sys, time
+pid = int(sys.argv[1])
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        sys.exit("Fixture server exited before readiness")
+    try:
+        with socket.create_connection(("127.0.0.1", 39138), timeout=0.1):
+            break
+    except OSError:
+        time.sleep(0.05)
+else:
+    sys.exit("Fixture server readiness timed out")
+PY_READY
+then
+    cat fixture-server.log >&2
+    exit 1
+fi
+'''
+    adjusted = original.replace(launcher, "python3 server.py 39138 >fixture-server.log 2>&1 &", 1)
+    script.write_text(adjusted.replace("sleep 1\n", readiness, 1), encoding="utf-8")
+    return info, script
+
+
 def stabilized_archive_fixture(source: Path, destination: Path) -> tuple[Path, Path]:
     target = destination / "repository_archive_matrix"
     shutil.copytree(source, target)
@@ -231,7 +267,13 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="maple-smoke-", dir=temp_parent) as raw:
             staging = Path(raw)
             fixture_info = normalized_fixture(fixture, staging, FIXTURE_NAME)
-            refresh_info = normalized_fixture(refresh_fixture, staging, "local_index_refresh")
+            refresh_info, ready_script = stabilized_refresh_fixture(refresh_fixture, staging)
+            (results / "refresh-fixture-adjustment.txt").write_text(
+                "local_index_refresh/run_refresh.sh: test-copy only, bounded listener readiness\n"
+                f"official script SHA-256: {file_sha256(refresh_fixture / 'run_refresh.sh')}\n"
+                f"adjusted script SHA-256: {file_sha256(ready_script)}\n",
+                encoding="utf-8",
+            )
             archive_info, stabilized_server = stabilized_archive_fixture(archive_fixture, staging)
             (results / "archive-fixture-adjustment.txt").write_text(
                 "repository_archive_matrix/server.py: test-copy only, gzip mtime pinned to 0\n"

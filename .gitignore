@@ -38,6 +38,9 @@ deployment/windows/logs/
 deployment/windows/run/
 deployment/docker/.build-context/
 deployment/docker/.env
+deployment/portable/.env
+deployment/portable/__pycache__/
+deployment/client/__pycache__/
 benchmark/proxy/storage/
 benchmark/proxy/*.log
 tools/node_modules/

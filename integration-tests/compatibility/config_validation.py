@@ -144,6 +144,24 @@ exclusive = true
                 failures += not passed
                 print(f"{'PASS' if passed else 'FAIL'} historical-record safe={safe}", flush=True)
 
+            # Never interpret an unsupported schema as a successful resolution.
+            # The supported v1 positive control is in the preceding loop.
+            unsupported_versions = (-1, 0, 2, 9223372036854775807)
+            for version in unsupported_versions:
+                document = dict(formatVersion=version, packages=[dict(package="company::auth", version="1.0.0",
+                                repository="private", registry=origin, sha256="0" * 64)])
+                record = root / "cjpm-provenance.json"
+                record.write_text(json.dumps(document), encoding="utf-8")
+                original = record.read_bytes()
+                result = invoke(base, "explain", recorded=True)
+                output = result.stdout + result.stderr
+                passed = (result.returncode != 0 and not Registry.requests and
+                          "unsupported repository provenance format version" in output and
+                          "Recorded resolution:" not in output and record.read_bytes() == original)
+                failures += not passed
+                print(f"{'PASS' if passed else 'FAIL'} provenance-format version={version} "
+                      f"exit={result.returncode} network_requests={len(Registry.requests)}", flush=True)
+
             # Omitted optional fields retain their defaults and reach only the exclusive route.
             minimal = f'[repository.home]\nregistry = "{origin}/private"\n'
             quoted_date_token = base.replace('token-env = "CJREPOMESH_CONFIG_FIXTURE_TOKEN"\n', "") \
@@ -163,7 +181,8 @@ exclusive = true
             temporary_parent.rmdir()
         except OSError:
             pass
-    print(f"Configuration validation: {len(cases) + 7 - failures}/{len(cases) + 7} passed.")
+    total = len(cases) + 7 + len(unsupported_versions)
+    print(f"Configuration validation: {total - failures}/{total} passed.")
     return int(failures != 0)
 
 

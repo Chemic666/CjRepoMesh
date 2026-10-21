@@ -1,0 +1,8 @@
+[package]
+cjc-version = "1.0.0"
+name = "teamhello"
+organization = "company"
+version = "1.0.0"
+output-type = "static"
+description = "CjRepoMesh private team package example"
+exclude = ["run.sh", "workspace.json"]

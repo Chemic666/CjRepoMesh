@@ -18,6 +18,8 @@ import std.time.*
 
 import stdx.serialization.serialization.*
 import stdx.encoding.json.*
+import stdx.crypto.digest.*
+import stdx.encoding.hex.*
 
 import cjpm.config.*
 import cjpm.util.*
@@ -399,7 +401,27 @@ private func registerCompileTasks(
             compileTask.requireTasks.toArray()
         }
 
-        registerCompilerCallTaskWithDeps(engine, compileTask, taskDeps, buildConfig)
+        let allTaskDeps = HashSet<TaskId>()
+        allTaskDeps.add(all: taskDeps)
+        let linksDependencies = match (compileTask.id) {
+            case Link(_, _, _, _, _, _) => true
+            case _ => match (resolveCompileTaskLinkStrategy(compileTask)) {
+                case NoLink => false
+                case _ => !compileTask.requiresOnlyTypeInfo
+            }
+        }
+        if (linksDependencies) {
+            // Link arguments include transitive libraries. A static bridge may
+            // keep its type information and object bytes when a leaf changes,
+            // so the final link must also observe that leaf's actual content.
+            let linkedPackages = getDepSet(compileTask, buildConfig)
+            for (candidate in compileTasksData where candidate.outputType == OutputType.Static &&
+                candidate.target == compileTask.target && linkedPackages.contains(candidate.fullName) &&
+                candidate.id != compileTask.id) {
+                allTaskDeps.add(candidate.id)
+            }
+        }
+        registerCompilerCallTaskWithDeps(engine, compileTask, allTaskDeps.toArray(), buildConfig)
 
         let monitorId = TaskId.Monitor(
             compileTask.fullName, 
@@ -445,7 +467,7 @@ private func createArtifactGroup(compileTask: CompileTask, buildConfig: BuildCon
             } else {
                 makeCangjieStaticlibName(compileTask.filename)
             }
-            ArtifactGroup(artifact(name, CheckExists), cjo())
+            ArtifactGroup(artifact(name, CheckContent), cjo())
         case Dynamic =>
             let name = if (compileTask.isMacro) { 
                 makeTargetMacroName(compileTask.filename, compileTask.target) 
@@ -496,6 +518,11 @@ private func registerReadCompilerOptionsTask(engine: IncrementalEngine, compileT
     // The proper incrementation between those scenarious is a separate task
     let comp: () -> CompilerOptions = { =>
         let res = ArrayList<String>()
+        if (compileTask.outputType == OutputType.Static) {
+            // Invalidate old timestamp-only static artifacts once; this marker
+            // participates only in the cache hash, never in compiler arguments.
+            res.add("cjrepomesh-static-content-cache-v1")
+        }
         res.add(all: appendCommandOptions(compileTask, ignoreTestFlags: compileTask.requiredForTests))
         for (option in compileTask.customizedOption) {
             res.add(all: extractOptionByString(option))
@@ -604,13 +631,16 @@ private struct PackageSource <: Serializable<PackageSource> {
 extend PackageSource <: SerializableIncData<PackageSource> {
     public func incHash(): ?Hash {
         if (exists(dirpath) && FileInfo(canonicalize(dirpath)).isDirectory()) {
-            return Directory.readFrom(dirpath).iterator()
+            let sourceHash = Directory.readFrom(dirpath).iterator()
                 .filter { it => it.isRegular() &&
                     it.name.endsWith(".cj") &&
                     !it.name.endsWith("_test.cj")
                 }
                 .map { it => it.lastModificationTime } |>
                 unorderedHash
+            // A registry URL change can select another source tree with exactly
+            // the same archive timestamps. Its location is part of source identity.
+            return [canonicalize(dirpath).toString().hashCode(), sourceHash] |> unorderedHash
         }
         return None
     }
@@ -643,11 +673,13 @@ extend CompilerOptions <: SerializableIncData<CompilerOptions> {
 private enum ArtifactCheckKind <: ToString & Serializable<ArtifactCheckKind> {
     | CheckExists
     | CheckTimestamp
+    | CheckContent
 
     public func toString(): String {
         match (this) {
             case CheckExists => "check-exists"
             case CheckTimestamp => "check-timestamp"
+            case CheckContent => "check-content"
         }
     }
 
@@ -659,6 +691,7 @@ private enum ArtifactCheckKind <: ToString & Serializable<ArtifactCheckKind> {
         match (value) {
             case "check-exists" => CheckExists
             case "check-timestamp" => CheckTimestamp
+            case "check-content" => CheckContent
             case _ => throw Exception("Unknown kind of aftifact checking: `${value}`")
         }
     }
@@ -709,6 +742,22 @@ extend Artifact <: SerializableIncData<Artifact> {
                 }
                 try {
                     FileInfo(canonicalize(path)).lastModificationTime.hashCode()
+                } catch (_: Exception) {
+                    return None
+                }
+            case CheckContent =>
+                if (!exists(path)) { return None }
+                try {
+                    let contentHash = SHA256()
+                    try (file = File(path, Read)) {
+                        let buffer = Array<UInt8>(65536, repeat: 0)
+                        while (true) {
+                            let length = file.read(buffer)
+                            if (length == 0) { break }
+                            contentHash.write(buffer[..length])
+                        }
+                    }
+                    toHexString(contentHash.finish()).hashCode()
                 } catch (_: Exception) {
                     return None
                 }

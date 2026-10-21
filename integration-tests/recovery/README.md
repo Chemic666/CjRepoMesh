@@ -60,6 +60,18 @@ It binds only `127.0.0.1:39640` by default (`--port` overrides it), isolates cli
 
 This is an isolated deployment test, not a command to back up an existing business volume. It does not establish online backup consistency, automatic scheduling, production cutover or power-loss durability.
 
+## Stopped-volume upgrade and rollback
+
+Use two existing local Linux amd64 server images and two genuine prebuilt CJP fixtures. The seed is a default-organization package; the new package belongs to a named organization. No SDK execution or downloads are required:
+
+```cmd
+python integration-tests\recovery\upgrade.py --previous-image <old-local-image> --candidate-image <new-local-image> --seed-package <default-package-target> --new-package <organization-package-target> --evidence-dir <new-evidence-directory>
+```
+
+This creates three new labeled volumes and an ephemeral loopback port. The 14 checkpoints pin distinct image and server identities; publish the old seed; stop all owned writers before a complete archive; restore a byte-identical candidate volume; check new reads/writes and old-version reads of candidate data; reject a controlled invalid startup configuration; restore the original snapshot into another empty volume; verify that later writes are absent; publish again, recreate the recovered server, and preserve original/candidate/backup bytes independently. The same generated read/publish credentials are checked across switches, without recording raw container environments.
+
+Only owned, label-verified resources are removed on success. Failures retain volumes and evidence and attempt to stop owned writers. The runner does not accept existing business volumes and is not an automatic production upgrade command. Snapshot rollback deliberately excludes post-snapshot writes; real maintenance must pause publishers or reconcile later data. The controlled startup failure is not a post-write crash or format migration. This test reads real archives but does not compile client projects. See the [maintenance procedure](../../docs/upgrade-and-rollback.md) and [actual verification scope](../../docs/verification-report.md).
+
 ## Repository Sync
 
 ```cmd

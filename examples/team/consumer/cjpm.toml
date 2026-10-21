@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.0"
+name = "team_consumer"
+version = "1.0.0"
+output-type = "executable"
+description = "CjRepoMesh read-only CI consumer example"
+
+[dependencies]
+"company::teamhello" = "1.0.0"
