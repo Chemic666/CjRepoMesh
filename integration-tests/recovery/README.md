@@ -26,6 +26,40 @@ Persisted intermediate states are injected deterministically. The actual process
 
 These checks establish the tested single-process recovery behavior, not power-loss durability, filesystem `fsync` guarantees, or coordination between multiple processes sharing one storage directory.
 
+## Cold filesystem backup and restore
+
+Load the matching SDK and stdx environment, then use the existing server and enhanced cjpm binaries:
+
+```cmd
+python integration-tests\recovery\backup.py --cjpm cjpm\target\release\bin\cjpm.exe
+```
+
+On Linux use the same Python entry point with `--cjpm cjpm/target/release/bin/cjpm`. The server defaults to the corresponding platform binary. `--server` and `--port` override the defaults; the default port is `39630`. Optional `--evidence-dir` must name a new directory outside the test's temporary storage and retains bundle, server and consumer logs plus the backup hash manifest. Without it, logs are removed along with successful test storage. Failures retain the owned storage directory.
+
+The 10 checkpoints use real `cjpm bundle` archives and cover:
+
+- private publication and reads of two default-organization versions and a named-organization package;
+- stopping the owned source before copying its complete storage, with file-set and SHA-256 equality;
+- detecting a modified artifact and a missing index by comparing deliberately damaged copies with the original manifest;
+- making the original storage path unavailable and restoring the backup into a new directory;
+- downloading, building and running default and named-organization consumers with fresh project caches;
+- immutable duplicate rejection, publication of another real version and persistence after restart;
+- verifying that restored writes do not change the backup or the offline original.
+
+The runner only starts its own processes and uses a unique directory under `integration-tests/.tmp`, including an isolated HOME/USERPROFILE and local repository/cache configuration for every package fixture. The damage checks exercise the test's manifest comparison, not an automatic backup-validation service. This is a stopped-instance filesystem copy drill; it does not test Docker-volume backup, live snapshots, deployment cutover, power-loss durability or automatic scheduling. Credentials are synthetic process configuration and are not included in the package-storage backup.
+
+## Docker volume cold backup
+
+```cmd
+python integration-tests\recovery\docker_backup.py --image cjrepomesh:local --cjpm cjpm\target\release\bin\cjpm.exe
+```
+
+This separate runner requires an existing local Linux CjRepo image and the matching host cjpm environment. It pins the local image ID and uses `--pull=never`. Nine checkpoints cover real package publication, a stopped source volume exported as tar, validated extraction into a different volume, complete file-set/SHA-256 equality before startup, private reads, two fresh-cache client builds, duplicate rejection/new publication, restart and preservation of the original volume and archive. Helpers have no network, export mounts are read-only, and the restored server uses the image's non-root account.
+
+It binds only `127.0.0.1:39640` by default (`--port` overrides it), isolates client HOME/USERPROFILE and per-fixture repository/cache configuration, and never loads the deployment `.env`. All Docker resources are uniquely labeled; only owned container IDs and matching labeled volumes are removed. Failed runs capture container inspect data and combined logs before removing containers and retain volumes plus local fixtures; a diagnostic-capture failure keeps the affected container after attempting to stop it. Optional `--evidence-dir` names a new directory retaining logs, runtime identity, the manifest and synthetic `backup.tar`. Without it, successful local evidence is removed.
+
+This is an isolated deployment test, not a command to back up an existing business volume. It does not establish online backup consistency, automatic scheduling, production cutover or power-loss durability.
+
 ## Repository Sync
 
 ```cmd

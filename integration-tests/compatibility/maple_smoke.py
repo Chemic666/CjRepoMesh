@@ -104,10 +104,13 @@ def run_case(
             env.pop(key)
     env.pop("CJPM_CONFIG", None)
     path_prefix = str(executable.parent)
+    # Every Maple case gets an owned profile, including config and repository
+    # cases. The flag only controls discovery of locally installed commands.
+    isolated_home = staging / f"{label}-{suite_name}-home"
+    isolated_home.mkdir()
+    env["HOME"] = str(isolated_home)
+    env["USERPROFILE"] = str(isolated_home)
     if isolate_home:
-        isolated_home = staging / f"{label}-{suite_name}-home"
-        isolated_home.mkdir()
-        env["HOME"] = str(isolated_home)
         path_prefix = f"{isolated_home / '.cjpm' / 'bin'}{os.pathsep}{path_prefix}"
     env["PATH"] = f"{path_prefix}{os.pathsep}{env.get('PATH', '')}"
     output_dir = results / f"{label}-{suite_name}"

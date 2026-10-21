@@ -33,8 +33,7 @@ private func configuredReadToken(): String {
 }
 
 private func configuredUpstream(): String {
-    let value = getVariable("CJREPO_UPSTREAM") ?? ""
-    return if (value.endsWith("/")) { value[..value.size - 1] } else { value }
+    return getVariable("CJREPO_UPSTREAM") ?? ""
 }
 
 private func configuredUpstreamToken(): String {
@@ -230,12 +229,17 @@ main(): Int64 {
         }
     }
 
+    let rawUpstream = configuredUpstream()
+    if (!rawUpstream.isEmpty() && !validateRegistryEndpoint(rawUpstream, "CJREPO_UPSTREAM")) {
+        return 2
+    }
+    let upstream = if (rawUpstream.endsWith("/")) { rawUpstream[..rawUpstream.size - 1] } else { rawUpstream }
     let readToken = configuredReadToken()
     if (!readToken.isEmpty() && configuredPublishToken().isEmpty()) {
         eprintln("Error: CJREPO_PUBLISH_TOKEN is required when CJREPO_READ_TOKEN is set")
         return 2
     }
-    let distributor = RegistryDistributor(configuredStorage(), configuredUpstream(), configuredUpstreamToken(),
+    let distributor = RegistryDistributor(configuredStorage(), upstream, configuredUpstreamToken(),
         readToken, configuredProxyTtlSeconds())
     distributor.register("/health", { context =>
         context.responseBuilder
@@ -252,8 +256,8 @@ main(): Int64 {
 
     println("CjRepo Server listening on http://${address}:${server.port}")
     println("CjRepo storage: ${configuredStorage()}")
-    if (!configuredUpstream().isEmpty()) {
-        println("CjRepo proxy upstream: ${configuredUpstream()}")
+    if (!upstream.isEmpty()) {
+        println("CjRepo proxy upstream: ${upstream}")
         println("CjRepo proxy index TTL: ${configuredProxyTtlSeconds()} seconds")
     }
     server.serve()

@@ -17,6 +17,9 @@ func runMirror(arguments: Array<String>): Bool {
         eprintln("Usage: cjrepo mirror <upstream> <package> <version>")
         return false
     }
+    if (!validateRegistryEndpoint(arguments[0], "mirror upstream")) {
+        return false
+    }
     let upstream = trimTrailingSlash(arguments[0])
     let packageSpec = arguments[1]
     let version = arguments[2]
@@ -156,6 +159,9 @@ func runMirrorManifest(arguments: Array<String>): Bool {
         return false
     }
 
+    if (!validateRegistryEndpoint(arguments[0], "mirror upstream")) {
+        return false
+    }
     let upstream = trimTrailingSlash(arguments[0])
     let manifestPath = arguments[1]
     var total: Int64 = 0
@@ -203,6 +209,10 @@ func runMirrorManifest(arguments: Array<String>): Bool {
 func runSync(arguments: Array<String>): Bool {
     if (arguments.size != 4) {
         eprintln("Usage: cjrepo sync <source> <destination> <package> <version>")
+        return false
+    }
+    if (!validateRegistryEndpoint(arguments[0], "sync source") ||
+        !validateRegistryEndpoint(arguments[1], "sync destination")) {
         return false
     }
     let source = trimTrailingSlash(arguments[0])
@@ -344,6 +354,10 @@ func runSyncManifest(arguments: Array<String>): Bool {
         return false
     }
 
+    if (!validateRegistryEndpoint(arguments[0], "sync source") ||
+        !validateRegistryEndpoint(arguments[1], "sync destination")) {
+        return false
+    }
     let source = trimTrailingSlash(arguments[0])
     let destination = trimTrailingSlash(arguments[1])
     let manifestPath = arguments[2]
@@ -405,6 +419,12 @@ private func runManifestWatch(arguments: Array<String>, syncMode: Bool): Bool {
         } else {
             "Usage: cjrepo mirror-watch <upstream> <file> <interval-seconds>"
         })
+        return false
+    }
+    if (!validateRegistryEndpoint(arguments[0], if (syncMode) { "sync source" } else { "mirror upstream" })) {
+        return false
+    }
+    if (syncMode && !validateRegistryEndpoint(arguments[1], "sync destination")) {
         return false
     }
     let interval = try {

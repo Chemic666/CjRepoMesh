@@ -151,12 +151,8 @@ class PublishHandler <: HttpRequestHandler {
                         recovered = true
                     }
                 } else {
-                    if (!exists(artifactDir)) {
-                        Directory.create(artifactDir, recursive: true)
-                    }
-                    if (!exists(indexDir)) {
-                        Directory.create(indexDir, recursive: true)
-                    }
+                    ensureParent(artifactPath)
+                    ensureParent(indexPath)
 
                     writeFileAtomically(artifactPath, payload.artifact)
                     try {

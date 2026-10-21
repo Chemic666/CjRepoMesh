@@ -11,6 +11,18 @@ import std.sync.*
 // public proxy requests. Operations for the same package always share a lock;
 // unrelated packages only serialize if their hashes collide.
 private let STORAGE_LOCKS: Array<Mutex> = createStorageLocks()
+// Recursive mkdir can race on shared ancestors even for different packages.
+// Serialize only directory creation, never network fetches or artifact writes.
+private let DIRECTORY_CREATION_LOCK = Mutex()
+
+func ensureParent(path: Path): Unit {
+    synchronized(DIRECTORY_CREATION_LOCK) {
+        let parent = path.parent
+        if (!exists(parent)) {
+            Directory.create(parent, recursive: true)
+        }
+    }
+}
 
 private func createStorageLocks(): Array<Mutex> {
     let locks = ArrayList<Mutex>()

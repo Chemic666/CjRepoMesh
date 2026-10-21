@@ -18,6 +18,12 @@ Repository Resolution                Dependency Resolution
 
 仓库优先级只决定同一最终版本从哪里下载，不会用高优先级仓的旧版本覆盖原求解器本应选择的新版本。
 
+## 先看一次完整场景
+
+[连贯演练入口](integration-tests/showcase/README.md)可以在已有 SDK 和构建产物上运行七个检查点：先看到公共同名高版本被选择，再启用内部命名空间保护；错误令牌必须阻断构建；关闭上游后从已校验的 Proxy 缓存构建；同步到私有副本，关闭源仓后用全新客户端缓存构建；最后所有仓停止，仍能解释已记录来源。
+
+这是本地合成场景，使用真实 `cjpm bundle` 归档、编译与运行；无路由对照使用同一个增强客户端，不冒充官方原版比较。按[演示与代码讲解](docs/demo-runbook.md)可把每个结果对应到真实实现；实际平台结果和产物边界见[验证记录](docs/verification-report.md)。
+
 ## 官方要求完成情况
 
 | 官方主要交付 | 当前实现 | 自动证据 |
@@ -192,9 +198,15 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 | Repository sync | 批量 Mirror/Sync、部分失败、鉴权、幂等和源仓离线构建 |
 | Windows deployment | 一键启动、诊断、发布、持久化重启和安全停止 |
 
-截至 2026-09-25，最新产品代码的 Linux 四组核心回归 **4/4 PASS、1267.28 秒**；同一二进制的 Docker 镜像诊断 **9/9 PASS**，私有默认仓与组织仓重建持久化专项通过。Windows 入口仍被系统 Application Control 拦截，历史 5/5 不能当作当前结果。官方原版与增强版的单仓差分 7/7、官方 HTTP 状态夹具各 16/16 断言通过；Maple 框架的 39 项选定 LLT 及另批本地打包 23、依赖树 17、组织名 12、workspace 52 项分别在两版通过，但未统一运行，不能称为完整 HLT/LLT。另有一个制品异常矩阵只在测试副本固定 gzip 时间戳后两版各 1/1 PASS。环境、耗时和边界见 [全量验证报告](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+2026-10-20 最新服务端补齐原生启动及 Mirror/Sync 的 URL 前置校验，拒绝地址内凭据且诊断不回显值：Windows / Linux 矩阵各 **96/96 PASS**，受影响的 Hosted、Proxy、Mirror/Sync 三组分别 **3/3 PASS、56.22 秒 / 90.15 秒**。新独立 Docker 镜像 Doctor **9/9 PASS**，容器内 URL 拒绝、私有读取、组织仓和重建持久化通过；客户端没有改动。
 
-本次完整回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。另备有 [8 页可编辑技术答辩稿（重设计版）](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)，视频路线仍待录制。
+此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
+
+当前官方原版与增强版的单仓差分 **7/7 PASS**、Maple 选定 LLT 两版各 **39/39 PASS**，另一个制品异常矩阵只在测试副本固定 gzip 时间戳后两版各 **1/1 PASS**；原版复用同批 34 项日志的细节见报告。历史本地打包、依赖树、组织名和 workspace 子集不与当前批次相加宣称完整官方覆盖。产物摘要、实际日志及未验证边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+
+后续使用隔离 HOME/USERPROFILE 的入口执行官方 HLT 来源离线打包子集：101 个中选择 95 个，原版与当前增强版各 **95/95 PASS**，保留 190 份真实 Maple 日志；使用既有官方 Linux 工具配置，没有执行远程发布等用例，仍不代表完整 HLT/LLT。
+
+上述核心回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。正式视频和签字 PDF 等材料已由参赛者完成提交，状态见 [提交检查表](docs/submission-checklist.md)；另保留 [早期可编辑技术答辩参考稿](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)。
 
 性能测试单独运行，避免把性能波动混入功能回归：
 
@@ -230,7 +242,7 @@ docs/                 架构、验收、报告、演示和提交材料
 
 ## 当前边界
 
-以下能力尚未完成，不应在参赛材料中描述成已有功能：
+当前支持范围与限制如下：
 
 - Hosted 与 Proxy 服务端支持默认仓与命名 organization 的读取，Hosted 可发布；Mirror、Sync 接受 `组织名::包名` 的单项命令和清单，索引/制品按组织隔离；读取鉴权需显式配置，默认仍公开读取；
 - 当前使用按仓库、组织和包名定位的固定锁分片；同包串行，不同包通常并行，但哈希碰撞时仍会串行；

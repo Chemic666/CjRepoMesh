@@ -2,6 +2,8 @@
 
 仓颉原生的 CjRepoMesh 私有中心仓服务端。当前已提供健康检查，以及默认仓和命名 organization 的 Hosted Registry 发布、索引和制品下载。发布过程兼容 cjpm framing，并校验令牌、包身份、SHA-256 和重复版本。
 
+Hosted、Proxy 与 Mirror/Sync 的目录创建共用进程内短时锁，避免不同包同时递归创建共享父目录时失败；包下载和文件写入仍使用原有包锁，不在目录锁内进行网络请求。不支持多个服务进程共用同一存储目录。
+
 ## 本地运行
 
 先加载仓颉环境并设置 `CANGJIE_STDX_PATH`，然后执行：
@@ -11,6 +13,8 @@ cjpm run
 ```
 
 默认监听 `127.0.0.1:8080`，可通过 `CJREPO_ADDRESS` 和 `CJREPO_PORT` 修改地址与端口。容器部署使用 `CJREPO_ADDRESS=0.0.0.0`，直接运行时仍默认只接受本机连接。存储目录默认为当前目录下的 `storage`，可通过 `CJREPO_STORAGE` 修改。设置 `CJREPO_PUBLISH_TOKEN` 后，发布请求必须携带相同的 `Authorization` 值。
+
+原生入口也会检查仓库基地址：`CJREPO_UPSTREAM`、Mirror 上游及 Sync 源/目标只能使用 HTTP(S) 基地址，拒绝内嵌凭据、查询参数、片段、反斜线、ASCII 控制/空白和 authority 中的百分号编码。认证使用 `CJREPO_UPSTREAM_TOKEN`、`CJREPO_SYNC_DESTINATION_TOKEN` 及 `CJREPO_SYNC_DESTINATION_READ_TOKEN`，不要写进 URL。非法地址的诊断只指出字段/角色，不回显地址值。原始空 `CJREPO_UPSTREAM` 仍关闭 Proxy；`/` 等非法相对地址不会被当成空配置。
 
 可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。
 
@@ -89,6 +93,8 @@ main.exe mirror-manifest https://upstream.example.com mirror.txt
 本地镜像索引只列出已下载并通过 SHA-256 校验的版本，不照搬上游的其他版本。制品先原子落盘，之后索引才公开该版本；重新访问已验证缓存时，还会离线清理旧版镜像可能留下的“有索引、无制品”条目。
 
 持续镜像清单可使用 `main.exe mirror-watch https://upstream.example.com mirror.txt 60`；末尾为 1–86400 秒的轮询间隔。每轮重新读取清单，新版本会镜像，已缓存版本跳过；失败轮次会在下一轮重试。用进程管理器托管此命令，停止进程即可停止轮询。
+
+Mirror/Sync 的单项、清单与 watcher 在处理缓存、读取清单或发起请求前校验地址；Sync 会先检查源和目标两者。地址配置错误直接以非零状态退出，watcher 不进入轮询；合法地址的网络请求失败仍按已有轮询规则重试。URL 校验与实际协议/连接错误是不同检查，不代表已完成所有 URI、TLS 或远端错误文本的审计。
 
 ## Repository Sync
 

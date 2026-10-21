@@ -2,6 +2,8 @@
 
 四组核心测试由同一个 Python 标准库运行器编排，Windows 与 Linux 共用夹具、断言、安全边界和清理逻辑；PowerShell 与 Bash 仅负责加载平台环境。Windows 一键部署是平台专属的第五组。
 
+如果希望先理解完整使用场景，见[连贯企业依赖演练](showcase/README.md)。一个入口串起同名公共高版本对照、私有命名空间保护、错误令牌阻断、上游停服、私有副本与离线来源解释，使用真实包和全新客户端缓存。它不替代四组回归或官方测试。
+
 ## Windows 全量入口
 
 在已经安装仓颉 SDK、stdx 和 Windows 构建工具的环境中，从项目根目录运行：
@@ -61,11 +63,13 @@ export CJREPOMESH_SERVER=/path/to/cjrepo
 
 ## 官方原版兼容性差分
 
-服务端发布中断、残留临时文件与仓间同步另有 [恢复专项](recovery/README.md)：
+服务端发布中断、残留临时文件、仓间同步与冷备份恢复另有 [恢复专项](recovery/README.md)：
 
 ```cmd
 python integration-tests\recovery\run.py
 python integration-tests\recovery\sync.py
+python integration-tests\recovery\backup.py --cjpm cjpm\target\release\bin\cjpm.exe
+python integration-tests\recovery\docker_backup.py --image cjrepomesh:local --cjpm cjpm\target\release\bin\cjpm.exe
 ```
 
 仓库配置类型校验有独立的 Python 标准库回归入口，使用已有 SDK 环境和增强版 cjpm；只访问临时本机 HTTP 夹具，不需要公共仓服务：
@@ -75,6 +79,14 @@ python integration-tests\compatibility\config_validation.py --cjpm cjpm\target\r
 ```
 
 它覆盖错误类型在网络请求前被拒绝、TOML 日期/时间不能冒充字符串、危险 URL 与历史来源记录的凭据回显阻断、合法独占路由和旧单仓缺省配置。
+
+服务端原生入口有独立 URL 矩阵，覆盖启动配置及 Mirror/Sync 的单项、清单、watcher、缓存路径：
+
+```cmd
+python integration-tests\compatibility\server_urls.py --server server\target\release\bin\main.exe
+```
+
+运行前加载匹配的 SDK/stdx 环境。96 项检查使用自建本机 Registry、唯一存储和隔离 HOME/USERPROFILE；非法输入应及时非零退出、输出不含地址值的诊断、Registry 未收到 HTTP 请求且已有存储文件不变。合法上游路径与令牌头有实际 HTTP 对照；HTTPS、IPv6 等仅检查服务启动，不当作 TLS/上游连接验收。默认服务端端口为 `39650`，可用 `--port` 覆盖，`--evidence-dir` 指定新的日志目录。成功只清理自建夹具，失败保留证据。
 
 多仓网络回退边界另用本机 HTTP 夹具验证；默认 14 项，加 `--include-timeout` 可覆盖真实客户端读取超时，额外耗时约 60 秒：
 
@@ -116,9 +128,11 @@ python3 integration-tests/compatibility/maple_smoke.py \
   --results-dir /path/to/test-results
 ```
 
-入口仅在临时副本中把 HTTP 状态与本地索引刷新用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；官方 Git 跟踪文件不变。Maple 对官方 HTTP 状态、三个配置、五个安装覆盖、十七个本地安装、四个卸载、两个更新错误配置和七个更新覆盖用例，共三十九个选定用例分别运行两版 cjpm，要求每版 `39/39 PASS`。本地安装、卸载和新增更新用例使用各自独立临时 `HOME`，且把其 `.cjpm/bin` 加入测试进程的 `PATH`，避免污染用户环境并使安装命令可被后续断言找到。本地索引刷新只访问 `127.0.0.1:39138`，入口检查测试端口释放。另外运行 `repository_archive_matrix`：它原样试跑会因官方夹具动态 gzip 时间戳偶发哈希不一致，入口只在测试副本中固定 gzip mtime 为 0，再要求两版各 `1/1 PASS`。结果日志和原始/稳定化测试服务脚本摘要保存在唯一的 `--results-dir/run-*` 中。稳定化矩阵不能表述为未经调整的官方用例通过；该入口也不代表完整 HLT/LLT。
+入口仅在临时副本中把 HTTP 状态与本地索引刷新用例的 `.sh`、`.toml`、`.cj` 行尾规范为 LF；官方 Git 跟踪文件不变。Maple 对官方 HTTP 状态、三个配置、五个安装覆盖、十七个本地安装、四个卸载、两个更新错误配置和七个更新覆盖用例，共三十九个选定用例分别运行两版 cjpm，要求每版 `39/39 PASS`。每次调用均隔离 `HOME`、`USERPROFILE`，并移除调用者的 `CJPM_CONFIG`；本地安装、卸载和新增更新用例还把其 `.cjpm/bin` 加入测试进程的 `PATH`，使安装命令可被后续断言找到。本地索引刷新只访问 `127.0.0.1:39138`，入口检查测试端口释放。另外运行 `repository_archive_matrix`：它原样试跑会因官方夹具动态 gzip 时间戳偶发哈希不一致，入口只在测试副本中固定 gzip mtime 为 0，再要求两版各 `1/1 PASS`。结果日志和原始/稳定化测试服务脚本摘要保存在唯一的 `--results-dir/run-*` 中。稳定化矩阵不能表述为未经调整的官方用例通过；该入口也不代表完整 HLT/LLT。
 
 另有 `integration-tests/compatibility/maple_local_bundle.py` 专门运行官方 `LLT/Tools/cjpm/CJNATIVE/repo/bundle` 下的 23 个本地打包用例。它先检查用例数量及命令未变，再逐例以隔离 `HOME` 对照原版和增强版，并将 46 份日志写到指定 `--results-dir`；不运行外部发布用例。参数为 `--framework`、`--bundle-suite`、`--test-config`、`--official-cjpm`、`--enhanced-cjpm`、`--results-dir`，路径含义与上述入口一致。
+
+同一入口可加 `--level HLT`，将 `--bundle-suite` 指向官方 `HLT/Tools/cjpm/repo/bundle`，其余工具参数仍使用官方 Linux cjpm 测试配置。当前快照先核对该目录共 101 个用例，从中选择 95 个离线打包用例；排除没有 Linux `EXEC` 的 `bundle_build_03/04/06`、单独生成二进制夹具的 `bundle_include_23/28`、含依赖查找的 `bundle_verify_03`。入口执行前检查所选命令和 TOML，拒绝远程地址、Git 仓库与依赖查找，不执行 HLT 的发布、下载或在线索引用例。每次运行保存 `selection.json`，包含级别、选择/排除清单、用例、配置及两版二进制摘要。95 个用例仅是 HLT bundle 离线子集，实际结果以日志为准，不等同于完整 HLT。
 
 同样可用 `maple_local_tree.py --tree-suite <官方 CJNATIVE/tree 目录>` 和 `maple_local_organization.py --organization-suite <官方 CJNATIVE/organization 目录>` 运行 17 个本地依赖树及 12 个本地组织名用例；其余参数与打包入口相同。三个入口分别检查用例数和执行命令，组织名入口还拒绝非本地依赖。它们只验证 cjpm 本地行为；Hosted 组织仓发布、解析和私有读取另由 `hosted-server/org-package`、`org-app`、`org-private-app` 夹具验证，Proxy 组织仓拉包和离线缓存由 `proxy/org-app` 验证，Mirror/Sync 组织仓由 `sync/org-manifest.txt` 与 `sync/org-app` 验证，不等同于完整 Maple。
 

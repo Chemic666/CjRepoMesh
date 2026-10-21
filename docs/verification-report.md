@@ -1,8 +1,134 @@
 # CjRepoMesh 验证记录与范围
 
-> 最近执行日期：2026-10-20
+> 最近执行日期：2026-10-21
+> 包含多批产物；最新服务端见首节，各历史节的“当前”只指该节产物，不将旧结果视为新二进制的重新验收。
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
 > 历史结论（2026-09-26）：在本地交付材料提交 `98e9f849` 上，从 Windows 工作区挂载路径真实重编译服务端并运行 Linux 四组，4/4 PASS、252.01 秒，随后 Docker Doctor 9/9。当时 Windows 原生构建被 Application Control 阻断；该限制不代表 2026-10-20 的实际环境。历史远端 HEAD、视频及 Maple 子集记录见各日期章节，不作为当前远端或最终产物的验收声明。
+
+## 2026-10-21 最新 Linux 恢复与 Docker 产物对齐
+
+在下节共享目录竞争修复后的同一 Linux Server（SHA-256 `1cea8eff24169a32695d2071518ac3184ad7f2c7e7fbbf3fa9186d27ec10b513`）上，文件存储冷备份恢复 **10/10 PASS，27 秒**。耗时由 Bash 整秒计时，不与前节精度为小数的记录混用。实际核对停服前后文件集合和摘要、损坏及缺失备份拒绝、不同目录恢复、默认/组织包全新缓存构建、重复版本拒绝、新版本发布及再次重启；原件和备份不变。没有运行 Windows 仓颉程序或更改其安全设置。
+
+Docker Desktop 启动后，仅使用本地已有候选运行时镜像，将上述 Linux Server 放入独立 `cjrepomesh:delivery-20261021`，未覆盖默认镜像、正式配置或已有卷。新镜像 ID 为 `sha256:7d5a905a74d8286802ce7ad87d818f7421e238a2e2cc961a03cdc2dcf6119805`。构建前后均核对基础镜像 ID `sha256:fc24453eb2a0212439ec21099adf56656b38644f62e180b35e520bf137fe0fef`，运行中二进制摘要与 Linux Server 一致。
+
+- 两种非法上游地址（内嵌凭据、单斜杠）在容器内退出 2，诊断不回显测试凭据；
+- 项目现有部署脚本中的 Docker Doctor **9/9 PASS**；
+- 独立 Compose 项目验证私有读取、组织隔离、授权发布、重建后索引/制品字节及摘要保留、重复发布 409，结束只回收本次自建项目和卷。
+
+Docker 持久化检查沿用 `integration-tests/docker_persistence.py` 的合成字节探针，**不是实际 cjpm 构建**；本次真实包恢复与构建在上面的 Linux 文件目录演练完成。没有复跑此前 Docker 新卷冷备份 9/9，不把旧结果算到新镜像上。
+
+首次镜像构建脚本将本地 image ID 写进 FROM，BuildKit 将其解释为仓库名，元数据查找被拒绝；未成功下载镜像层。纠正为先核对已有本地标签的 ID、使用该标签并在构建后再次核对；成功构建设置 `--pull=false --network=none`。失败日志保留，没有弱化产品断言或修改部署源码。
+
+证据位于外层 `test-runs/delivery-20261021/`：`linux-backup.log`、`linux-inputs-sha256.txt`、`linux-backup-details/`、`docker-image.json`、`docker-build.log`、`docker-doctor.log`、`docker-run.log`、运行中二进制摘要及两份首次失败日志。产物、脚本和结果汇总另存 `verified-results.json`。本次只补充当前产物验收及文档，不新增备份系统，也没有 Commit/Push。
+
+## 2026-10-21 连贯场景与共享父目录竞争修复
+
+新增 `integration-tests/showcase/run.py`，把独占路由、认证阻断、Proxy 离线缓存、私有副本和离线来源解释串成同一条流程。五份真实包由已有增强版 cjpm 打包并核对归档摘要；每个消费者使用新目录、本地配置、独立缓存、无 lockfile 和无构建产物，HOME/USERPROFILE 也为测试专用。Python 的本机 HTTP 不读取宿主代理配置。
+
+首次 Windows 演练在冷 Proxy 下载两个不同组织的包时失败；第二次保留的网关 502 响应明确包含递归建目录 `File exists`。原来不同包各持自己的包锁，但共享祖先目录的 `exists` / recursive mkdir 没有共同保护。修复将 `ensureParent` 移入 `storage.cj`，用一个短时进程内锁保护目录创建；审查又补齐 Hosted 首次发布的两处直接 mkdir。下载与文件写入仍不占目录锁，包锁与目录锁的获取顺序固定；不支持多个服务进程共用同一存储。
+
+| 最终连贯演练 | 检查点 | 墙钟耗时 |
+| --- | ---: | ---: |
+| Windows | **7/7 PASS** | 26.27s |
+| Linux | **7/7 PASS** | 42.66s |
+
+共享目录辅助函数影响 Hosted、Proxy 与 Mirror/Sync，最终产物的相关三组回归另行执行：
+
+| 回归 | Windows | Linux |
+| --- | ---: | ---: |
+| Hosted | PASS 20.55s | PASS 30.74s |
+| Proxy（含不同包不等待慢上游） | PASS 21.84s | PASS 32.26s |
+| Mirror / Sync（含组织与 watcher） | PASS 14.30s | PASS 15.55s |
+| 三组总计 | **3/3，56.78s** | **3/3，78.57s** |
+
+七项分别是无路由对照、独占保护、错误令牌、上游停服、同步副本、副本独立构建、所有仓停止后 recorded explain。对照使用**同一个增强客户端**，不是官方原版差分。保护阶段审计公共网关（包括 Proxy 缓存命中路径），断言没有内部命名空间请求；401 阶段公共入口请求数不变。Sync 的两个源包第一次为 SYNCED、重复为 SKIP，目标匿名读取 401、授权读取逐字节匹配。最后明确停止所有五个服务端口，核对 explain 的包名、版本、仓库、地址和摘要，并确认来源文件未改写。准备阶段并发发布两个组织的真实包，冷 Proxy 首次构建并行拉取两包。
+
+| 本次产物 | SHA-256 |
+| --- | --- |
+| Windows cjpm（未改） | `20f3ce0c534c981a755388bc5b4b73e79e9e07a83d76336391130fb10570355d` |
+| Windows Server（新建） | `533158e00bdd391b708564aa11927f6b08a8114f82431eab7542fa9c45b308fe` |
+| Linux cjpm（未改） | `7e29eaa7e02885ba6d9ae998a6d2787170db5b17b28741bb61d613e02b330abf` |
+| Linux Server（新建） | `1cea8eff24169a32695d2071518ac3184ad7f2c7e7fbbf3fa9186d27ec10b513` |
+| 两平台相同演练脚本 | `96fb41e400a0716205fef32ad9df627674911e196d7cb85ac293c9e506e11b66` |
+
+固定 140 份服务端/测试文件后，在全新 Linux 验证目录逐份核对摘要再构建；`source.tar` SHA-256 为 `265738cb4bb25356c69db04ab1fc3153879cfa1319219910222c74c2928eedcb`。说明文档随后补充，但运行器和产品源码保持该批固定内容；归档内说明文档的变化另存摘要。证据在外层 `test-runs/enterprise-showcase-20261021/`：两个早期 Windows 失败目录、`windows-final/` 与 `linux-final/` 的输入/归档摘要、逐阶段结果、原始命令及 HTTP 请求日志，另有两平台构建与相关回归输出。原始日志、失败 JSON 可能含本机路径，公开前需审阅。
+
+Windows 运行结束后，参赛者报告安全中心反复询问是否允许 `std.testrunner.exe`。当前没有取得完整提示/路径，也未找到可匹配的 Defender/Code Integrity 事件，原因仍未核实；未将文件加入允许列表、未修改防护设置，停止继续 Windows 原生测试，后续验证使用现有 Linux 环境。已记录通过结果不等于已解决该环境提示。
+
+这是本机合成场景，“离线”是指定源服务停止，并非操作系统断网。没有重跑完整 Windows 五组、完整 Maple 或新 Docker 镜像，不把上一服务端的冷备份/Docker记录视为本次重新验收。成果在本地，尚未 Commit/Push。
+
+## 2026-10-20 原生服务端与 Mirror/Sync URL 安全边界
+
+部署脚本的 URL 保护未覆盖直接执行服务端。旧产物会在启动日志输出带凭据的 `CJREPO_UPSTREAM`，Mirror/Sync 也未统一检查源/目标；非法目标仍可能先请求源，watcher 会持续重试，缓存 Mirror 可跳过地址检查并修改索引。新真实进程矩阵在旧 Windows Server 上为 **5/95**（仅五个合法地址对照通过）。
+
+新增 `server/src/registry_url.cj`，复用客户端同等的小型词法安全边界：只允许 HTTP(S) 前缀、非空且无 userinfo/百分号的 authority，拒绝查询、片段、反斜线和 ASCII 控制/空白。启动、单项、清单和 watcher 均在后续操作前检查地址，Sync 先检查源与目标；错误只报告角色，不回显值。独立审查另发现规范化可能将原始 `/` 裁为空：新增回归后中间版本 **95/96**，改为先检查原值再处理尾斜杠，原始空值仍关闭 Proxy。复核无新增阻塞项。
+
+最终固定 137 个服务端/测试文件，归档 SHA-256 为 `e192f8d90b733ed2e274d11dd6abd43ce339071ee72eaea8d070f11ff832318d`；Linux 在新的验证目录核对全部摘要后构建，客户端未修改。
+
+| 验证 | Windows | Linux |
+| --- | ---: | ---: |
+| 原生 URL 矩阵 | **96/96 PASS** | **96/96 PASS** |
+| Hosted 真实包集成 | PASS 16.69s | PASS 37.20s |
+| Proxy 真实包集成 | PASS 23.88s | PASS 36.05s |
+| Mirror / Sync 真实集成（含清单与 watcher） | PASS 15.50s | PASS 16.87s |
+| 三组编排合计 | **3/3，56.22s** | **3/3，90.15s** |
+
+矩阵的 91 项拒绝检查覆盖启动、源/目标、清单、watch、空命令地址、缓存 Mirror 以及单斜杠配置，断言及时非零退出、安全诊断、无测试凭据回显、夹具未收到 HTTP 请求和既有存储文件摘要不变。五项合法对照中，只有 HTTP 路径/令牌头实际访问上游；HTTPS、IPv6、大小写 scheme 和编码路径中的相应检查仅证明服务启动接受配置，不证明其 TLS/连接兼容性。该词法边界也不等于完整 URI 语法、所有 Unicode 空白或远端错误文本审计；不支持 authority 百分号形式的 IPv6 zone identifier。
+
+| 产物 | SHA-256 |
+| --- | --- |
+| 新 Windows Server | `6c475c54f04b8252f92c1039629953acf91f51fa6a1ee0fdec7b260bd7f8c55b` |
+| 新 Linux Server | `09d03bf5b9bf5dab9ff0631e02fd05c61b3ccdd5a9883a7b85e5951f6a84dc2c` |
+
+基于已有本地候选运行时镜像，只替换上述 Linux Server，禁用拉取和构建网络，创建独立 `cjrepomesh:native-urls-20261020`，ID 为 `sha256:6c8b677e1d4c41ba0dda376719efcf48a240c725fb8d75bdbfcc5bd3c9659861`。容器内带凭据/单斜杠两个配置均安全退出 2；Doctor **9/9 PASS**，私有读取、组织隔离、重建持久化及重复 409 通过，运行中二进制摘要与新 Linux Server 相同。没有覆盖默认镜像、正式 `.env` 或业务卷。
+
+原始证据在外层 `test-runs/server-urls-20261020/`：基线与单斜杠失败日志、两平台 `*-final-urls.log` / `*-final-details/results.json`、`*-core.log`、新旧二进制摘要、`final-source.tar` / `final-source-sha256.json` 及 Docker 构建/Doctor/持久化输出。收口核对生产/测试脚本未再变化；归档内后补的一份使用说明另存 `documentation-overlay-sha256.json`，结果核对汇总为 `verified-results.json`。本轮未重跑客户端 Multi-repository、完整 Windows 五组、冷备份与其他恢复专项或完整 Maple；此前这些结果保留其原产物边界。变更仍在本地，尚未 Commit/Push。
+
+## 2026-10-20 Maple 调用者目录隔离与离线 HLT 子集
+
+测试入口原先只对部分用例设置临时 HOME。新增回归使用一个真实 Python 子进程，将合成的“调用者目录”作为 HOME/USERPROFILE，检测子进程是否写入该目录；旧入口 **FAIL**，证实了配置和写入隔离缺口。这里使用的是测试自建目录，没有操作真实个人文件。
+
+`maple_smoke.run_case` 现在每例均使用独立 HOME/USERPROFILE，并移除调用者 `CJPM_CONFIG`；需要运行本地安装命令的用例继续将相应 `.cjpm/bin` 加入 PATH。修复后 Windows 与 Linux 隔离/端口单元均 **3/3 PASS**。该单元中的探针不是官方 Maple 用例；随后实际调用官方框架，原版和增强版各完成配置 **3/3**、HTTP 状态 **1/1 PASS**。未因此重复整套 39 项或产品核心集成。
+
+证据为外层 `test-runs/maple-isolation-baseline-20261020.log`、`maple-isolation-fixed-20261020.log`，以及 `test-runs/maple-offline-hlt-20261020/` 的 `linux-unit.log`、`config-http-summary.log`、`config-http/` 与 `inputs-sha256.txt`。客户端二进制沿用下文当前候选与官方基线，未修改生产源码。
+
+继续扩展现有 `maple_local_bundle.py --level HLT`：对官方 `HLT/Tools/cjpm/repo/bundle` 的 101 个 `.info` 先做本地操作检查，选择其中 95 个。排除 `bundle_build_03/04/06`（没有 Linux EXEC）、`bundle_include_23/28`（另有 Python 生成夹具步骤）与 `bundle_verify_03`（含依赖查找），没有运行发布、下载或在线索引用例。使用既有 Maple 框架及官方 LLT cjpm Linux 工具配置执行这些 HLT 来源用例，不改其内容和断言，不宣称完整 HLT 环境验收。
+
+| 二进制 | 所选 HLT 打包用例 | 逐例耗时之和 |
+| --- | ---: | ---: |
+| 官方原版 `2f624cbe…` | **95/95 PASS** | 274.08s |
+| 当前增强版 `7e29eaa7…` | **95/95 PASS** | 281.95s |
+
+结果位于 `test-runs/maple-offline-hlt-20261020/hlt/bundle-1792504961-9939b607/`，含 `selection.json` 与 190 份逐例 `runner.log`。收口时核对每份真实 Maple 日志的 `Total: 1, PASS: 1, FAIL: 0`、对应二进制摘要和原始用例摘要，另保存 `results-summary.json` 与各日志 SHA-256。耗时为日志记录的逐例合计，未当作整批墙钟时长；这 95 个用例不与历史 LLT 子集相加冒充全量。完整 HLT/LLT 仍未执行。
+
+## 2026-10-20 Docker 卷冷备份与异常证据保留
+
+新增 `integration-tests/recovery/docker_backup.py`，使用本地已有候选镜像（固定 ID，不拉取），由当前 Windows cjpm 打包真实默认/命名组织包。最终演练 **9/9 PASS，25.16s**：停源容器后只读挂载其唯一测试卷，导出完整 tar；校验路径/类型及文件摘要后恢复到另一个新卷，启动前再次对比文件集合和 SHA-256。恢复容器通过私有读取、两个全新缓存消费者构建、重复版本 409、新版本发布及重启读取；源卷与备份归档保持不变。仅回收本次自建容器与带匹配标记的卷，没有操作正式 Compose 项目。
+
+独立审查指出失败时清理容器会丢失异常日志。修复为删除前保存完整 inspect 及含 stderr 的日志，捕获失败时尝试停止并保留容器。另在真实测试容器已启动后，注入健康检查失败：演练按预期返回 1，校验器确认诊断文件已经保存、容器已移除而两个测试卷保留，随后按本次唯一标记显式回收这两个测试卷；该故障注入检查 **PASS**，不把故意的 `0/9` 当作产品功能失败或成功验收。
+
+- 镜像 ID：`sha256:fc24453eb2a0212439ec21099adf56656b38644f62e180b35e520bf137fe0fef`；容器内 Server SHA-256：`d0d7fd99f568a7006903b8d43f4fa31dc7c60e39d014ddad831bdec4c76862e2`，与上一批 Linux 候选一致。
+- Windows cjpm 沿用下表产物；最终演练脚本 SHA-256：`ca8e1aaef9d81b53a337ebff28221ee602a0bc1c5c0c15b2984219faa796a0e5`。
+- 原始证据：外层 `test-runs/docker-cold-backup-20261020/` 的 `final.log`、`final-result.json`、`final-source-sha256.json`、`final-details/`（含合成包备份、清单、运行时身份及消费者日志），以及 `failure-injection.log`、`failure-details/`。
+
+这里只验证隔离卷的停服备份恢复，不宣称在线快照、自动调度、业务切换或断电持久性；没有修改生产源码或重建候选二进制。
+
+## 2026-10-20 文件存储冷备份恢复演练
+
+在已交付的 AtomGit `d99d51ee` / GitHub `7aee7732` 等内容源码基础上，新增 `integration-tests/recovery/backup.py`；没有修改生产源码或重建二进制。两端提交历史不同、文件树相同，GitHub 后续交付继续使用 noreply 分支。本批测试与文档尚未 Commit/Push。
+
+| 平台 | 检查点 | 耗时 | 产物 |
+| --- | ---: | ---: | --- |
+| Windows | **10/10 PASS** | 16.33s | 下文当前候选表的 Windows cjpm / Server |
+| Linux | **10/10 PASS** | 29.05s | 下文当前候选表的 Linux cjpm / Server |
+
+演练实际打包三个初始制品（默认组织两个版本、命名组织一个版本），授权发布并校验读取权限。停止源实例后，对完整存储复制和逐文件 SHA-256 校验；故意损坏制品或移除索引的两个副本均被测试清单比较发现。将原存储改为离线路径，从备份复制到新目录启动，分别用全新缓存的两个消费者下载、构建和运行。恢复实例拒绝重复版本，接受第四个真实制品，重启后仍能读取全部版本；备份与离线原件保持不变。成功后只清理测试自有进程与临时存储。
+
+最终证据保存在外层 `test-runs/cold-backup-20261020-isolated/`：`windows.log`、`windows-result.json`、`linux.log`、两平台 `*-details/` 的打包/服务/消费者日志及 `backup-manifest.json`。脚本两平台摘要相同，为 `a28ffa6db14fa56a9332f8425ea1661d331abfdc0aea8cda133b237e804f844e`；Windows 输入摘要另存 `windows-input-sha256.json`，Linux 输入摘要在 `linux.log`。
+
+初版两平台演练虽通过，独立审查发现打包夹具可能读取用户级 cjpm 配置。修正为隔离 HOME/USERPROFILE，并给每个夹具写本地仓库/缓存配置后，两平台重新执行并得到上表结果；复核未发现新的必须修复问题。初版证据保留在 `test-runs/cold-backup-20261020/`，不作为最终脚本验收；其中首次 WSL 启动因外层参数转义失败，尚未进入测试，原输出保留为 `linux-launch-preflight.log`。
+
+本批仅补齐停服文件存储备份恢复的验证，不等于自动备份产品、Docker 卷恢复、在线快照、业务切换或断电持久性验收。完整 HLT/LLT 仍未执行；没有重复运行未受影响的核心套件。
 
 ## 2026-10-20 当前候选的固定源码验收
 

@@ -78,6 +78,20 @@ $upstreamToken = Read-Host "Upstream token (optional)" -AsSecureString
 
 `-PurgeData` 不可恢复，应只用于测试环境。
 
+## 冷备份与恢复验证
+
+包数据位于 `cjrepo-data` 命名卷，镜像或容器重建不等于数据备份。实际备份前，应停止本实例及写入该卷的 watcher，确认卷名后导出完整的 `index`、`artifacts` 和组织子目录；凭据和部署参数另行保管。恢复时使用新卷，不覆盖原卷，恢复后核对文件 SHA-256、私有读取及客户端构建，再安排业务切换。不要让两个服务进程同时写同一卷。
+
+仓库提供独立的冷备份演练入口，使用已有本地镜像和真实 cjpm 包：
+
+```cmd
+python integration-tests\recovery\docker_backup.py --image cjrepomesh:local --cjpm cjpm\target\release\bin\cjpm.exe
+```
+
+它只创建带唯一标记的测试卷和容器，不读取当前 Compose 项目的 `.env` 或操作其数据卷，不拉取镜像。源服务停止后，以只读卷挂载导出 tar，并恢复到另一个新卷；核对完整文件集合和 SHA-256，再验证全新缓存构建、再次发布和重启读取。结束后只清理自己创建的资源；失败先保存容器日志和状态，再清理容器、保留测试卷。可用 `--evidence-dir <新目录>` 保留日志、清单及合成包的备份归档。
+
+该入口验证部署流程，不能对现有业务卷直接执行备份或恢复。当前已验证的镜像、产物与结果见 [验证报告](../../docs/verification-report.md)。在线快照、自动备份调度、业务切换和断电持久性不在通过范围内。
+
 ## 安全边界
 
 - 容器内监听 `0.0.0.0` 仅用于 Docker 网络；宿主机发布范围由 Compose 端口映射决定；

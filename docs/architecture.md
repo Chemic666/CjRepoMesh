@@ -141,7 +141,7 @@ storage/
 | 模块 | 主要位置 | 职责 |
 | --- | --- | --- |
 | 配置模型 | `cjpm/src/config/central_repository.cj` | 兼容旧单仓配置，解析命名仓库与路由 |
-| 多仓客户端 | `cjpm/src/implement/central_repository.cj` | 候选聚合、优先级、回退、认证和下载 |
+| 多仓客户端 | `cjpm/src/implement/depot.cj`、`central_repository.cj`、`dep_engine.cj` | 仓库路由、认证和下载，聚合各仓候选并保留最终版本来源 |
 | 原依赖求解 | `cjpm/src/implement/dep_engine.cj` | 保持官方版本选择与冲突处理语义 |
 | Explain / Doctor | `cjpm/src/command/repo.cj`、`cjpm/src/implement/repo.cj` | 解释真实决策和探测仓库状态 |
 | 来源记录 | `cjpm/src/implement/provenance.cj` | 原子持久化最终来源和校验和 |
@@ -155,6 +155,7 @@ storage/
 
 - Hosted 与 Proxy 支持默认仓及 `?organization=<组织名>`，按组织分别存放索引和制品，并拒绝其他查询参数或组织身份不匹配，避免别名到默认仓；Mirror、Sync 的命令与清单可用 `组织名::包名` 选择组织仓；读取鉴权可通过 `CJREPO_READ_TOKEN` 显式启用，默认仍公开读取；
 - 发布和代理缓存填充使用固定 256 个锁分片，按仓库、组织和包名定位；同包串行，不同包通常并行，哈希碰撞时仍会串行，且锁对象数量有界；
+- 递归创建共享父目录另用一个进程内短时锁，Hosted、Proxy、Mirror/Sync 统一调用；锁内不下载或写制品，不支持多进程共用存储目录；
 - Mirror/Sync 已支持显式批量清单与单进程定时轮询，失败项下轮重试；尚无持久化游标、字节级断点续传和多实例协调；
 - Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与四组共享核心回归、Docker Compose 真实发布和容器重建持久化均已验证；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT，因此不能宣称通过全部官方回归；

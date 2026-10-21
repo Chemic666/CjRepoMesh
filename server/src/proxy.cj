@@ -226,13 +226,6 @@ func jsonString(object: JsonObject, field: String): String {
     return value.asString().getValue()
 }
 
-func ensureParent(path: Path): Unit {
-    let parent = path.parent
-    if (!exists(parent)) {
-        Directory.create(parent, recursive: true)
-    }
-}
-
 private func proxyResponse(context: HttpContext, status: UInt16, body: Array<UInt8>): Unit {
     context.responseBuilder
         .status(status)
