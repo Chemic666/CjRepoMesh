@@ -4,7 +4,9 @@
 
 2026-10-21 客户端可靠性、离线交付及开发者/CI示例已同步至AtomGit和GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。参赛者已授权后续阶段验收后自主双端推送；实际产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
 
-最新离线查看修订 `6a7b3acb…` 支持无SDK执行 `repo explain <包名> --recorded`，读取当前目录已有来源记录；13项检查通过，保留配置、格式与安全地址拒绝，文件集合与字节不变且本机夹具GET为0。其他在线与构建命令仍需SDK。各候选仅按实际复验范围记账，下面af35综合验收不移算给新产物。
+当前固定客户端 `6a7b3acb…` 已完成[所列Linux候选范围的综合验收](docs/candidate-acceptance.md)：核心4/4、两组增量各7/7、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38、就绪调整1、归档稳定化1、离线HLT95分别通过。无SDK来源查看13项、配置40项、运行8项及包接收为已核对的同一二进制有效证据，本轮未重复执行；完整Maple、Windows及跨主机验收仍未完成。
+
+此客户端支持无SDK执行 `repo explain <包名> --recorded`，读取当前目录已有来源记录，保留配置、格式和安全地址拒绝；其他在线与构建命令仍需SDK。当前交付包不变，各历史候选结果分别保留。
 
 前一c12运行状态修订使应用失败时 `cjpm run` 返回1，成功仍为0，不再错误报告完成；真实8项及多仓客户端组通过。该修复保留在新源码，最新实际回归见[验证记录](docs/verification-report.md)。
 
@@ -220,9 +222,9 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
 
-最近完成官方兼容检查的固定客户端 `af3516e8…` 与原版单仓差分 **7/7 PASS**；增强版Maple **38项原断言通过**，刷新就绪调整 **1/1** 及归档稳定化 **1/1** 分列。原刷新失败保留，不称39项未经调整通过；该批Maple只执行增强版，原版仍为历史结果。c12运行状态修订未重跑此集合；旧06ae的HLT95/95及历史本地打包、依赖树、组织名和workspace子集，不移算给新产物或相加宣称完整覆盖。产物摘要、实际日志及边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+当前固定客户端6a7与官方原版单仓差分 **7/7 PASS**；增强版Maple **原断言38项、就绪调整1项、归档稳定化1项、HLT离线95/101** 分别通过，共113份真实调用日志。原刷新失败保留，不称39项未经调整通过；本轮Maple只执行增强版，完整HLT/LLT仍未完成。身份和本轮新执行/引用的区别见[固定候选验收清单](docs/candidate-acceptance.md)，详情见[验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md)与[Docker历史记录](docs/docker-verification.md)。
 
-历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批均非当前af35的复验，也不代表完整HLT/LLT。
+历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批仍为各自历史产物记录，不移算为本轮6a7执行，也不代表完整HLT/LLT。
 
 上述核心回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。正式视频和签字 PDF 等材料已由参赛者完成提交，状态见 [提交检查表](docs/submission-checklist.md)；另保留 [早期可编辑技术答辩参考稿](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)。
 

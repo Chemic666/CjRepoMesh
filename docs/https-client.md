@@ -47,7 +47,7 @@ python3 integration-tests/compatibility/tls_identity.py \
 
 ## 当前证据
 
-后续增量链接修复候选 `af3516e8035b8bebf779cb5ea0fcb163138914893cbc17e16419e7ece82c46e1` 已重新执行同一15项HTTPS身份/跳转回归，**15/15 PASS**。实际日志及固定产物见[验证报告](verification-report.md)首节，下面保留HTTPS修复本身的历史对照。
+当前固定候选 `6a7b3acb280bd849501d7e43788b9e165d2b8e54528c5762ad7f646314f46112` 已在综合验收中重新执行同一15项HTTPS身份/跳转回归，**15/15 PASS**。先前af35同脚本15/15仍保留历史身份；当前结果和其他新执行范围见[统一清单](candidate-acceptance.md)及[验证报告](verification-report.md)首节。下面保留HTTPS修复本身的历史对照。
 
 名称修复阶段的同脚本旧客户端 **7/12**，修复客户端 `14d6f505…` **12/12、14.25秒**。扩展跳转用例后，该客户端实际 **12/15**：发布包体被307转发到本机明文HTTP目标，认证头已被移除；三项跳转检查均未通过。禁止自动跳转的新Linux客户端 **15/15、18.68秒**，SHA-256为 `06ae2c1b7a058502f531da257c6ff8d1f316dbe57a599cab1421e1d9e8acb458`。旧/新15项使用同一脚本摘要；源码、各阶段失败证据和同产物综合回归见[验证报告](verification-report.md)。
 
