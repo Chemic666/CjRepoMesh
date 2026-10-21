@@ -1,5 +1,13 @@
 # CjRepoMesh 交付记录
 
+## 2026-10-21 无SDK离线来源查看批次
+
+按持续授权完成普通快进推送并查询两端main确认：AtomGit代码提交 `c38cd29fb4ec3f9970b5c17ac2676638dbbf2c1a`，GitHub代码提交 `b8beefb4ab2a58a36b373ee63ff2085d3956fb0d`，文件树同为 `a2aede2b1af87efcab63247de8df524b3f6264a4`。
+
+12文件包含精确recorded命令跳过编译器预检、真实无SDK回归和使用/验证说明。6a7候选原始入口及包内无SDK各13/13、配置40/40、运行状态8/8通过；其他核心组、HTTPS和官方集合未在本候选重跑。原配置及记录安全检查保留，证据边界见[验证记录](verification-report.md)首节。SDK、交付归档、原始日志和凭据未上传，旧包未覆盖，没有origin推送、强推或Release。
+
+本页为代码后的文档补记，因此最终HEAD可晚于上述代码提交。
+
 ## 2026-10-21 运行状态修复批次
 
 按项目持续授权完成Commit与两端main普通快进Push，并查询远端确认：AtomGit代码提交 `92abd10809f4d247682dc3c1db55ca5403e466fe`，GitHub代码提交 `5f27ff8416001676e1473cdb8ea1886cb01fa9f8`，文件树同为 `5dbe6fe3876382e12929895738b0311359d480f4`。两端保留独立历史及noreply身份，未向origin推送。
