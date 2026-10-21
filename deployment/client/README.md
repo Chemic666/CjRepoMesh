@@ -15,20 +15,28 @@ python3 verify.py
 ./run.sh --help
 ```
 
+离线来源查看修订后的包也可无SDK读取项目目录已有记录：
+
+```bash
+/path/to/client-bundle/run.sh repo explain meshdep --recorded
+```
+
+命令从当前目录的 `cjpm-provenance.json` 读取，不联系记录中的仓库，不更改记录；只读副本亦可。默认/项目仓库配置仍须有效，保留原配置错误拒绝、记录格式及安全地址校验。它展示已记录的来源和摘要，不重新验证包文件，也不能证明构建成功。旧c12及此前客户端仍需SDK才能执行此命令，应核对产物摘要。
+
 启动器每次先核对固定文件的大小、SHA-256及二进制平台，再为本进程设置运行库路径并直接执行cjpm，保留参数和退出码。不会写入系统PATH、系统动态库配置或证书存储。不要只把run.sh复制到别处；需要通过完整路径调用它。
 
 清单能发现传输损坏，不能独立证明发行者身份；核对可信渠道提供的清单摘要。若改动了包内文件，应重新取得经过验证的完整交付包，不应修改清单来忽略损坏。
 
 ## 开发者与CI使用
 
-文件校验和 `--help` 不需要完整SDK。现有cjpm在处理大多数命令前统一查找编译器，包括 `-v`、配置诊断及已有来源记录解释，因此这些命令仍需事先加载匹配SDK，不能把本包说成完全脱离SDK的独立客户端。编译/运行项目、`bundle`、测试和lint也需要完整工具链及stdx。当前项目固定验证SDK1.1.3、stdx1.1.3.1；本包不会下载它们，缺少SDK时保留真实失败，不伪造编译器输出。
+文件校验、`--help` 及精确的 `repo explain <包名> --recorded` 不需要完整SDK。其他命令包括 `-v`、在线解释、仓库诊断、编译/运行、`bundle`、测试和lint仍需要匹配工具链及stdx，不能把本包说成完全脱离SDK的独立客户端。当前项目固定验证SDK1.1.3、stdx1.1.3.1；本包不会下载它们，缺少SDK时保留真实失败，不伪造编译器输出。
 
 在已加载工具链的任务环境中，从项目目录通过交付包的完整路径调用：
 
 ```bash
 /path/to/client-bundle/run.sh repo doctor
 /path/to/client-bundle/run.sh build
-/path/to/client-bundle/run.sh repo explain --recorded
+/path/to/client-bundle/run.sh repo explain company::teamhello --recorded
 ```
 
 读取与发布凭据由受保护的任务环境注入，项目配置只用 `token-env` 引用；每个任务使用自己的HOME和缓存。发布任务用发布令牌，消费任务只用读取令牌。不要将凭据写进本包、URL、命令参数或提交到仓库。

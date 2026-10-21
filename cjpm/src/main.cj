@@ -24,7 +24,9 @@ main(): Int64 {
             return 0
         }
 
-        findCjc()
+        if (!isRecordedRepositoryExplain(cmdHandler)) {
+            findCjc()
+        }
 
         if (lackConfigInfo()) {
             return 1

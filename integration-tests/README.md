@@ -128,6 +128,15 @@ python3 integration-tests/compatibility/cache_identity.py --cjpm /path/to/enhanc
 
 Linux增强客户端的独立交付入口见[客户端交付说明](../deployment/client/README.md)。Python合成检查为 `python -m unittest discover -s integration-tests/deployment -p test_client_bundle.py -v`，不执行合成ELF；接收方大部分cjpm命令仍需已加载匹配SDK。
 
+离线来源查看有独立的Linux无SDK验收：
+
+```bash
+python3 integration-tests/compatibility/recorded_without_sdk.py --cjpm /path/to/enhanced/cjpm \
+  --library-path /path/to/matching/runtime/lib --evidence-dir /path/to/new-recorded-evidence
+```
+
+使用完整交付包时，`--cjpm` 指向 `run.sh`，省略 `--library-path`。入口为子进程只保留标准系统PATH和独立HOME，确认cjc不可发现，不传SDK环境；raw二进制仅提供匹配运行库路径。13项覆盖默认/组织包、只读记录、配置错误、缺失/损坏/未知格式、不安全地址、包名及在线/构建/运行仍需SDK的对照；逐项核对测试目录文件集合和字节未变，记录地址指向本机HTTP计数夹具且GET请求数须为0。它只验证读取记录，不把记录当成真实构建证明；当前Windows仓颉未执行。
+
 `cjpm run` 的失败状态另有八项真实程序回归：
 
 ```bash

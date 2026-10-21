@@ -17,6 +17,14 @@ Examples:
   cjpm repo explain meshdep
   cjpm repo explain company::auth"""
 
+// Stored provenance inspection does not invoke the compiler or resolve packages.
+// Keep the match exact so online/invalid command forms retain normal preflight.
+public func isRecordedRepositoryExplain(handler: Handle): Bool {
+    let args = handler.arguments
+    return handler.cmdName == "repo" && args.size == 3 &&
+        args[0] == "explain" && args[2] == "--recorded"
+}
+
 class RepoCommand <: Handle {
     init(args: Array<String>) {
         this.cmdName = args[0]
