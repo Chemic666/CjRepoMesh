@@ -1,0 +1,35 @@
+# CjRepoMesh 本批交付记录
+
+日期：2026-10-21。参赛者已授权本批 Commit 与双端 Push，以下代码提交已普通快进推送，并通过匿名查询两端 `main` 确认。
+
+| 位置 | 已发布代码提交 |
+| --- | --- |
+| [AtomGit 参赛仓](https://atomgit.com/Chemic666/CjRepoMesh) | `2e19080c9dddadc27b0f80e48aad399e664f9c9a` |
+| [GitHub 镜像](https://github.com/Chemic666/CjRepoMesh) | `da682c7f16329774027b4b007482c7a0e60ec947` |
+
+两份代码提交的文件树均为 `37523fd91ffa33b7df3f310d87cc3fdf215b798d`，文件内容一致。GitHub 沿用独立 noreply 历史；本批作者及提交邮箱均为既有 GitHub noreply 地址，没有合入 AtomGit 的旧私密邮箱提交历史。未向上游 `origin` 推送，未强推、建 PR 或发布 Release。
+
+本页及随后引用它的状态更新属于代码后的纯文档提交，因此分支最终 HEAD 可以晚于表中代码提交。历史报告中“尚未 Commit/Push”描述的是当时验证时点，当前发布状态以本页和实际分支历史为准。
+
+## 本批内容
+
+29 个文件包含原生服务端 URL 检查、Hosted/Proxy/Mirror/Sync 共享父目录创建保护、文件目录与 Docker 卷冷备份演练、Maple 调用者目录隔离，以及七阶段连贯场景和使用说明。没有提交 SDK、二进制、缓存、原始日志、凭据或私有签字材料。
+
+| 最新目录并发修复产物的验证 | 实际结果 |
+| --- | --- |
+| Windows / Linux 七阶段连贯场景 | 各 7/7，26.27s / 42.66s |
+| Windows / Linux Hosted、Proxy、Mirror/Sync 三组 | 各 3/3，56.78s / 78.57s |
+| 最新 Linux 文件目录恢复 | 10/10，整秒计时 27s，含真实包与新缓存构建 |
+| 匹配 Linux Server 的独立 Docker 镜像 | Doctor 9/9、两项非法地址拒绝、私有组织仓重建持久化通过 |
+
+Docker 镜像为 `cjrepomesh:delivery-20261021`，ID `sha256:7d5a905a74d8286802ce7ad87d818f7421e238a2e2cc961a03cdc2dcf6119805`；运行中服务端 SHA-256 与已验证 Linux Server 一致，为 `1cea8eff24169a32695d2071518ac3184ad7f2c7e7fbbf3fa9186d27ec10b513`。这是本地验证镜像，不是公开镜像仓或正式 Release。
+
+URL 矩阵、Maple 子集及此前 Docker 卷恢复有各自记录的产物边界，不把旧结果当作最新二进制的重跑。完整说明、二进制摘要和证据位置见[验证报告](verification-report.md)。原始本机日志留在公开仓库之外。
+
+## 复验与限制
+
+先按[七阶段演练说明](../integration-tests/showcase/README.md)准备匹配的 SDK/stdx 和构建产物，再从一个入口观察私有保护、认证阻断、上游停服、私有副本与离线来源。它使用真实包，场景为本机合成数据；无独占路由对照使用同一个增强客户端，并非官方原版差分。
+
+Docker 重建持久化使用字节探针，不冒充 cjpm 构建；本次未重跑新镜像的卷冷备份。完整 Maple HLT/LLT、最终 Windows 五组连续验收、在线备份、自动切换及断电持久性均不作完成宣称。
+
+Windows 安全中心反复询问是否允许 `std.testrunner.exe` 的具体原因仍未核实。已停止继续执行 Windows 仓颉程序，没有更改安全设置或允许列表；后续验证使用已有 Linux 环境。没有生成新的 PPT 或正式录像，参赛者对方案的实际讲解仍需本人演练。

@@ -4,7 +4,7 @@
 
 参赛者已确认初赛正式视频约5分39秒、播放正常，正式模板已填写并本人签字导出PDF，邮件投递成功；这些身份与签字材料仅保存在私有目录。下列2026年9月的DOCX/PPT和视频重放均为历史草稿，不能取代正式材料，也不据其旧“待录制/待签字”文字判断当前提交状态。
 
-决赛PPT暂缓，当前先完善作品。最新[连贯场景](../integration-tests/showcase/README.md)、[源码讲解与演示路线](../docs/demo-runbook.md)、[产物验证范围](../docs/verification-report.md)是工程复验入口；七阶段自动结果不是新屏幕录像。后续URL与并发修复尚未提交推送，不把历史公开提交号当作本地最新代码。
+决赛PPT暂缓，当前先完善作品。最新[连贯场景](../integration-tests/showcase/README.md)、[源码讲解与演示路线](../docs/demo-runbook.md)、[产物验证范围](../docs/verification-report.md)是工程复验入口；七阶段自动结果不是新屏幕录像。本批URL与并发修复已交付AtomGit与GitHub，提交号和验收边界见[交付记录](../docs/delivery-record.md)，不把较早的材料提交号当作当前代码。
 
 ## 2026-09-23～09-26 历史材料与当时状态
 
