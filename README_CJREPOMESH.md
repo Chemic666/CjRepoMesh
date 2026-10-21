@@ -2,7 +2,9 @@
 
 > 面向仓颉与 cjpm 的原生多仓依赖和轻量企业私有仓基础设施
 
-2026-10-21 已交付基线同步至 AtomGit 与 GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。当前工作区另有客户端可靠性修复、离线服务端交付及开发者/CI示例，尚未提交推送，各产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
+2026-10-21 客户端可靠性、离线交付及开发者/CI示例已同步至AtomGit和GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。参赛者已授权后续阶段验收后自主双端推送；实际产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
+
+最新运行状态修订 `c12d1b68…` 使应用失败时 `cjpm run` 返回1，成功仍为0，不再错误报告完成；真实8项及多仓客户端组通过，更新离线客户端包也通过包内8项。此候选只补跑相关范围，下面af35综合验收仍属于前一固定产物，不宣称已重跑所有套件。
 
 接收方已有离线包时，见[离线服务端交付](deployment/portable/README.md)：只用Python 3与Docker Compose即可导入、校验、配置和启动，服务端运行不依赖源码/仓颉SDK/开发机WSL。当前仅Linux amd64容器、本机监听与实例级读写令牌；不据此宣称内网HTTPS或完整企业生产验收已完成。
 
@@ -14,7 +16,7 @@
 
 HTTPS准备见[客户端身份与CA说明](docs/https-client.md)：本地修订核对DNS名称或IP SAN，并禁止自动跳转，已有真实CJP下载构建验证；成熟网关及跨主机HTTPS部署仍待验收。
 
-当前Linux客户端 `af3516e8…` 修复保留target换仓仍运行旧程序的问题，覆盖源码路径身份、静态库内容指纹及传递静态链接；四组受控时间戳/三包回归和旧热缓存升级各7/7。同一产物另通过核心4/4、配置40/40、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38项通过，刷新项就绪调整1项及归档稳定化1项分列。[Linux客户端离线包](deployment/client/README.md)已完成隔离接收验证，接收者无需编译cjpm，构建项目等大多数命令仍需匹配SDK。结果和摘要见[最新验证记录](docs/verification-report.md)。旧 `06ae2c1b…` 的HLT95/95只属于旧产物，本候选未重跑HLT；完整HLT/LLT及当前Windows原生验收仍未完成，后续批次尚未提交推送。
+前一综合验收产物 `af3516e8…` 修复保留target换仓仍运行旧程序的问题，覆盖源码路径身份、静态库内容指纹及传递静态链接；四组受控时间戳/三包回归和旧热缓存升级各7/7。同一产物另通过核心4/4、配置40/40、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38项通过，刷新项就绪调整1项及归档稳定化1项分列。[Linux客户端离线包](deployment/client/README.md)已完成隔离接收验证，接收者无需编译cjpm，大多数命令仍需匹配SDK。摘要见[验证记录](docs/verification-report.md)。旧06ae的HLT95/95不移算给新产物；完整HLT/LLT及当前Windows原生验收仍未完成。
 
 CjRepoMesh 对应仓颉生态创新开发挑战赛推荐技术课题 **#6 仓颉中心仓多仓配置与私有化体系建设**。项目在不重写 cjpm 版本求解器的前提下，增加公共仓、私有仓、代理仓和镜像仓之间的路由、优先级、安全回退、来源审计与同步能力，并提供仓颉原生的私有中心仓服务端。
 
@@ -216,7 +218,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
 
-当前Linux客户端 `af3516e8…` 与官方原版单仓差分 **7/7 PASS**；增强版Maple **38项原断言通过**，刷新就绪调整 **1/1** 及归档稳定化 **1/1** 分列。原刷新连接拒绝失败保留，不称39项未经调整通过；本轮Maple只执行增强版，原版仍为历史结果。旧06ae产物的HLT95/95及历史本地打包、依赖树、组织名和workspace子集，不移算给当前客户端或相加宣称完整覆盖。产物摘要、实际日志及边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
+最近完成官方兼容检查的固定客户端 `af3516e8…` 与原版单仓差分 **7/7 PASS**；增强版Maple **38项原断言通过**，刷新就绪调整 **1/1** 及归档稳定化 **1/1** 分列。原刷新失败保留，不称39项未经调整通过；该批Maple只执行增强版，原版仍为历史结果。c12运行状态修订未重跑此集合；旧06ae的HLT95/95及历史本地打包、依赖树、组织名和workspace子集，不移算给新产物或相加宣称完整覆盖。产物摘要、实际日志及边界见 [验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md) 与 [Docker 验证记录](docs/docker-verification.md)。
 
 历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批均非当前af35的复验，也不代表完整HLT/LLT。
 

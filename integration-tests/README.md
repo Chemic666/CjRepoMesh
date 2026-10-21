@@ -128,6 +128,15 @@ python3 integration-tests/compatibility/cache_identity.py --cjpm /path/to/enhanc
 
 Linux增强客户端的独立交付入口见[客户端交付说明](../deployment/client/README.md)。Python合成检查为 `python -m unittest discover -s integration-tests/deployment -p test_client_bundle.py -v`，不执行合成ELF；接收方大部分cjpm命令仍需已加载匹配SDK。
 
+`cjpm run` 的失败状态另有八项真实程序回归：
+
+```bash
+python3 integration-tests/compatibility/run_exit_status.py --cjpm /path/to/enhanced/cjpm \
+  --evidence-dir /path/to/new-run-status-evidence
+```
+
+已有SDK环境下，入口创建独立含空格应用目录、HOME和无依赖项目，先直接执行真实应用确认退出7，再检查普通/跳过构建运行、旧参数、分隔符优先级、带空格与help参数、产物缺失及编译失败不运行旧应用。修复契约是应用非零映射cjpm退出1，成功0，不是精确保留子进程退出码；应用失败时不得显示 `cjpm run finished`。成功只清理本次目录，失败保留现场，日志和摘要写入新证据目录；Windows仓颉尚未运行，当前实测范围见验证记录。
+
 Windows 部署脚本的隔离回归见 [部署测试说明](deployment/README.md)。
 
 两个已有Linux服务镜像间的停服快照、候选新卷及回退演练见[升级与回滚专项](recovery/README.md#stopped-volume-upgrade-and-rollback)。该入口只创建隔离卷，不接受业务卷名；不以健康检查替代真实包摘要和恢复边界检查。

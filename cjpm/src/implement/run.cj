@@ -123,8 +123,7 @@ func startRun(runConfig: RunConfig): Bool {
         println("Run current project: ${getCmdStr(envBuilder.asCliStrings(env), exeTool, args)}")
     }
 
-    execAndToTerminal(exeTool, args.toArray(), envBuilder: envBuilder, originalEnv: env)
-    return true
+    return execAndToTerminal(exeTool, args.toArray(), envBuilder: envBuilder, originalEnv: env)
 }
 
 func getCmdStr(envMap: HashMap<String, String>, exeTool: String, args: ArrayList<String>): String {

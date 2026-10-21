@@ -34,7 +34,7 @@ python examples/team/prepare.py --role consumer --registry http://127.0.0.1:8080
 bash run.sh
 ```
 
-任务先执行 `cjpm build`，再直接运行本例默认产物 `target/release/bin/main`；两步均成功后才离线解释解析记录，输出应含 `CjRepoMesh team 1.0.0: CI`。直接执行产物可保留应用非零退出码，避免当前上游 `cjpm run` 忽略子进程失败的问题。每个任务拥有自己的 `.home` 和 `cache`；不同任务使用不同新目录。目录准备器不读取令牌，不生成凭据文件，不覆盖已有目录；脚本关闭命令回显并移除本例另一个角色的令牌变量。
+任务先执行 `cjpm build`，再直接运行本例默认产物 `target/release/bin/main`；两步均成功后才离线解释解析记录，输出应含 `CjRepoMesh team 1.0.0: CI`。直接执行产物可精确保留应用退出码；修订后的增强客户端 `cjpm run` 将应用非零映射为1，旧af35及此前客户端仍有忽略失败的问题，示例兼容两者。每个任务拥有自己的 `.home` 和 `cache`；不同任务使用不同新目录。目录准备器不读取令牌，不生成凭据文件，不覆盖已有目录；脚本关闭命令回显并移除本例另一个角色的令牌变量。
 
 ## 接入CI
 
