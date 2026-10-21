@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shutil
 import socket
 import struct
@@ -20,22 +21,40 @@ import urllib.request
 import uuid
 
 
+def client_bundle_identity(root: Path) -> dict:
+    # Use the repository's verifier, never execute a candidate's Python code.
+    verifier = Path(__file__).resolve().parents[2] / "deployment/client/verify.py"
+    manifest = runpy.run_path(str(verifier))["verify_bundle"](root)
+    return dict(mode="client-bundle", binarySha256=manifest["files"]["cjpm"]["sha256"],
+                manifestSha256=hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--package-dir", required=True, type=Path, help="existing cjpm bundle output")
     parser.add_argument("--evidence-dir", required=True, type=Path, help="new local evidence directory")
     parser.add_argument("--team-sdk", type=Path, help="optional existing Linux SDK, mounted read-only")
-    parser.add_argument("--team-client", type=Path, help="optional existing Linux enhanced cjpm")
+    client = parser.add_mutually_exclusive_group()
+    client.add_argument("--team-client", type=Path, help="optional existing Linux enhanced cjpm")
+    client.add_argument("--team-client-bundle", type=Path, help="optional complete Linux client delivery directory")
     parser.add_argument("--team-native", type=Path, help="optional existing ar/ld and libraries for a minimal runtime container")
     args = parser.parse_args()
-    if bool(args.team_sdk) != bool(args.team_client):
-        parser.error("team-sdk and team-client must be supplied together")
-    if args.team_sdk and (not (args.team_sdk / "envsetup.sh").is_file() or not args.team_client.is_file()):
+    team_client = args.team_client_bundle or args.team_client
+    if bool(args.team_sdk) != bool(team_client):
+        parser.error("team-sdk and a team client must be supplied together")
+    if args.team_sdk and (not (args.team_sdk / "envsetup.sh").is_file() or
+                          (args.team_client and not args.team_client.is_file())):
         parser.error("an existing Linux SDK and client are required")
+    client_identity = None
+    if args.team_client_bundle:
+        try:
+            client_identity = client_bundle_identity(args.team_client_bundle)
+        except (OSError, ValueError, KeyError, TypeError) as failure:
+            parser.error("invalid team client bundle: " + str(failure))
     if args.team_native and (not args.team_sdk or not (args.team_native / "bin/ar").is_file()):
         parser.error("team-native requires team SDK/client and an existing ar")
-    total = 20 if args.team_sdk else 12
+    total = (21 if args.team_client_bundle else 20) if args.team_sdk else 12
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -194,6 +213,8 @@ def main() -> int:
         passed("duplicate-rejected-and-original-credentials-preserved")
 
         if args.team_sdk:
+            if args.team_client_bundle:
+                passed("delivered-client-verified-before-team-jobs", **client_identity)
             example = Path(__file__).resolve().parents[2] / "examples" / "team"
             registry = "http://cjrepo:8080"
             network = project + "_default"
@@ -226,10 +247,11 @@ def main() -> int:
                            "--label", "com.docker.compose.project=" + project,
                            "--label", "io.cjrepomesh.distribution=" + image_tag,
                            "--mount", f"type=bind,source={args.team_sdk.resolve()},target=/opt/cangjie,readonly",
-                           "--mount", f"type=bind,source={args.team_client.resolve()},target=/opt/cjpm,readonly",
+                           "--mount", f"type=bind,source={team_client.resolve()},target=/opt/client,readonly",
                            *native_mount,
                            "--mount", f"type=bind,source={job},target=/job", "--workdir", "/job",
-                           "--env", "CJREPOMESH_CJPM=/opt/cjpm", "--env", key,
+                           "--env", "CJREPOMESH_CJPM=" + ("/opt/client/run.sh" if args.team_client_bundle else "/opt/client"),
+                           "--env", key,
                            "--entrypoint", "/bin/bash", image_tag, "-ec",
                            'source /opt/cangjie/envsetup.sh; '
                            'export PATH="/opt/native/bin:$PATH" LD_LIBRARY_PATH="/opt/native/lib:$LD_LIBRARY_PATH"; '
@@ -291,6 +313,8 @@ def main() -> int:
             expect(status, 200)
             assert json.loads(stored.decode().strip())["sha256sum"] == expected_sha
             assert hashlib.sha256((installation / ".env").read_bytes()).hexdigest() == credential_sha
+            if args.team_client_bundle:
+                assert client_bundle_identity(args.team_client_bundle) == client_identity
             passed("failed-team-jobs-preserve-package-and-server-credentials")
     except (OSError, ValueError, KeyError, AssertionError, subprocess.SubprocessError) as failure:
         error = str(failure) or type(failure).__name__
@@ -323,6 +347,7 @@ def main() -> int:
                        seconds=round(time.monotonic() - started, 2), stages=stages,
                        image=manifest["image"], error=error, cleanup_errors=cleanup_errors,
                        team_jobs=bool(args.team_sdk),
+                       team_client=client_identity,
                        limits=["Local receiver-directory simulation on the existing Docker engine, not a fresh host.",
                                ("Real Linux publisher and independent read-only consumer builds; no Windows Cangjie execution."
                                 if args.team_sdk else "Real prebuilt CJP publish/read; no consumer build or Windows Cangjie execution."),
