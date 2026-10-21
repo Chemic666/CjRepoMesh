@@ -154,6 +154,8 @@ Windows 部署脚本的隔离回归见 [部署测试说明](deployment/README.md
 
 离线服务端交付包另有接收端验证，不运行Windows仓颉程序：
 
+接收工具合成回归现为12项，Linux完整执行；Windows无链接权限时3项跳过并明确记账。覆盖链接校验器/初始化器跨目录定位及制作端悬空输出路径拒绝，制作端拒绝测试不访问Docker。Windows宿主真实接收可在只有Python和已可发现的Docker Compose插件、无SDK的环境执行；仍是已有引擎上的目录隔离，不等同全新主机。
+
 ```cmd
 python integration-tests\deployment\test_portable_bundle.py
 python integration-tests\deployment\portable.py --bundle <未初始化交付目录> --package-dir <已有真实CJP及meta-data.json目录> --evidence-dir <新的证据目录>

@@ -73,7 +73,7 @@ def main() -> int:
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
     try:
-        project = configure(Path(__file__).resolve().parent, args.port)
+        project = configure(Path(__file__).absolute().parent, args.port)
         print(f"Configured project {project}; endpoint http://127.0.0.1:{args.port}")
         print("Private credentials are in .env; values are hidden. Keep this file for restarts.")
         return 0

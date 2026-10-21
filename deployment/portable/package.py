@@ -14,7 +14,11 @@ from verify import FILES, digest, docker, verify_bundle
 
 
 def package(image: str, output: Path) -> dict:
-    if output.exists():
+    try:
+        output.lstat()
+    except FileNotFoundError:
+        pass
+    else:
         raise FileExistsError("output must be a new directory")
     info = json.loads(docker("image", "inspect", image))[0]
     if info["Os"] != "linux" or info["Architecture"] != "amd64":
@@ -58,7 +62,7 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path, help="new distribution directory")
     args = parser.parse_args()
     try:
-        output = args.output.resolve()
+        output = args.output.absolute()
         manifest = package(args.image, output)
         print("PASS: offline bundle created at " + str(output))
         print("Image: " + manifest["image"]["id"])

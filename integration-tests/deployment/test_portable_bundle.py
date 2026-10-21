@@ -111,6 +111,51 @@ class PortableBundleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root/".env").exists())
 
+    def test_linked_verifier_does_not_validate_another_bundle(self):
+        trusted = self.root / "trusted-copy"
+        shutil.copytree(self.root, trusted)
+        (self.root / "image.tar").write_bytes(b"damaged receiver image")
+        verifier = self.root / "verify.py"
+        verifier.unlink()
+        try:
+            verifier.symlink_to(trusted / "verify.py")
+        except OSError as error:
+            self.skipTest("symlink unavailable: " + type(error).__name__)
+        result = self.run_script("verify.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("integrity", result.stdout + result.stderr)
+
+    def test_linked_configure_does_not_write_another_bundles_credentials(self):
+        trusted = self.root / "trusted-copy"
+        shutil.copytree(self.root, trusted)
+        configure = self.root / "configure.py"
+        configure.unlink()
+        try:
+            configure.symlink_to(trusted / "configure.py")
+        except OSError as error:
+            self.skipTest("symlink unavailable: " + type(error).__name__)
+        result = self.run_script("configure.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / ".env").exists())
+        self.assertFalse((trusted / ".env").exists())
+        self.assertIn("integrity", result.stdout + result.stderr)
+
+    def test_maker_refuses_dangling_output_link_before_docker(self):
+        output, target = self.root / "output-link", self.root / "uncreated-target"
+        try:
+            output.symlink_to(target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest("symlink unavailable: " + type(error).__name__)
+        # No engine or mock image is needed: this path must be rejected before
+        # looking for Docker. A missing executable is a different failure.
+        environment = dict(os.environ, PATH=str(self.root / "empty-path"))
+        result = subprocess.run((sys.executable, str(SOURCE / "package.py"),
+                                 "--image", "unused-synthetic-name", "--output", str(output)),
+                                env=environment, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("new directory", result.stdout + result.stderr)
+        self.assertFalse(target.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

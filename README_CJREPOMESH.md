@@ -12,6 +12,8 @@
 
 接收方已有离线包时，见[离线服务端交付](deployment/portable/README.md)：只用Python 3与Docker Compose即可导入、校验、配置和启动，服务端运行不依赖源码/仓颉SDK/开发机WSL。当前仅Linux amd64容器、本机监听与实例级读写令牌；不据此宣称内网HTTPS或完整企业生产验收已完成。
 
+2026-10-22补齐服务端交付文件链接和悬空输出路径拒绝；Linux回归12/12，Windows Python9通过3跳过，并在隔离用户环境的Windows宿主实际接收12/12。新版服务端包更新接收工具，镜像和服务端未重建；仍使用既有Docker Desktop引擎，不冒充全新主机验收，见[验证记录](docs/verification-report.md)首节。
+
 [开发者发布与只读CI示例](examples/team/README.md)提供独立任务目录：发布者构建上传私有包，消费任务仅用读取令牌编译运行，并记录实际来源与摘要。任务机需已有Linux仓颉工具链及增强版cjpm；服务端离线包不包含这些开发工具。
 
 维护时参考[单实例升级与回滚](docs/upgrade-and-rollback.md)：停服快照恢复至新卷，并核对包内容、凭据和产物身份。两个固定Linux镜像已有隔离演练；从旧快照恢复会丢弃快照之后的发布，不承诺任意版本无损回退。

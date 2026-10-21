@@ -73,7 +73,7 @@ def main() -> int:
     parser.add_argument("--docker", action="store_true", help="also verify the already loaded image and server")
     args = parser.parse_args()
     try:
-        manifest = verify_bundle(Path(__file__).resolve().parent, check_docker=args.docker)
+        manifest = verify_bundle(Path(__file__).absolute().parent, check_docker=args.docker)
         print("PASS: bundle files" + (", loaded image and server" if args.docker else ""))
         print("Image: " + manifest["image"]["id"])
         return 0
