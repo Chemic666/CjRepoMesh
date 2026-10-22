@@ -1,3 +1,5 @@
+**English** | [简体中文](README_zh.md)
+
 > **CjRepoMesh competition branch**
 >
 > This branch extends the official Cangjie toolchain with native cjpm multi-registry resolution and a lightweight private repository for competition topic #6. Start with the [CjRepoMesh overview](README_CJREPOMESH.md), [architecture](docs/architecture.md), and [one-command verification](integration-tests/README.md). The official upstream README follows below, with empty placeholder links removed.

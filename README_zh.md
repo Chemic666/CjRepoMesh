@@ -1,3 +1,9 @@
+[English](README.md) | **简体中文**
+
+> **CjRepoMesh 参赛分支**
+>
+> 本分支基于官方仓颉工具链扩展 cjpm 原生多仓依赖解析与轻量私有仓，对应技术课题第6题。请先阅读 [CjRepoMesh 项目介绍](README_CJREPOMESH.md)、[架构说明](docs/architecture.md)和[构建与验证说明](integration-tests/README.md)。下文保留官方上游工具链说明。
+
 # 仓颉语言命令行工具链
 
 ## 简介
