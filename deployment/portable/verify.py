@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import urllib.error
+import urllib.request
 
 FILES = {"image.tar", "compose.yaml", "configure.py", "verify.py", "README.md", "LICENSE"}
 
@@ -68,13 +70,106 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
     return manifest
 
 
+def runtime_configuration(root: Path) -> tuple[str, int]:
+    path = root / ".env"
+    if not regular_file(path):
+        raise ValueError("runtime configuration must be a regular file")
+    values = {}
+    # Collect only public deployment identity; no token values are returned.
+    with path.open(encoding="utf-8") as stream:
+        for line in stream:
+            key, separator, value = line.strip().partition("=")
+            if key not in {"COMPOSE_PROJECT_NAME", "CJREPO_HOST_PORT"}:
+                continue
+            if not separator or key in values:
+                raise ValueError("duplicate or invalid runtime configuration")
+            values[key] = value
+    project, port = values.get("COMPOSE_PROJECT_NAME", ""), values.get("CJREPO_HOST_PORT", "")
+    if (not re.fullmatch(r"cjrepomesh-[a-f0-9]{16}", project) or
+            not re.fullmatch(r"[0-9]{1,5}", port) or not 1 <= int(port) <= 65535):
+        raise ValueError("invalid runtime configuration; retain the original project and port")
+    return project, int(port)
+
+
+def check_running_container(item: dict, image: dict, project: str, port: int) -> None:
+    labels = item["Config"].get("Labels") or {}
+    if (item["Image"] != image["id"] or labels.get("com.docker.compose.project") != project or
+            labels.get("com.docker.compose.service") != "cjrepo" or
+            labels.get("io.cjrepomesh.distribution") != image["tag"]):
+        raise ValueError("running container identity does not match this deployment")
+    if item["State"].get("Running") is not True or item["State"].get("Health", {}).get("Status") != "healthy":
+        raise ValueError("deployment is not running and healthy; wait for startup or inspect it locally")
+    host = item["HostConfig"]
+    if (item["Config"]["User"] != "10001:10001" or host["ReadonlyRootfs"] is not True or
+            host.get("Privileged", False) is not False or host.get("CapAdd") or
+            "ALL" not in (host.get("CapDrop") or []) or
+            "no-new-privileges:true" not in (host.get("SecurityOpt") or [])):
+        raise ValueError("running container constraints do not match the distribution")
+    expected = {"8080/tcp": [dict(HostIp="127.0.0.1", HostPort=str(port))]}
+    if item["NetworkSettings"]["Ports"] != expected:
+        raise ValueError("running port binding does not match the configured loopback endpoint")
+    mounts = [mount for mount in item["Mounts"] if mount["Destination"] == "/var/lib/cjrepo"]
+    if (len(mounts) != 1 or mounts[0]["Type"] != "volume" or
+            mounts[0]["Name"] != project + "_cjrepo-data" or mounts[0]["RW"] is not True):
+        raise ValueError("running data volume does not match this deployment")
+    environment = dict(line.split("=", 1) for line in (item["Config"].get("Env") or []))
+    if not environment.get("CJREPO_READ_TOKEN") or not environment.get("CJREPO_PUBLISH_TOKEN"):
+        raise ValueError("running private credentials are missing")
+
+
+def verify_running(root: Path, manifest: dict) -> None:
+    project, port = runtime_configuration(root)
+    identifiers = docker("compose", "--project-directory", str(root), "-p", project,
+        "-f", str(root / "compose.yaml"), "--env-file", str(root / ".env"),
+        "ps", "--all", "-q", "cjrepo").split()
+    if len(identifiers) != 1 or not re.fullmatch(r"[a-f0-9]{64}", identifiers[0]):
+        raise ValueError("expected exactly one deployment container; start or inspect this project locally")
+    identifier = identifiers[0]
+    inspected = json.loads(docker("inspect", identifier))
+    if not isinstance(inspected, list) or len(inspected) != 1:
+        raise ValueError("cannot identify the running deployment")
+    check_running_container(inspected[0], manifest["image"], project, port)
+    volume = json.loads(docker("volume", "inspect", project + "_cjrepo-data"))
+    if not isinstance(volume, list) or len(volume) != 1:
+        raise ValueError("cannot identify the persistent volume")
+    labels = volume[0].get("Labels") or {}
+    if (labels.get("com.docker.compose.project") != project or
+            labels.get("io.cjrepomesh.distribution") != manifest["image"]["tag"]):
+        raise ValueError("persistent volume identity does not match this deployment")
+    observed = docker("exec", identifier, "sha256sum", "/usr/local/bin/cjrepo").split()
+    if not observed or observed[0] != manifest["image"]["serverSha256"]:
+        raise ValueError("running server binary does not match the manifest")
+    class LocalHealthOnly(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, response, code, message, headers, new_url):
+            return None
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), LocalHealthOnly())
+    try:
+        with opener.open(f"http://127.0.0.1:{port}/health", timeout=3) as response:
+            body = response.read(4097)
+            if response.status != 200 or len(body) > 4096:
+                raise ValueError("unexpected health response")
+            health = json.loads(body)
+            if not isinstance(health, dict) or health.get("status") != "ok" or health.get("service") != "cjrepo":
+                raise ValueError("unexpected health response")
+    except (OSError, ValueError) as error:
+        if isinstance(error, urllib.error.HTTPError):
+            error.close()
+        raise ValueError("local registry health check failed; inspect this deployment locally") from error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--docker", action="store_true", help="also verify the already loaded image and server")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--docker", action="store_true", help="also verify the already loaded image and server")
+    mode.add_argument("--running", action="store_true", help="read-only diagnosis of this configured running deployment")
     args = parser.parse_args()
     try:
-        manifest = verify_bundle(Path(__file__).absolute().parent, check_docker=args.docker)
-        print("PASS: bundle files" + (", loaded image and server" if args.docker else ""))
+        root = Path(__file__).absolute().parent
+        manifest = verify_bundle(root, check_docker=args.docker)
+        if args.running:
+            verify_running(root, manifest)
+        print("PASS: bundle files" + (", running deployment" if args.running else
+                                      ", loaded image and server" if args.docker else ""))
         print("Image: " + manifest["image"]["id"])
         return 0
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:

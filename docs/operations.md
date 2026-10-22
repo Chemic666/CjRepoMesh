@@ -7,10 +7,12 @@
 1. 源码构建按 [构建与验证说明](../integration-tests/README.md) 准备已有仓颉SDK、匹配的stdx和平台依赖，不混用Windows/Linux二进制。已有[离线服务端包](../deployment/portable/README.md)时，服务端运行只需Python 3与Docker Compose；开发者构建仓颉应用仍需工具链。
 2. 选择离线包、[Windows 原生部署](../deployment/windows/README.md) 或 [开发镜像部署](../deployment/docker/README.md)。固定数据目录或卷，保存部署参数，令牌单独保管。离线包的 `.env` 同时固定项目名，重建时保留；Compose命令始终显式 `-f compose.yaml`。
 3. 设置发布令牌。需要私有读取时同时设置读取令牌；客户端用 `token-env`，不要把令牌放进 URL、命令历史或公开配置。
-4. 运行相应 `doctor.ps1`。健康检查成功只代表服务可响应，还应实际发布一个测试包、下载并核对 SHA-256，再验证客户端构建。
+4. 新离线包在Docker显示healthy后运行 `python verify.py --running`；原生/开发镜像部署使用相应 `doctor.ps1`。诊断会核对本部署身份，不能仅凭HTTP响应认定正确。成功后仍应实际发布一个测试包、下载并核对 SHA-256，再验证客户端构建。
 5. 多仓项目按 [配置说明](multirepo-implementation.md) 设置地址、优先级和路由。内部包使用独占路由时，公共仓不会作为后备。
 
 开始接收前先确认 `docker compose version` 可用。隔离用户目录可能同时隐藏已有Compose插件位置，表现为Docker本身可用但compose命令不可用；应先解决本机现有插件发现问题，不修改交付清单来绕过校验。服务端接收工具只接受普通交付文件，不能把 `verify.py` 或 `configure.py` 链接到另一份包。更新接收工具后领取新的完整归档；原包、已有凭据和业务数据保留。
+
+`verify.py --running`只读检查原项目、实际容器/卷、精确回环绑定、运行中二进制及已列权限约束，不修复或启停服务；与检查已加载镜像的 `--docker` 模式互斥。HTTP就绪可能早于Docker健康状态，starting时先等待。它只检查运行环境中读写令牌非空，不确认 `.env` 令牌与运行实例一致，不替代真实认证读写测试。旧离线包无此选项，应领取包含新诊断器的完整包，不能只替换脚本破坏清单。
 
 ## 开发者发布与CI接入
 

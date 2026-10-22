@@ -163,6 +163,8 @@ python integration-tests\deployment\portable.py --bundle <未初始化交付目�
 
 第一项验证清单、损坏拒绝、凭据保护和初始化不覆盖；第二项需要Docker，复制交付目录到隔离接收副本，检查镜像导入、覆盖文件隔离、缺失令牌拒启、私有读写、真实CJP发布读取和容器重建持久化。结束仅清理匹配随机项目与发行标签的本次容器/卷，失败日志和本地接收副本保留；原交付目录不初始化，不写入凭据。此项不是消费端构建、全新主机或内网HTTPS验收。
 
+含新运行态诊断器的服务端包可加 `--check-running`，在原12项上增加未启动拒绝、运行实例通过、停服拒绝及重建后通过，共16项。验收器有界等待Docker健康状态，不仅等待HTTP就绪；产品诊断仍严格检查healthy，不为测试放宽。`python integration-tests/deployment/test_portable_runtime.py`另验证元数据身份/权限拒绝及自有回环HTTP跳转和错误正文处理，不实际创建高权限或对外暴露容器。
+
 [开发者与只读CI示例](../examples/team/README.md)另有准备器回归与可选真实Linux任务验证：
 
 ```cmd

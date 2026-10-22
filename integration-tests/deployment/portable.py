@@ -34,6 +34,7 @@ def main() -> int:
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--package-dir", required=True, type=Path, help="existing cjpm bundle output")
     parser.add_argument("--evidence-dir", required=True, type=Path, help="new local evidence directory")
+    parser.add_argument("--check-running", action="store_true", help="exercise verify.py --running in a supporting bundle")
     parser.add_argument("--team-sdk", type=Path, help="optional existing Linux SDK, mounted read-only")
     client = parser.add_mutually_exclusive_group()
     client.add_argument("--team-client", type=Path, help="optional existing Linux enhanced cjpm")
@@ -54,7 +55,7 @@ def main() -> int:
             parser.error("invalid team client bundle: " + str(failure))
     if args.team_native and (not args.team_sdk or not (args.team_native / "bin/ar").is_file()):
         parser.error("team-native requires team SDK/client and an existing ar")
-    total = (21 if args.team_client_bundle else 20) if args.team_sdk else 12
+    total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0)
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -118,6 +119,22 @@ def main() -> int:
             time.sleep(0.5)
         raise AssertionError("receiver service did not become healthy")
 
+    def running_diagnostic(label):
+        # HTTP can be ready before Docker's periodic healthcheck has run.
+        identifier = compose(label + "-container", "ps", "-q", "cjrepo", log=False).stdout.strip()
+        if not re.fullmatch(r"[a-f0-9]{64}", identifier):
+            raise AssertionError("expected one running receiver container")
+        for _ in range(30):
+            status = run(label + "-health", ("docker", "inspect", "--format",
+                "{{.State.Health.Status}}", identifier), log=False).stdout.strip()
+            if status == "healthy":
+                run(label, (sys.executable, "verify.py", "--running"))
+                return
+            if status == "unhealthy":
+                raise AssertionError("receiver Docker healthcheck failed")
+            time.sleep(0.5)
+        raise AssertionError("receiver Docker healthcheck did not become ready")
+
     try:
         run("verify-files", (sys.executable, "verify.py"))
         with socket.socket() as probe:
@@ -132,6 +149,9 @@ def main() -> int:
         projects.append((project, installation))
         credential_sha = hashlib.sha256((installation / ".env").read_bytes()).hexdigest()
         passed("bundle-verified-and-private-configuration-created")
+        if args.check_running:
+            run("runtime-before-start", (sys.executable, "verify.py", "--running"), success=False)
+            passed("runtime-diagnostic-rejects-not-started-deployment")
 
         run("image-load", ("docker", "load", "--input", "image.tar"), timeout=300)
         run("verify-runtime", (sys.executable, "verify.py", "--docker"))
@@ -170,6 +190,9 @@ def main() -> int:
         assert any(value.startswith("no-new-privileges") for value in info["HostConfig"]["SecurityOpt"])
         assert info["NetworkSettings"]["Ports"]["8080/tcp"] == [dict(HostIp="127.0.0.1", HostPort=str(port))]
         passed("healthy-server-with-fixed-image-and-runtime-constraints")
+        if args.check_running:
+            running_diagnostic("runtime-healthy")
+            passed("runtime-diagnostic-verifies-running-deployment")
 
         metadata = json.loads((fixture / "meta-data.json").read_text())
         package, version = metadata["name"], metadata["version"]
@@ -202,12 +225,18 @@ def main() -> int:
         passed("organization-query-does-not-alias-default-storage")
 
         compose("down-retain-data", "down")
+        if args.check_running:
+            run("runtime-stopped", (sys.executable, "verify.py", "--running"), success=False)
+            passed("runtime-diagnostic-rejects-stopped-deployment")
         compose("recreate", "up", "-d", "--no-build", "--pull", "never")
         healthy()
         status, content = request(archive_path, credentials["CJREPO_READ_TOKEN"])
         expect(status, 200)
         assert content == artifact
         passed("real-archive-survives-container-recreation")
+        if args.check_running:
+            running_diagnostic("runtime-recreated")
+            passed("runtime-diagnostic-verifies-recreated-deployment")
         expect(request(publish_path, credentials["CJREPO_PUBLISH_TOKEN"], frame)[0], 409)
         assert hashlib.sha256((installation / ".env").read_bytes()).hexdigest() == credential_sha
         passed("duplicate-rejected-and-original-credentials-preserved")
@@ -347,6 +376,7 @@ def main() -> int:
                        seconds=round(time.monotonic() - started, 2), stages=stages,
                        image=manifest["image"], error=error, cleanup_errors=cleanup_errors,
                        team_jobs=bool(args.team_sdk),
+                       runtime_diagnostics=args.check_running,
                        team_client=client_identity,
                        limits=["Local receiver-directory simulation on the existing Docker engine, not a fresh host.",
                                ("Real Linux publisher and independent read-only consumer builds; no Windows Cangjie execution."
