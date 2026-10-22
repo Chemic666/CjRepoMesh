@@ -71,6 +71,22 @@ python integration-tests\recovery\docker_backup.py --image <existing-local-image
 
 Bundling jobs have no network. Each consumer starts with its own HOME/cache and shares only the owned restored server's network namespace, reaching its internal loopback port. The host server remains bound to `127.0.0.1`; no WSL-to-host networking changes are needed. This is an isolated container recovery drill, not cross-host deployment. In bundle mode, `runtime.json` records the image/server/client identities; `summary.json` records checkpoints and cleanup status in both modes. The client bundle is rechecked after all operations; tools and credentials remain separate from the storage backup.
 
+## Portable CA configuration and data cold restore
+
+The standard CA-capable seven-file server bundle has a separate combined acceptance path:
+
+```cmd
+python integration-tests\deployment\portable_ca.py --bundle <unconfigured-server-directory> --package-dir <real-default-meshdep-CJP-directory> --native <existing-Linux-tools-directory> --openssl <existing-Linux-OpenSSL-file> --evidence-dir <new-private-evidence-directory> --cold-restore --client-bundle <complete-Linux-client-directory> --client-sdk <existing-Linux-SDK> --expected-output high-1.0.0
+```
+
+Use the real `meshdep` fixture whose `registryMarker()` returns the supplied output marker. The default marker matches the existing high-priority 1.0.0 fixture. Inputs must already exist; no image pulls, dependency installation, host Cangjie or system trust changes occur. The source repository's trusted verifiers check both deliveries before evidence creation. The native tools use the same `bin/`, `lib/`, `system/` layout as the container-client runner above. Keep evidence outside the public checkout: it retains synthetic credentials and backup data.
+
+Without `--cold-restore`, the runner keeps its ten-stage CA/HTTPS acceptance. The optional fifteen-stage path first populates a genuine CJP cache through an owned HTTPS upstream, then removes that upstream. It creates a protected configuration backup with the existing configure tool, stops the source Compose project, and exports/validates the full data volume. Another unconfigured copy receives the backed-up CA and credentials; only its randomly generated project identity changes. A separate volume must match the archive file set and hashes before startup.
+
+The recovered standard Compose deployment passes `verify.py --running` and private reads while the source remains stopped. A fresh consumer uses the complete client's `run.sh`, with the existing Linux SDK/tools read-only, and actually builds/runs from the restored cache. The final recreation checks credentials/CA/cache retention and unchanged original data/configuration/archive. Runtime summaries and logs hide the generated tokens. Cleanup targets only recorded owned containers/projects; retained `.env` files are private, not ordinary log material.
+
+This is a stopped synthetic configuration/data recovery drill for one default-organization proxy-cache package. It does not replace the separate organization/publication checks, test live snapshots, business cutover, power-loss durability or cross-host recovery, or provide automatic business backup, CA rotation or upgrade/rollback. See the [actual verification record](../../docs/verification-report.md).
+
 ## Stopped-volume upgrade and rollback
 
 Use two existing local Linux amd64 server images and two genuine prebuilt CJP fixtures. The seed is a default-organization package; the new package belongs to a named organization. No SDK execution or downloads are required:
