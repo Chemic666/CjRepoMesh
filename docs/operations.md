@@ -89,6 +89,8 @@ HTTP400错误正文若包含当前仓库配置的完整令牌，客户端会将�
 
 新Linux服务端的出站TCP连接默认30秒/次，可在启动前设置 `CJREPO_CONNECT_TIMEOUT_SECONDS` 为1–300的整数。非法/空值在主入口退出2，诊断不显示原值。原生进程设置环境变量；离线容器应修改本部署受保护.env，再按[离线包说明](../deployment/portable/README.md)重建服务以生效，不能只设置宿主变量。连接超时后先核对端点和网络可达性，再重试；不要仅增大期限掩盖错误端点。原stdx15秒读写期限不变，此项不限制DNS、TLS握手、整个同步或watcher总时长。
 
+Proxy/Mirror/Sync使用HTTPS上游或目标时，先按[CA说明](https-client.md)核对主机名/IP SAN和可信CA。Linux进程可用 `SSL_CERT_FILE`；容器必须额外保证该文件在容器内可读，七文件包没有预装公共根CA或CA挂载配置，宿主文件路径不能直接当容器路径。错误身份在发送HTTP前拒绝，先修复证书/地址/信任文件，不退回HTTP或关闭校验。出站HTTPS不改变服务端HTTP监听入口，仍不代表入站HTTPS网关或跨主机部署验收。
+
 ## 停止与卸载
 
 Windows 使用 `stop.ps1`，Docker 使用 `down.ps1`，默认保留包数据。卸载程序前核对存储实际位置并保留备份。Docker 的 `-PurgeData` 会删除持久化数据，不用于普通升级或排障。

@@ -16,6 +16,8 @@ cjpm run
 
 Proxy/Mirror/Sync共享出站TCP建连期限：`CJREPO_CONNECT_TIMEOUT_SECONDS` 默认30秒，接受整数1–300，涵盖上游读取及Sync发布。原生部署在启动进程前设置该环境变量；容器部署见[离线包说明](../deployment/portable/README.md)。非法值（包括显式空值）在主入口返回退出码2，不发请求、不回显原值。建连失败关闭socket，Proxy返回502，Mirror/Sync沿用非零失败处理；网络恢复后可以重试。此期限按单次TCP连接计算，原stdx的15秒读写超时不变，不是DNS、TLS握手或整个命令的总时限。
 
+HTTPS上游与Sync目标在发送HTTP前验证证书链、服务器用途以及URL的DNS名称或IP SAN；身份错误拒绝连接，不改用HTTP或跳过验证。Linux原生进程可通过 `SSL_CERT_FILE` 指向团队可信CA文件，不修改系统信任库；容器还须保证CA文件在容器内可读，见[CA说明](../docs/https-client.md)。握手使用stdx的30秒读写等待设置，它不是整个握手的绝对截止，也不由TCP选项调节；慢速分片和整个操作总预算尚未验收。本服务的监听入口仍为HTTP，不等于已经提供入站HTTPS网关。
+
 原生入口也会检查仓库基地址：`CJREPO_UPSTREAM`、Mirror 上游及 Sync 源/目标只能使用 HTTP(S) 基地址，拒绝内嵌凭据、查询参数、片段、反斜线、ASCII 控制/空白和 authority 中的百分号编码。认证使用 `CJREPO_UPSTREAM_TOKEN`、`CJREPO_SYNC_DESTINATION_TOKEN` 及 `CJREPO_SYNC_DESTINATION_READ_TOKEN`，不要写进 URL。非法地址的诊断只指出字段/角色，不回显地址值。原始空 `CJREPO_UPSTREAM` 仍关闭 Proxy；`/` 等非法相对地址不会被当成空配置。
 
 可选设置 `CJREPO_READ_TOKEN` 启用私有读取：`/index/...` 和 `/pkg/<包名>/<版本>` 在 Hosted 与 Proxy 模式下均要求 `Authorization` 与令牌完全相同，且在检查磁盘缓存或访问上游之前拒绝无效请求；`/health` 仍公开用于健康检查。未设置时保持原来的公开读取行为。开启读取鉴权时必须同时设置 `CJREPO_PUBLISH_TOKEN`，否则服务拒绝启动，避免“读私有、写匿名”。增强版 cjpm 可用仓库配置中的 `token-env` 发送该令牌；CjRepo-to-CjRepo Sync 从私有源仓读取时可用 `CJREPO_UPSTREAM_TOKEN`。当前使用与 cjpm 兼容的原始令牌头值，不自动添加 `Bearer` 前缀；公网部署仍需 TLS 和入口层防护。

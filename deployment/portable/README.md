@@ -29,6 +29,8 @@ docker compose -f compose.yaml --env-file .env ps
 
 出站TCP连接默认最多等待30秒/次。需要调整时，在本部署受保护的 `.env` 中加入 `CJREPO_CONNECT_TIMEOUT_SECONDS=10`，有效范围为整数1–300；省略时使用30，空值或非法值令服务启动失败，诊断不回显原值。Compose通过现有 `env_file` 将其传入容器，仅在宿主命令行设置变量不足以完成配置；修改后使用本页显式Compose命令重建服务以生效，并保留原项目名、凭据和数据卷。原库15秒读写超时不变；此选项只约束每次TCP建连，不约束DNS、TLS握手或完整同步总时长。
 
+新服务端支持HTTPS上游读取与Sync发布，始终验证证书链及URL中的DNS名称或IP SAN，不提供跳过身份校验的选项。当前Ubuntu基础镜像有TLS运行库，但没有预装公共根证书集合；使用HTTPS时必须让可信CA文件在容器内可读，并给服务进程设置 `SSL_CERT_FILE`。仅在.env填宿主路径不会把文件带入容器。标准七文件包没有CA文件或额外挂载配置，默认仍以本机HTTP Hosted接收流程为准；自定义容器应使用受保护CA的只读挂载，另行验证部署配置。原生进程的CA设置及验证边界见源码仓库 `docs/https-client.md`。
+
 ## 运行中的部署诊断
 
 服务healthy后，在原交付目录执行：

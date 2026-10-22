@@ -256,7 +256,7 @@ func runSync(arguments: Array<String>): Bool {
         frame.add(all: encodeLittleEndianSize(artifact.size))
         frame.add(all: artifact)
 
-        let client = outboundHttpClient()
+        let client = outboundHttpClient(destination)
         try {
             let requestBuilder = HttpRequestBuilder()
                 .method("POST")

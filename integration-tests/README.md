@@ -179,6 +179,8 @@ python integration-tests\deployment\portable.py --bundle <未初始化交付目�
 
 服务端TCP建连专项：`python3 integration-tests/compatibility/server_connect_timeout.py --server <已有Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新证据目录>`。14项以自有IPv4回环监听队列饱和模拟建连停滞，不修改防火墙、不访问外部黑洞；设2秒，要求驱动4秒前返回失败且不写存储，包含Proxy同实例同包恢复、Mirror/Sync读取/目的仓预检和独立发布连接。发布夹具先停止接收并饱和、再返回404，必须确认源索引和制品均到达，避免只测到GET预检。另测六项非法配置无HTTP、三个正常直连（省略变量/1/300）；`--case blocked-sync-publish`可单测发布。运行前加载匹配SDK/stdx；拒绝Windows原生执行。默认30秒的停滞、DNS、TLS、慢读写及整体操作总时限均未验收，实际产物和各版本脚本结果见[验证记录](../docs/verification-report.md)。
 
+服务端HTTPS专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新证据目录>`。已有Linux OpenSSL生成一天有效的合成CA/证书，0700临时目录退出清除；CA只给子进程，不改系统信任。18项覆盖Proxy/Mirror/Sync的合法HTTPS、未知CA、错误DNS/IP及用途拒绝，以及索引通过之后的源/目的制品和独立发布连接身份错误；核对HTTP到达阶段、真实CJP/发布帧、认证及文件保持。需加载匹配SDK/stdx，不执行Windows仓颉；Sync夹具不提供真实持久化，真实目的仓由核心Sync组另验。镜像内复验另需既有Python/OpenSSL测试工具；不要求把这些工具装进服务镜像，不将本机夹具称为成熟网关、跨主机或标准Compose CA挂载验收。
+
 验证实际交付组合时，将 `--team-client <文件>` 换成 `--team-client-bundle <完整客户端交付目录>`，两者互斥且均须搭配SDK。新模式在创建证据目录/访问Docker前用源码仓库的可信校验器检查包，不执行待测包中的Python代码；任务只读挂载整个目录，通过包内run.sh执行。摘要记录实际二进制和清单SHA-256，结束再次检查包不变，共21项。启动器需容器内已有Python 3；可在任务专用的 `--team-native` 目录下提供已有 `bin/python3`、对应 `lib/python3.X` 标准库及匹配共享库，不向最小服务端镜像安装工具。应先在相同只读挂载条件下运行包的 `--help` 检查依赖。六项离线回归只验证预检和参数拒绝，不代替真实编译。
 
 可选模式在原12项上增加8项，共20项：无凭据准备目录、真实构建发布、只读CI编译运行、第二个独立冷任务、应用运行失败退出码、错误读取令牌、读取令牌越权发布拒绝，以及失败后制品和服务凭据保持。SDK/客户端只读挂载，任务通过本次内部Docker网络访问服务，主机仍仅本机监听。两次成功消费核对同一包的实际来源和SHA-256；失败应用仍可能有解析记录，但不得继续解释或返回成功。这不替代Windows仓颉、全新主机、内网HTTPS或完整官方验收。

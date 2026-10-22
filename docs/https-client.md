@@ -1,4 +1,4 @@
-# HTTPS客户端身份验证
+# HTTPS客户端与服务端出站身份验证
 
 证书链验证确认发证方可信，名称验证确认连接的是配置中指定的仓库。这两项都应通过后，客户端才发送包含令牌的HTTP请求。服务端本身仍是HTTP服务；真实团队HTTPS入口需要另行部署和验收成熟反向代理，本文不提供已验证的网关配置。
 
@@ -13,6 +13,18 @@
 索引、发布和下载请求均不自动跟随重定向。配置应直接指向仓库实际端点；遇到重定向时先核对仓库或网关地址。默认库虽会移除跳转请求的Authorization，但307/308仍可能转发发布包体到其他地址，包括明文HTTP，且跨主机跳转不能继续套用原仓库身份。客户端因此明确拒绝自动跳转，不通过关闭严格校验处理这类配置问题。
 
 API说明可参考[官方TLS配置接口](https://gitcode.com/Cangjie/cangjie_stdx/blob/main/doc/libs_stdx/net/tls/tls_package_api/tls_package_structs.md)；该链接随上游更新，本文结论以当前固定SDK/stdx和实际客户端产物为准。
+
+## 服务端出站HTTPS
+
+服务端Proxy/Mirror/Sync现也支持HTTPS源仓及Sync目标：共享GET与发布POST分别绑定各自URL，DNS名称用TLS配置验证，IP在默认链/有效期/服务器用途检查后精确比对叶证书IP SAN；验证成功前不把连接交给HTTP层。不提供TrustAll开关，不跟随跳转。服务监听入口仍是HTTP，不能把出站HTTPS当成入站网关完成。
+
+原生Linux进程在启动前设置 `SSL_CERT_FILE` 为可信CA文件路径即可；私钥不交给仓库进程。默认TCP建连30秒（可用 `CJREPO_CONNECT_TIMEOUT_SECONDS` 调整1–300），TLS握手另用stdx的30秒读写等待。后者是每次I/O等待设置，不是握手总预算；DNS、慢速分片握手及完整操作绝对时限没有因此获得保证。
+
+离线镜像具有TLS库但不带公共根CA集合。容器使用HTTPS时，CA文件必须在容器内可读，并为服务进程设置其容器路径；仅在.env设置宿主文件路径不够。标准七文件包未附带CA或额外挂载配置，默认Hosted接收仍走本机HTTP。受保护CA文件的只读挂载属于具体部署配置，需另行验证，不能通过关闭身份校验解决文件或证书问题。
+
+服务端专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <已有真实默认组织CJP及meta-data.json目录> --evidence-dir <新证据目录>`。使用已有OpenSSL和匹配SDK/stdx；18项包含Mirror/Sync的可信DNS/IP、Proxy可信IP、未知CA/错误DNS/IP/仅clientAuth用途拒绝，以及先成功读取索引、再遇到错误制品或发布连接证书的检查。记录HTTP到达阶段、认证、真实发布帧及失败存储保持；Sync发布正向是协议夹具，不证明夹具持久化。
+
+最新6f5d服务端在原生Linux18/18（15.38s），465c镜像内同脚本18/18（13.74s）；镜像内仅测试Python/OpenSSL使用只读工具挂载，服务端使用镜像自带库，临时CA不安装到系统。容器专项未使用标准Compose的CA挂载，不能称其已验收。旧1ec3服务端同脚本6/18，合法HTTPS报未配置TLS；六项早拒绝不能证明旧TLS身份通过。准确产物与准备失败记录见[验证报告](verification-report.md)。
 
 ## 团队CA与任务环境
 
@@ -51,4 +63,4 @@ python3 integration-tests/compatibility/tls_identity.py \
 
 名称修复阶段的同脚本旧客户端 **7/12**，修复客户端 `14d6f505…` **12/12、14.25秒**。扩展跳转用例后，该客户端实际 **12/15**：发布包体被307转发到本机明文HTTP目标，认证头已被移除；三项跳转检查均未通过。禁止自动跳转的新Linux客户端 **15/15、18.68秒**，SHA-256为 `06ae2c1b7a058502f531da257c6ff8d1f316dbe57a599cab1421e1d9e8acb458`。旧/新15项使用同一脚本摘要；源码、各阶段失败证据和同产物综合回归见[验证报告](verification-report.md)。
 
-当前仅实测Linux、DNS localhost与IPv4回环地址，以及上述三种自动跳转拒绝；不代表任意重定向处理通过。IPv6路径、证书过期/吊销、mTLS、公有CA线上服务、Proxy/Mirror/Sync自身的出站TLS以及完整官方集合未由本批证明。服务端镜像和离线包没有改变；本地修复尚未提交或推送。
+以上客户端历史批次仅实测Linux、DNS localhost与IPv4回环，以及所列三种自动跳转拒绝；该批没有改变服务端镜像。后续服务端出站TLS见前节及最新验证记录，不回填成当次客户端批次的成绩。IPv6、过期/吊销、mTLS、公有CA线上服务、成熟网关/跨主机HTTPS、绝对握手预算及完整官方集合仍未由这些本机夹具证明。源码提交与推送状态见交付记录。

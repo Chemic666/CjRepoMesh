@@ -3,10 +3,28 @@
 > 已发布代码及双端提交见[交付记录](delivery-record.md)。各节“尚未Commit/Push”描述各次验收时点，不代表当前远端状态；须结合对应批次阅读。
 
 > 最近执行日期：2026-10-22
-> **最新固定候选：** 客户端仍为 `6a7b3acb…`，所列Linux综合验收身份与边界见[固定候选验收清单](candidate-acceptance.md)；最新Linux服务端为 `1ec31bf1…`，本页首节单列其TCP建连期限、关联三组、跳转回归及新镜像接收结果。旧产物成绩不移算，同一二进制既有证据明确标为引用。
+> **最新固定候选：** 客户端仍为 `6a7b3acb…`，所列Linux综合验收身份与边界见[固定候选验收清单](candidate-acceptance.md)；最新Linux服务端为 `6f5d3708…`，本页首节单列其HTTPS出站身份、关联三组、TCP/跳转回归及新镜像接收结果。旧产物成绩不移算，同一二进制既有证据明确标为引用。
 > 包含多批产物；产物身份见各对应节，各历史节的“当前”只指该节产物，不将旧结果视为新二进制的重新验收。
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
 > 历史结论（2026-09-26）：在本地交付材料提交 `98e9f849` 上，从 Windows 工作区挂载路径真实重编译服务端并运行 Linux 四组，4/4 PASS、252.01 秒，随后 Docker Doctor 9/9。当时 Windows 原生构建被 Application Control 阻断；该限制不代表 2026-10-20 的实际环境。历史远端 HEAD、视频及 Maple 子集记录见各日期章节，不作为当前远端或最终产物的验收声明。
+
+## 2026-10-22 服务端HTTPS上游与目标身份
+
+现有入口接受HTTPS URL，但服务端两个出站ClientBuilder未设置tlsConfig，合法HTTPS在本地直接报 `TLS must be configured when HTTPS requests are sent`。自有回环HTTPS夹具使用真实CJP，旧1ec3服务端同脚本 **6/18、19.20s**；五个正向及七个后阶段用例失败，六个早拒绝通过仅因根本没有TLS连接，不能说旧版身份已验收，也没有证据称旧版接受错误证书。
+
+共享出站helper现在接收实际upstream或destination URL，启用默认TlsClientConfig；DNS绑定serverName，IP在默认链、有效期和服务器用途校验的握手之后比较已认证叶证书IP SAN二进制值，成功前不向HTTP层交出连接。没有TrustAll或替代默认证书链的CustomVerify，失败关闭连接；原TCP配置、noProxy和禁止跳转保留。握手参数30秒在当前stdx中表示读写等待，**不是绝对握手或整次操作总预算**；独立审查指出此区别，代码注释与使用说明已明确，未声称慢速分片测试完成。
+
+冻结164份源/测试输入，Windows为源码，复制到新Linux目录逐项核对；用既有SDK/stdx与固定6a7客户端构建新服务端，SHA-256 `6f5d3708ebd71ccdcceef361ea3c46584ba6839f6cdebdb061f8cf3413393628`。与旧版同运行器摘要下 **18/18 PASS、15.38s**，包含Mirror/Sync可信DNS/IP、Proxy可信IP、未知CA/错误DNS/IP/仅clientAuth用途拒绝，以及合法索引之后的源制品、目的索引/制品和独立Sync发布IP/DNS连接拒绝。指定阶段确实到达，身份错误处没有HTTP请求，已配置认证正确，失败存储不变，合法Sync发布检查真实完整帧；协议夹具不证明目的持久化。
+
+同一新服务端与6a7真实Hosted/Proxy/Sync **3/3 PASS、100.79s**（44.40/38.23/18.12s），TCP建连专项 **14/14、21.19s**，出站跳转 **12/12、14.18s**；构建及相关运行外层158.43s。Linux副本164输入前后保持；之后公开说明及一处将deadline改为I/O waits的注释补正，执行逻辑没有变化，最终核对单列该注释差异。
+
+复用已有Ubuntu、本批Linux二进制及原两份仓颉运行库，断网构建新镜像 `sha256:465c270beaaedf0ac0a0ac488091d90a49e88e83a6b60666ffb92deff5dafbd4`。Windows Python/Docker七文件包隔离接收 **16/16 PASS、21.28s**，含真实CJP私有读写、摘要、运行态四状态及重建保留，清理无错误。镜像具有libssl/libcrypto，但没有根CA集合或OpenSSL命令工具；标准七文件Compose包未提供额外CA挂载配置，不能把原生进程CA设置直接当作容器路径。
+
+另在该镜像内、network=none运行同一18项：**18/18 PASS、13.74s**，服务端摘要匹配且仅使用镜像自带库。测试Python/OpenSSL来自已有工具只读挂载；Python的工具库仅通过其启动器指定，服务端子进程LD_LIBRARY_PATH仍仅指向镜像仓颉库；合成CA在容器内临时目录生成、只给测试子进程，未安装到系统。首轮因测试Python缺libexpat未启动用例，随后证书工具因缺openssl.cnf未开始用例；原失败保留，给Python启动器提供既有库、仅证书工具使用空配置后才运行完整18项，不修改服务镜像或放宽断言。准备期间WSL复制工具一次服务超时，重试成功，不涉及网络/安全配置变更；自建容器均已清理。此项是镜像回环协议夹具，不是标准Compose CA挂载或生产网关验收。
+
+新归档 `artifacts/CjRepoMesh-server-linux-amd64-465c270beaae-tls.zip`（外层目录），38,370,532字节，SHA-256 `8d3f713b6b32d1d37ad95605d655c56e2147497e13f99d9dd227007ce0860f7b`，清单摘要 `6d16f068cb4128b0bd522348c915b29857815e97244a3e96c7a666281ff76a3f`。镜像/归档/客户端旧产物保留；证据在外层 `test-runs/server-tls-20261022/`，不提交原始日志、工具、合成私钥或产物。按持续授权双端普通推送，不推送origin、不发布Release。
+
+当前仍未验收IPv6、证书过期/吊销、mTLS、公有CA线上端点、成熟入口网关/跨主机HTTPS、绝对握手总时限、Windows仓颉、完整Maple及新镜像冷恢复/升级；不能继承旧镜像的9/9或14/14成绩。服务端监听仍为HTTP，新增的是它访问HTTPS源/目标的能力，不提供入站证书管理。
 
 ## 2026-10-22 服务端出站TCP建连期限
 
