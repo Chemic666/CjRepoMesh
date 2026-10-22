@@ -270,6 +270,19 @@ python3 integration-tests/compatibility/maple_local_workspace.py \
 .\benchmark\proxy\run.ps1
 ```
 
+## 基线能力查询与消费任务预检
+
+```bash
+python3 integration-tests/compatibility/baseline_capability.py \
+  --cjpm /path/to/current/cjpm \
+  --old-cjpm /path/to/existing/8da5/cjpm \
+  --evidence-dir /path/to/new-capability-evidence
+```
+
+仅运行Linux客户端；入口为各例隔离HOME/目录，移除SDK环境及编译器PATH，并创建只记录请求的本机HTTP夹具。核对精确能力查询、损坏配置/脚本、未知/帮助标记、额外参数和原在线SDK边界；stdout与stderr分开判断，隐私检查覆盖两者。消费脚本的异常退出、空/错/额外stdout、显式空值及未配置/支持控制使用自有合成客户端，另有实际旧客户端拒绝；这些协议控制不冒充真实CJP构建。
+
+真实完整新包的发布、消费、冷CI基线匹配/漂移及旧客户端构建前拒绝另在[验证记录](../docs/verification-report.md)记账。能力是兼容性自报，不认证二进制；所有日志和合成材料留在新的本地证据目录。
+
 ## 来源基线多图兼容性
 
 使用与单图专项相同的固定Linux客户端、已有SDK/stdx和真实meshdep包目录：

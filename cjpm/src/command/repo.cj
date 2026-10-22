@@ -14,6 +14,7 @@ Usage:
   cjpm repo explain <package>
   cjpm repo explain <package> --recorded
   cjpm repo doctor [package]
+  cjpm repo supports source-baseline-v1
 
 Examples:
   cjpm repo explain meshdep
@@ -42,6 +43,14 @@ class RepoCommand <: Handle {
     }
 
     public override func handleCommand(): Bool {
+        if (!this.arguments.isEmpty() && this.arguments[0] == "supports") {
+            if (this.arguments.size == 2 && this.arguments[1] == "source-baseline-v1") {
+                println("source-baseline-v1")
+                return true
+            }
+            eprintln("Error: unsupported repository capability or invalid supports arguments")
+            return false
+        }
         if (!this.arguments.isEmpty() && this.arguments[0] == "doctor") {
             if (this.arguments.size == 1) {
                 return doRepoDoctor(None)
@@ -62,7 +71,8 @@ class RepoCommand <: Handle {
             eprintln("Error: usage is 'cjpm repo explain <package> [--recorded]'")
             return false
         }
-        eprintln("Error: usage is 'cjpm repo explain <package> [--recorded]' or 'cjpm repo doctor [package]'")
+        eprintln("Error: use 'cjpm repo explain <package> [--recorded]', 'cjpm repo doctor [package]' or " +
+            "'cjpm repo supports source-baseline-v1'")
         return false
     }
 }

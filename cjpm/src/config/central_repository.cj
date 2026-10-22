@@ -274,7 +274,16 @@ public func readConfigToml(file: Path): SettingsConfig {
     return res
 }
 
+// A static compatibility query must not depend on repository configuration.
+// Keep this exact; malformed/other command forms retain normal initialization.
+public func isRepositoryCapabilityQuery(args: Array<String>): Bool {
+    return args.size == 3 && args[0] == "repo" && args[1] == "supports"
+}
+
 public func loadConfigInfo(): SettingsConfig {
+    if (isRepositoryCapabilityQuery(getCommandLine()[1..])) {
+        return SettingsConfig()
+    }
     // Read the configuration file based on priority.
     if (fileExists(Path(DIR_CURRENT).join(REPO_CONFIG_FILE_NAME))) {
         return readConfigToml(Path(DIR_CURRENT).join(REPO_CONFIG_FILE_NAME))

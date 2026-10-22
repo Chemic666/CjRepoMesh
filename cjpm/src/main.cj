@@ -8,6 +8,7 @@ package cjpm
 
 import std.env.*
 import cjpm.command.*
+import cjpm.config.isRepositoryCapabilityQuery
 import cjpm.util.CliFailError
 
 func getCommandArgs(): Array<String> {
@@ -20,6 +21,10 @@ main(): Int64 {
     let factory = CommandFactory()
     let cmdHandler = factory.createCommandHandler(args)
     try {
+        if (isRepositoryCapabilityQuery(args)) {
+            return if (cmdHandler.handleCommand()) { 0 } else { 1 }
+        }
+
         if (hasHelpCommand(cmdHandler)) {
             return 0
         }
