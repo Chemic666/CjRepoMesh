@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import runpy
 import shutil
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import uuid
 TESTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TESTS))
 from lib.harness import (  # noqa: E402
-    TestFailure, assert_contains, assert_equal, assert_ports_available, http_request,
+    CommandResult, TestFailure, assert_contains, assert_equal, assert_ports_available, http_request,
     publish_frame, remove_within, run_command, wait_for_health, wait_for_ports_closed,
 )
 
@@ -41,13 +42,31 @@ def archive_manifest(path: Path) -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="existing local CjRepo image; never pulled")
-    parser.add_argument("--cjpm", type=Path, required=True)
+    clients = parser.add_mutually_exclusive_group(required=True)
+    clients.add_argument("--cjpm", type=Path, help="existing native host client")
+    clients.add_argument("--client-bundle", type=Path, help="complete Linux client delivery directory")
+    parser.add_argument("--client-sdk", type=Path, help="existing Linux SDK for container jobs, read-only")
+    parser.add_argument("--client-native", type=Path, help="existing ar/ld, Python and libraries, read-only")
     parser.add_argument("--port", type=int, default=39640)
     parser.add_argument("--evidence-dir", type=Path, help="new directory retaining logs and backup archive")
     args = parser.parse_args()
-    cjpm = args.cjpm.resolve()
-    if not cjpm.is_file():
+    if not args.client_bundle and (args.client_sdk or args.client_native):
+        parser.error("client-sdk/client-native require client-bundle")
+    cjpm = args.cjpm.resolve() if args.cjpm else None
+    if cjpm and not cjpm.is_file():
         parser.error("build the enhanced cjpm first")
+    client_manifest = None
+    client_verifier = None
+    if args.client_bundle:
+        if not args.client_sdk or not (args.client_sdk / "envsetup.sh").is_file():
+            parser.error("client-bundle requires an existing client-sdk")
+        if args.client_native and not (args.client_native / "bin/ar").is_file():
+            parser.error("client-native requires existing ar/ld and matching runtime tools")
+        client_verifier = runpy.run_path(str(TESTS.parent / "deployment/client/verify.py"))["verify_bundle"]
+        try:
+            client_manifest = client_verifier(args.client_bundle)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            parser.error("invalid client bundle: " + str(error))
     assert_ports_available((args.port,))
     parent = TESTS / ".tmp"
     root = parent / ("docker-backup-" + uuid.uuid4().hex)
@@ -68,6 +87,10 @@ def main() -> int:
     client_env.update(HOME=str(isolated_home), USERPROFILE=str(isolated_home),
                       CJREPOMESH_BACKUP_READ_TOKEN="backup-read-fixture")
     base = f"http://127.0.0.1:{args.port}"
+    client_registry = "http://127.0.0.1:8080" if args.client_bundle else base
+    client_manifest_sha = (hashlib.sha256((args.client_bundle / "manifest.json").read_bytes()).hexdigest()
+                           if args.client_bundle else None)
+    recovered = None
     completed = 0
     success = False
 
@@ -135,6 +158,40 @@ def main() -> int:
         assert_equal(state["Running"], False, label="source is stopped before backup")
         wait_for_ports_closed((args.port,))
 
+    def client_command(command: str, target: Path, suffix: str) -> CommandResult:
+        if cjpm:
+            return run_command((cjpm, command), cwd=target, env=client_env, timeout=90)
+        native_mounts = []
+        if args.client_native:
+            native_mounts += ["--mount", f"type=bind,source={args.client_native.resolve()},target=/opt/native,readonly"]
+            for path in sorted((args.client_native / "system").rglob("*")):
+                if path.is_file():
+                    destination = "/" + path.relative_to(args.client_native / "system").as_posix()
+                    native_mounts += ["--mount", f"type=bind,source={path.resolve()},target={destination},readonly"]
+        if command == "run" and recovered is None:
+            raise TestFailure("A restored server is required for consumer jobs")
+        # Share only this owned restored server's network namespace. The client
+        # reaches its internal port without exposing the host beyond loopback.
+        identifier = create(image, f"type=bind,source={target.resolve()},target=/job",
+            "--network", "container:" + recovered if command == "run" else "none",
+            "--tmpfs", "/tmp:size=128m,mode=1777", "--workdir", "/job",
+            "--mount", f"type=bind,source={args.client_sdk.resolve()},target=/opt/cangjie,readonly",
+            "--mount", f"type=bind,source={args.client_bundle.resolve()},target=/opt/client,readonly",
+            *native_mounts, "--env", "HOME=/job/.home", "--env", "USERPROFILE=/job/.home",
+            "--env", "CJREPOMESH_BACKUP_READ_TOKEN=backup-read-fixture", "--entrypoint", "/bin/bash",
+            command=("-ec", 'source /opt/cangjie/envsetup.sh; '
+                     'export PATH="/opt/native/bin:$PATH" LD_LIBRARY_PATH="/opt/native/lib:$LD_LIBRARY_PATH"; '
+                     'exec /opt/client/run.sh "$@"', "cjpm-job", command))
+        # The launcher reports integrity on stderr; preserve both streams.
+        output = run_command(("docker", "start", "--attach", identifier), cwd=root,
+                             env=docker_env, timeout=180).output
+        state = json.loads(docker("inspect", identifier))[0]["State"]
+        (logs / f"client-{suffix}.log").write_text(output, encoding="utf-8")
+        assert_equal(state["ExitCode"], 0, label="real container client exit")
+        assert_contains(output, "PASS: client bundle integrity; cjpm SHA-256 " +
+                        client_manifest["files"]["cjpm"]["sha256"])
+        return CommandResult(0, output)
+
     def fixture(relative: str, suffix: str) -> Path:
         target = root / suffix
         target.mkdir()
@@ -145,7 +202,7 @@ def main() -> int:
             elif original.is_file():
                 shutil.copyfile(original, target / name)
         (target / "cangjie-repo.toml").write_text(
-            f'[repository.cache]\npath = "cache"\n[repository.home]\nregistry = "{base}"\n'
+            f'[repository.cache]\npath = "cache"\n[repository.home]\nregistry = "{client_registry}"\n'
             'token-env = "CJREPOMESH_BACKUP_READ_TOKEN"\n', encoding="utf-8")
         return target
 
@@ -156,7 +213,7 @@ def main() -> int:
             text = config.read_text(encoding="utf-8")
             assert_equal(text.count('version = "2.0.0"'), 1, label="fixture version replacement")
             config.write_text(text.replace('version = "2.0.0"', f'version = "{version}"'), encoding="utf-8")
-        result = run_command((cjpm, "bundle"), cwd=target, env=client_env, timeout=60)
+        result = client_command("bundle", target, suffix)
         (logs / f"bundle-{suffix}.log").write_text(result.output, encoding="utf-8")
         metadata = (target / "target/meta-data.json").read_bytes()
         value = json.loads(metadata)
@@ -203,6 +260,8 @@ def main() -> int:
         original = server(image, source_volume)
         binary_sha = docker("exec", original, "sha256sum", "/usr/local/bin/cjrepo").decode().split()[0]
         (logs / "runtime.json").write_text(json.dumps(dict(image=image, server_sha256=binary_sha,
+            client_sha256=client_manifest["files"]["cjpm"]["sha256"] if client_manifest else None,
+            client_manifest_sha256=client_manifest_sha,
             source_volume=source_volume, restored_volume=restored_volume), indent=2), encoding="utf-8")
         for package in packages:
             publish(package)
@@ -228,7 +287,7 @@ def main() -> int:
         for suffix, relative, marker in (("default", "hosted-server/app", "low-2.0.0"),
                                          ("organization", "hosted-server/org-app", "meshcorp-1.0.0")):
             consumer = fixture(relative, "consumer-" + suffix)
-            result = run_command((cjpm, "run"), cwd=consumer, env=client_env, timeout=90)
+            result = client_command("run", consumer, "consumer-" + suffix)
             (logs / f"consumer-{suffix}.log").write_text(result.output, encoding="utf-8")
             assert_contains(result.output, marker)
             passed(f"fresh-cache {suffix} client builds and runs from restored volume")
@@ -246,6 +305,10 @@ def main() -> int:
         assert_equal(export(image, source_volume, root / "source-after.tar"), expected,
                      label="source volume remains unchanged")
         assert_equal(hashlib.sha256(backup.read_bytes()).hexdigest(), backup_sha, label="backup archive unchanged")
+        if args.client_bundle:
+            assert_equal(client_verifier(args.client_bundle), client_manifest, label="client delivery unchanged")
+            assert_equal(hashlib.sha256((args.client_bundle / "manifest.json").read_bytes()).hexdigest(),
+                         client_manifest_sha, label="client manifest unchanged")
         passed("source volume and backup archive remain unchanged by restored writes")
         success = True
     except (TestFailure, OSError, ValueError, tarfile.TarError, subprocess.TimeoutExpired) as error:
@@ -284,6 +347,10 @@ def main() -> int:
                     cleanup_failed = True
                     print(f"FAIL owned-volume cleanup: {error}", flush=True)
         success = success and not cleanup_failed
+        (logs / "summary.json").write_text(json.dumps(dict(success=success, passed=completed, total=9,
+            client_mode="container-bundle" if args.client_bundle else "native-host",
+            client_sha256=client_manifest["files"]["cjpm"]["sha256"] if client_manifest else None,
+            cleanup_failed=cleanup_failed), indent=2) + "\n", encoding="utf-8")
         if success:
             remove_within(root, (parent,))
         else:

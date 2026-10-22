@@ -60,6 +60,17 @@ It binds only `127.0.0.1:39640` by default (`--port` overrides it), isolates cli
 
 This is an isolated deployment test, not a command to back up an existing business volume. It does not establish online backup consistency, automatic scheduling, production cutover or power-loss durability.
 
+When host Cangjie execution is unavailable, use the complete Linux client delivery in owned job containers:
+
+```cmd
+python integration-tests\recovery\test_docker_client.py
+python integration-tests\recovery\docker_backup.py --image <existing-local-image> --client-bundle <complete-client-directory> --client-sdk <existing-Linux-SDK> --client-native <existing-native-tools-directory> --evidence-dir <new-evidence-directory>
+```
+
+`--client-bundle` and `--cjpm` are mutually exclusive. The bundle is checked with the source repository's trusted verifier before Docker or evidence writes; the candidate verifier is not executed during preflight. Linux jobs still need the matching SDK, Python 3, ar/ld and system link inputs. The optional native-tools directory uses the same `bin/`, `lib/` and `system/` layout as the [team acceptance runner](../README.md); it mounts existing tools read-only and never installs or downloads them. All client commands run through the complete bundle's `run.sh`, with stdout and stderr retained and the actual container exit checked.
+
+Bundling jobs have no network. Each consumer starts with its own HOME/cache and shares only the owned restored server's network namespace, reaching its internal loopback port. The host server remains bound to `127.0.0.1`; no WSL-to-host networking changes are needed. This is an isolated container recovery drill, not cross-host deployment. In bundle mode, `runtime.json` records the image/server/client identities; `summary.json` records checkpoints and cleanup status in both modes. The client bundle is rechecked after all operations; tools and credentials remain separate from the storage backup.
+
 ## Stopped-volume upgrade and rollback
 
 Use two existing local Linux amd64 server images and two genuine prebuilt CJP fixtures. The seed is a default-organization package; the new package belongs to a named organization. No SDK execution or downloads are required:
