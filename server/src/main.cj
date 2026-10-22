@@ -216,6 +216,8 @@ private class RegistryDistributor <: HttpRequestDistributor {
 main(): Int64 {
     try {
         let _ = outboundConnectTimeoutSeconds()
+        let _ = maximumArtifactBytes()
+        let _ = maximumIndexBytes()
     } catch (e: Exception) {
         eprintln("Error: ${e.message}")
         return 2

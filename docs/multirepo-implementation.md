@@ -24,6 +24,7 @@
 - `cjpm repo explain <package>` 复用真实 Router 与 DepRecord 输出解析决策；
 - `cjpm-provenance.json` 原子记录最终版本、仓库名称、地址与 SHA-256；
 - `cjpm repo explain <package> --recorded` 支持离线读取保存的依赖解析结果，仅接受当前支持的 `formatVersion = 1`；记录不代表编译成功；
+- 在线 `cjpm repo explain <package>` 是单包候选预览，明确忽略 `cjpm.lock` 与传递依赖约束；`selected version` 是预览候选，实际锁定构建可能不同。要查看实际解析，先构建，再用 `--recorded`；本批不改变原求解器或锁文件格式，也不提供来源基线强制校验。
 - `cjpm repo doctor [package]` 逐仓检查真实 Metadata API，并标识允许或禁止回退；
 - 旧 `repository.home` 配置和缓存路径兼容。
 

@@ -66,12 +66,14 @@ class PublishHandler <: HttpRequestHandler {
         try {
             let storageOrganization = requestedRegistryOrganization(context)
             let frameBuffer = ArrayList<UInt8>()
+            let maximumFrameBytes = maximumArtifactBytes() + MAX_PUBLISH_METADATA_BYTES + 10
             while (true) {
                 let chunk = Array<UInt8>(64 * 1024, repeat: 0)
                 let readSize = context.request.body.read(chunk)
                 if (readSize == 0) {
                     break
                 }
+                ensurePayloadFits(frameBuffer.size, readSize, maximumFrameBytes)
                 frameBuffer.add(all: chunk[..readSize])
             }
             let frame = frameBuffer.toArray()
@@ -175,6 +177,8 @@ class PublishHandler <: HttpRequestHandler {
                 .status(200)
                 .header("Content-Type", "application/json; charset=utf-8")
                 .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
+        } catch (e: PayloadTooLargeException) {
+            respondError(context, 413, e.message)
         } catch (e: Exception) {
             respondError(context, 400, e.message)
         }
@@ -229,11 +233,13 @@ private func parsePublishFrame(frame: Array<UInt8>): PublishPayload {
         throw Exception("invalid metadata frame")
     }
     let metadataLength = decodeLittleEndianSize(frame, 1)
+    ensurePayloadFits(0, metadataLength, MAX_PUBLISH_METADATA_BYTES)
     let artifactHeader = 5 + metadataLength
     if (metadataLength <= 0 || artifactHeader + 5 > frame.size || frame[artifactHeader] != FRAME_VERSION) {
         throw Exception("invalid metadata length or artifact frame")
     }
     let artifactLength = decodeLittleEndianSize(frame, artifactHeader + 1)
+    ensurePayloadFits(0, artifactLength, maximumArtifactBytes())
     let artifactStart = artifactHeader + 5
     if (artifactLength <= 0 || artifactStart + artifactLength != frame.size) {
         throw Exception("invalid artifact length")

@@ -199,12 +199,14 @@ public func doRepoExplain(fullName: String): Bool {
 
     let selectedDepot = sourceDepotMap[fullName][selectedVersion]
     let checksum = indexMap[fullName][selectedVersion].sha256sum
-    println("Resolution:")
+    println("Candidate preview:")
+    println("  scope: single package; ignores cjpm.lock and transitive constraints")
+    println("  actual resolution: run cjpm build, then cjpm repo explain ${fullName} --recorded")
     println("  effective requirement: ${effective}")
     println("  available versions: ${String.join(resolvedRecord.available.toArray(), delimiter: ", ")}")
     println("  selected version: ${selectedVersion}")
     println("  repository: ${selectedDepot.registryName}")
     println("  checksum: sha256:${checksum}")
-    println("  reason: existing cjpm version selection, then repository priority for the exact version")
+    println("  reason: highest direct compatible candidate, then repository priority for the exact version")
     return true
 }

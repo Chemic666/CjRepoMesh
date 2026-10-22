@@ -188,12 +188,14 @@ func fetchUpstream(upstream: String, token: String, path: String): (UInt16, Arra
         }
         let response = client.send(requestBuilder.build())
         let buffer = ArrayList<UInt8>()
+        let maximumBytes = if (path.startsWith("/index/")) { maximumIndexBytes() } else { maximumArtifactBytes() }
         while (true) {
             let chunk = Array<UInt8>(64 * 1024, repeat: 0)
             let readSize = response.body.read(chunk)
             if (readSize == 0) {
                 break
             }
+            ensurePayloadFits(buffer.size, readSize, maximumBytes)
             buffer.add(all: chunk[..readSize])
         }
         return (response.status, buffer.toArray())

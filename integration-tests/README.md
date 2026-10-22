@@ -6,6 +6,10 @@
 
 固定客户端、服务端、交付包及同一产物的新执行/引用证据集中在[固定候选验收清单](../docs/candidate-acceptance.md)，其中仍未验收项单独列出。
 
+在线来源解释回归：`python3 integration-tests/compatibility/explain_preview.py --cjpm <已有Linux客户端> --package-dir <真实默认组织meshdep-1.0.0的target目录> --evidence-dir <新目录>`。以合成双版本索引和真实1.0.0 CJP核对锁定构建/实际运行、候选预览2.0.0的范围提示、recorded1.0.0及锁/记录不变；第二版本只用于候选，不下载或冒充真实2.0.0构建。需先加载已有SDK/stdx，不执行Windows仓颉。
+
+大小边界回归：`python3 integration-tests/compatibility/server_payload_limits.py --server <已有Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新私有目录>`。24项覆盖非法配置、制品和元数据临界值、独立元数据声明/实际超限、分块总帧、鉴权优先、Proxy索引/分块制品超限及同实例恢复、Mirror/Sync索引/制品超限失败和无写入。合成上游制品有匹配摘要，不能仅靠摘要不符误判大小限制；日志落盘前脱敏、隐私断言使用原始内存值。仅操作自有进程/存储，不做耗尽内存、全量压力或Windows仓颉测试。
+
 ## Windows 全量入口
 
 在已经安装仓颉 SDK、stdx 和 Windows 构建工具的环境中，从项目根目录运行：

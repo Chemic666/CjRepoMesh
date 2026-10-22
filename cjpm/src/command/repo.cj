@@ -7,6 +7,8 @@ import cjpm.implement.*
 
 let REPO_USAGE: String = """
 Explain repository routing and package source selection.
+Online explain previews one package without lockfile or transitive constraints.
+Use --recorded to inspect the last saved dependency resolution (not build success).
 
 Usage:
   cjpm repo explain <package>
