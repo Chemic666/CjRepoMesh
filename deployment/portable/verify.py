@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 from pathlib import Path
 import re
@@ -158,6 +159,21 @@ def check_running_trust(root: Path, item: dict, identifier: str, *, required: bo
             raise ValueError('container CA does not match the configured digest')
 
 
+def check_running_credentials(item: dict, effective: dict) -> None:
+    """Compare resolved Compose values in memory; never include them in errors."""
+    message = 'running credentials do not match the effective Compose configuration'
+    if not isinstance(effective, dict):
+        raise ValueError(message)
+    entries = item['Config'].get('Env') or []
+    for key in ('CJREPO_READ_TOKEN', 'CJREPO_PUBLISH_TOKEN'):
+        expected = effective.get(key)
+        observed = [entry[len(key)+1:] for entry in entries
+                    if isinstance(entry, str) and entry.startswith(key+'=')]
+        if (not isinstance(expected, str) or not expected or len(observed) != 1 or
+                not hmac.compare_digest(expected.encode('utf-8'), observed[0].encode('utf-8'))):
+            raise ValueError(message)
+
+
 def verify_running(root: Path, manifest: dict) -> None:
     project, port = runtime_configuration(root)
     identifiers = docker("compose", "--project-directory", str(root), "-p", project,
@@ -170,6 +186,11 @@ def verify_running(root: Path, manifest: dict) -> None:
     if not isinstance(inspected, list) or len(inspected) != 1:
         raise ValueError("cannot identify the running deployment")
     check_running_container(inspected[0], manifest["image"], project, port)
+    # Let Compose resolve env_file quoting/interpolation using the same explicit
+    # files as startup. Do not persist or print config output: it holds secrets.
+    configuration = json.loads(docker('compose', '--project-directory', str(root), '-p', project,
+        '-f', str(root/'compose.yaml'), '--env-file', str(root/'.env'), 'config', '--format', 'json'))
+    check_running_credentials(inspected[0], configuration['services']['cjrepo'].get('environment'))
     check_running_trust(root, inspected[0], identifier,
                         required=manifest.get('caConfiguration') == 'pem-directory-v1')
     volume = json.loads(docker("volume", "inspect", project + "_cjrepo-data"))

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import runpy
+import secrets
 import shutil
 import socket
 import struct
@@ -35,12 +36,15 @@ def main() -> int:
     parser.add_argument("--package-dir", required=True, type=Path, help="existing cjpm bundle output")
     parser.add_argument("--evidence-dir", required=True, type=Path, help="new local evidence directory")
     parser.add_argument("--check-running", action="store_true", help="exercise verify.py --running in a supporting bundle")
+    parser.add_argument('--check-credential-drift',action='store_true',help='also test configuration drift and credential recreation')
     parser.add_argument("--team-sdk", type=Path, help="optional existing Linux SDK, mounted read-only")
     client = parser.add_mutually_exclusive_group()
     client.add_argument("--team-client", type=Path, help="optional existing Linux enhanced cjpm")
     client.add_argument("--team-client-bundle", type=Path, help="optional complete Linux client delivery directory")
     parser.add_argument("--team-native", type=Path, help="optional existing ar/ld and libraries for a minimal runtime container")
     args = parser.parse_args()
+    if args.check_credential_drift and not args.check_running:
+        parser.error('check-credential-drift requires check-running')
     team_client = args.team_client_bundle or args.team_client
     if bool(args.team_sdk) != bool(team_client):
         parser.error("team-sdk and a team client must be supplied together")
@@ -55,7 +59,7 @@ def main() -> int:
             parser.error("invalid team client bundle: " + str(failure))
     if args.team_native and (not args.team_sdk or not (args.team_native / "bin/ar").is_file()):
         parser.error("team-native requires team SDK/client and an existing ar")
-    total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0)
+    total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0) + (2 if args.check_credential_drift else 0)
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -243,6 +247,35 @@ def main() -> int:
         expect(request(publish_path, credentials["CJREPO_PUBLISH_TOKEN"], frame)[0], 409)
         assert hashlib.sha256((installation / ".env").read_bytes()).hexdigest() == credential_sha
         passed("duplicate-rejected-and-original-credentials-preserved")
+
+        if args.check_credential_drift:
+            original_configuration=(installation/'.env').read_bytes()
+            new_read,new_publish=secrets.token_hex(32),secrets.token_hex(32)
+            secret_values.extend((new_read,new_publish))
+            changed=original_configuration.replace(('CJREPO_READ_TOKEN='+credentials['CJREPO_READ_TOKEN']).encode(),('CJREPO_READ_TOKEN='+new_read).encode())
+            changed=changed.replace(('CJREPO_PUBLISH_TOKEN='+credentials['CJREPO_PUBLISH_TOKEN']).encode(),('CJREPO_PUBLISH_TOKEN='+new_publish).encode())
+            assert changed!=original_configuration
+            try:
+                (installation/'.env').write_bytes(changed)
+                run('runtime-credential-drift',(sys.executable,'verify.py','--running'),success=False)
+                assert 'credentials' in (report/'runtime-credential-drift.log').read_text()
+                expect(request(archive_path,credentials['CJREPO_READ_TOKEN'])[0],200)
+                expect(request(publish_path,credentials['CJREPO_PUBLISH_TOKEN'],frame)[0],409)
+                expect(request(archive_path,new_read)[0],401)
+                expect(request(publish_path,new_publish,frame)[0],401)
+                passed('runtime-diagnostic-rejects-unapplied-credentials-without-changing-service')
+                compose('apply-test-credentials','up','-d','--force-recreate','--no-build','--pull','never')
+                healthy();running_diagnostic('runtime-applied-credentials')
+                expect(request(archive_path,credentials['CJREPO_READ_TOKEN'])[0],401)
+                expect(request(publish_path,credentials['CJREPO_PUBLISH_TOKEN'],frame)[0],401)
+                status,content=request(archive_path,new_read);expect(status,200);assert content==artifact
+                expect(request(publish_path,new_publish,frame)[0],409)
+                passed('recreated-test-service-applies-new-credentials-and-rejects-old-values')
+            finally:
+                (installation/'.env').write_bytes(original_configuration)
+                # Subsequent optional team jobs retain the original fixture's credentials.
+                compose('restore-test-credentials','up','-d','--force-recreate','--no-build','--pull','never')
+                healthy()
 
         if args.team_sdk:
             if args.team_client_bundle:

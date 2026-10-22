@@ -84,6 +84,35 @@ class PortableRuntimeTests(unittest.TestCase):
                 self.check(item)
             self.assertNotIn('synthetic-', str(caught.exception))
 
+    def credential_check(self, item, expected):
+        self.assertTrue('check_running_credentials' in self.functions, 'credential drift diagnostics are missing')
+        self.functions['check_running_credentials'](item, expected)
+
+    def test_matching_effective_credentials_are_accepted(self):
+        self.credential_check(self.container, dict(CJREPO_READ_TOKEN='synthetic-read', CJREPO_PUBLISH_TOKEN='synthetic-publish'))
+
+    def test_changed_running_credentials_are_rejected_without_echo(self):
+        expected = dict(CJREPO_READ_TOKEN='synthetic-read', CJREPO_PUBLISH_TOKEN='synthetic-publish')
+        for key in expected:
+            with self.subTest(key=key):
+                changed = {**expected, key: 'synthetic-private-new-value'}
+                with self.assertRaisesRegex(ValueError, 'credentials') as caught:
+                    self.credential_check(self.container, changed)
+                self.assertNotIn('synthetic-', str(caught.exception))
+
+    def test_missing_empty_or_nonstring_effective_credentials_are_rejected(self):
+        for expected in ({}, None, [], {'CJREPO_READ_TOKEN': 'synthetic-read'},
+                         dict(CJREPO_READ_TOKEN='', CJREPO_PUBLISH_TOKEN='synthetic-publish'),
+                         dict(CJREPO_READ_TOKEN=123, CJREPO_PUBLISH_TOKEN='synthetic-publish')):
+            with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, 'credentials'):
+                self.credential_check(self.container, expected)
+
+    def test_duplicate_running_token_is_rejected_even_when_last_value_matches(self):
+        item = deepcopy(self.container)
+        item['Config']['Env'].insert(0, 'CJREPO_READ_TOKEN=synthetic-other-value')
+        with self.assertRaisesRegex(ValueError, 'credentials'):
+            self.credential_check(item, dict(CJREPO_READ_TOKEN='synthetic-read', CJREPO_PUBLISH_TOKEN='synthetic-publish'))
+
     def test_duplicate_or_invalid_runtime_config_is_rejected(self):
         self.assertTrue('runtime_configuration' in self.functions, 'runtime configuration reader not implemented')
         parent = ROOT / 'integration-tests/.tmp'
@@ -118,6 +147,9 @@ class PortableRuntimeTests(unittest.TestCase):
         item['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort'] = str(port)
         manifest = dict(image={**self.image, 'serverSha256': 'd' * 64})
         def docker(*args):
+            if args[0] == 'compose' and 'config' in args:
+                return json.dumps(dict(services=dict(cjrepo=dict(environment=dict(
+                    CJREPO_READ_TOKEN='synthetic-read',CJREPO_PUBLISH_TOKEN='synthetic-publish')))))
             if args[0] == 'compose': return 'e' * 64
             if args[0] == 'inspect': return json.dumps([item])
             if args[:2] == ('volume', 'inspect'): return json.dumps([dict(Labels=item['Config']['Labels'])])
