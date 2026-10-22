@@ -4,7 +4,7 @@
 
 2026-10-21 客户端可靠性、离线交付及开发者/CI示例已同步至AtomGit和GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。参赛者已授权后续阶段验收后自主双端推送；实际产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
 
-2026-10-22 服务端补齐出站跳转拒绝：新Linux服务端7369通过同脚本12/12及真实Hosted/Proxy/Sync三组3/3，新f3d6镜像/离线包接收16/16。Proxy/Mirror/Sync需要直接返回响应的端点，不自动跟随源/目标跳转或转发发布包体。旧镜像的冷恢复/升级成绩仍单列，不移算给新产物；详情见[最新验证记录](docs/verification-report.md)。
+2026-10-22 服务端补齐出站TCP建连期限：默认30秒，可设整数1–300；最新Linux服务端1ec3通过最终14项、跳转12项及真实Hosted/Proxy/Sync三组3/3，新c25e镜像/离线包接收16/16。Proxy/Mirror/Sync仍需直接响应的端点，不跟随跳转；TCP选项不限制DNS、TLS或整个同步时长。旧镜像冷恢复/升级成绩单列，不移算给新产物；详情见[最新验证记录](docs/verification-report.md)。
 
 当前固定客户端 `6a7b3acb…` 已完成[所列Linux候选范围的综合验收](docs/candidate-acceptance.md)：核心4/4、两组增量各7/7、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38、就绪调整1、归档稳定化1、离线HLT95分别通过。无SDK来源查看13项、配置40项、运行8项及包接收为已核对的同一二进制有效证据，本轮未重复执行；完整Maple、Windows及跨主机验收仍未完成。
 

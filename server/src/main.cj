@@ -214,6 +214,12 @@ private class RegistryDistributor <: HttpRequestDistributor {
 }
 
 main(): Int64 {
+    try {
+        let _ = outboundConnectTimeoutSeconds()
+    } catch (e: Exception) {
+        eprintln("Error: ${e.message}")
+        return 2
+    }
     let arguments = getCommandLine()[1..]
     if (!arguments.isEmpty()) {
         match (arguments[0]) {

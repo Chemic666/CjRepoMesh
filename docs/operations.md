@@ -87,6 +87,8 @@ HTTP400错误正文若包含当前仓库配置的完整令牌，客户端会将�
 
 新Linux服务端的Proxy/Mirror/Sync读取及Sync发布也不自动跟随跳转，包括同源跳转。Proxy传递上游非200状态且不填充缓存，Mirror/Sync返回失败；遇到3xx应调整直接仓库端点。需要跳转的服务不再沿用旧默认行为，禁止用目标返回200或已移除认证头作为允许转发发布包体的依据。具体产物身份与本机HTTP验证范围见[验证记录](verification-report.md)。
 
+新Linux服务端的出站TCP连接默认30秒/次，可在启动前设置 `CJREPO_CONNECT_TIMEOUT_SECONDS` 为1–300的整数。非法/空值在主入口退出2，诊断不显示原值。原生进程设置环境变量；离线容器应修改本部署受保护.env，再按[离线包说明](../deployment/portable/README.md)重建服务以生效，不能只设置宿主变量。连接超时后先核对端点和网络可达性，再重试；不要仅增大期限掩盖错误端点。原stdx15秒读写期限不变，此项不限制DNS、TLS握手、整个同步或watcher总时长。
+
 ## 停止与卸载
 
 Windows 使用 `stop.ps1`，Docker 使用 `down.ps1`，默认保留包数据。卸载程序前核对存储实际位置并保留备份。Docker 的 `-PurgeData` 会删除持久化数据，不用于普通升级或排障。
