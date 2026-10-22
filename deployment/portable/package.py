@@ -47,7 +47,7 @@ def package(image: str, output: Path) -> dict:
     shutil.copyfile(source.parents[1] / "LICENSE", output / "LICENSE")
     (output / "compose.yaml").write_text(
         (source / "compose.yaml").read_text(encoding="utf-8").replace("@IMAGE@", tag), encoding="utf-8")
-    manifest = dict(formatVersion=1, createdAtUtc=datetime.now(timezone.utc).isoformat(),
+    manifest = dict(formatVersion=1, caConfiguration='pem-directory-v1', createdAtUtc=datetime.now(timezone.utc).isoformat(),
                     image=dict(id=identifier, tag=tag, os="linux", architecture="amd64", serverSha256=server_sha),
                     files={name: dict(bytes=(output/name).stat().st_size, sha256=digest(output/name))
                            for name in sorted(FILES)})

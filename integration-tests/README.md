@@ -181,6 +181,10 @@ python integration-tests\deployment\portable.py --bundle <未初始化交付目�
 
 服务端HTTPS专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新证据目录>`。已有Linux OpenSSL生成一天有效的合成CA/证书，0700临时目录退出清除；CA只给子进程，不改系统信任。18项覆盖Proxy/Mirror/Sync的合法HTTPS、未知CA、错误DNS/IP及用途拒绝，以及索引通过之后的源/目的制品和独立发布连接身份错误；核对HTTP到达阶段、真实CJP/发布帧、认证及文件保持。需加载匹配SDK/stdx，不执行Windows仓颉；Sync夹具不提供真实持久化，真实目的仓由核心Sync组另验。镜像内复验另需既有Python/OpenSSL测试工具；不要求把这些工具装进服务镜像，不将本机夹具称为成熟网关、跨主机或标准Compose CA挂载验收。
 
+标准七文件包的CA/Compose流程另用 `python integration-tests/deployment/portable_ca.py --bundle <尚未初始化的新包> --package-dir <已有真实默认CJP目录> --native <已有Linux Python及lib工具目录> --openssl <已有Linux OpenSSL可执行文件> --evidence-dir <新证据目录>`。先按包说明加载固定镜像；脚本不拉取/构建镜像，不需SDK。10项在自建Compose项目验证CA导入、只读挂载与实际摘要、错误DNS证书/无令牌拒绝、同代理恢复后真实HTTPS取包、CA篡改诊断、上游离线缓存和重建保持；TLS夹具仅共享本次服务的网络命名空间，工具只读挂给夹具，不挂给服务。结束清理自建容器/卷和合成私钥，证据目录保留；不测试真实CA分发、原部署轮换、入站网关或跨主机。
+
+接收工具的Python回归可用 `python -m unittest discover -s integration-tests/deployment -p "test_portable*.py"`，共39项：普通七文件校验/初始化、运行诊断和CA/失败清理/异常脱敏。无需Docker或仓颉；健康诊断两项需要本机回环权限，不能把沙箱连接拒绝改成跳过或弱化断言。Windows链接权限不足时有4项跳过，Linux实际39项全过，具体记录见[验证报告](../docs/verification-report.md)。
+
 验证实际交付组合时，将 `--team-client <文件>` 换成 `--team-client-bundle <完整客户端交付目录>`，两者互斥且均须搭配SDK。新模式在创建证据目录/访问Docker前用源码仓库的可信校验器检查包，不执行待测包中的Python代码；任务只读挂载整个目录，通过包内run.sh执行。摘要记录实际二进制和清单SHA-256，结束再次检查包不变，共21项。启动器需容器内已有Python 3；可在任务专用的 `--team-native` 目录下提供已有 `bin/python3`、对应 `lib/python3.X` 标准库及匹配共享库，不向最小服务端镜像安装工具。应先在相同只读挂载条件下运行包的 `--help` 检查依赖。六项离线回归只验证预检和参数拒绝，不代替真实编译。
 
 可选模式在原12项上增加8项，共20项：无凭据准备目录、真实构建发布、只读CI编译运行、第二个独立冷任务、应用运行失败退出码、错误读取令牌、读取令牌越权发布拒绝，以及失败后制品和服务凭据保持。SDK/客户端只读挂载，任务通过本次内部Docker网络访问服务，主机仍仅本机监听。两次成功消费核对同一包的实际来源和SHA-256；失败应用仍可能有解析记录，但不得继续解释或返回成功。这不替代Windows仓颉、全新主机、内网HTTPS或完整官方验收。

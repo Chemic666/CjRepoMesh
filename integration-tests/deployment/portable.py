@@ -64,6 +64,9 @@ def main() -> int:
     guard.mkdir()
     shutil.copyfile(installation / "compose.yaml", guard / "compose.yaml")
     (guard / ".env").write_text("")
+    # New bundles bind an empty directory even for Hosted-only startup.
+    # Let the credential-negative cases reach the entrypoint, not fail a mount.
+    (guard / 'trust').mkdir()
     environment = {key: value for key, value in os.environ.items()
                    if not key.upper().startswith(("CJREPO_", "CJREPOMESH_", "COMPOSE_"))}
     project, projects, secret_values = "", [], []

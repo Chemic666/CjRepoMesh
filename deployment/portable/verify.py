@@ -43,6 +43,8 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
         raise ValueError("bundle manifest must be an object")
     if type(manifest.get("formatVersion")) is not int or manifest["formatVersion"] != 1:
         raise ValueError("unsupported bundle manifest version")
+    if manifest.get('caConfiguration') not in (None, 'pem-directory-v1'):
+        raise ValueError('unsupported bundle CA configuration')
     if not isinstance(manifest.get("files"), dict) or set(manifest["files"]) != FILES:
         raise ValueError("unexpected bundle file list")
     image = manifest["image"]
@@ -117,6 +119,45 @@ def check_running_container(item: dict, image: dict, project: str, port: int) ->
         raise ValueError("running private credentials are missing")
 
 
+def check_running_trust(root: Path, item: dict, identifier: str, *, required: bool = False) -> None:
+    environment = dict(line.split('=', 1) for line in (item['Config'].get('Env') or []))
+    values = []
+    with (root/'.env').open(encoding='utf-8') as stream:
+        for line in stream:
+            key, separator, value = line.strip().partition('=')
+            if key == 'CJREPO_CA_SHA256':
+                if not separator:
+                    raise ValueError('invalid CA configuration')
+                values.append(value)
+    # Older seven-file bundles did not declare a trust directory.
+    if not required and not values and 'SSL_CERT_FILE' not in environment:
+        return
+    if len(values) != 1 or (values[0] and not re.fullmatch(r'[a-f0-9]{64}', values[0])):
+        raise ValueError('missing, duplicate or invalid CA configuration')
+    expected = values[0]
+    trust = root/'trust'
+    info = trust.lstat()
+    if not stat.S_ISDIR(info.st_mode) or (getattr(info, 'st_file_attributes', 0) & 0x400):
+        raise ValueError('CA trust directory must be an ordinary directory')
+    names = ['ca.pem'] if expected else []
+    if sorted(path.name for path in trust.iterdir()) != names:
+        raise ValueError('unexpected CA trust directory contents')
+    if expected and (not regular_file(trust/'ca.pem') or digest(trust/'ca.pem') != expected):
+        raise ValueError('host CA does not match the configured digest')
+    mounts = [mount for mount in item['Mounts'] if mount['Destination'] == '/run/cjrepo-trust']
+    if (len(mounts) != 1 or mounts[0]['Type'] != 'bind' or mounts[0]['RW'] is not False or
+            environment.get('SSL_CERT_FILE') != '/run/cjrepo-trust/ca.pem' or
+            environment.get('CJREPO_CA_SHA256') != expected):
+        raise ValueError('running CA mount or configuration does not match this deployment')
+    observed = docker('exec', identifier, '/bin/ls', '-A', '/run/cjrepo-trust').splitlines()
+    if sorted(observed) != names:
+        raise ValueError('container CA directory does not match this deployment')
+    if expected:
+        observed = docker('exec', identifier, 'sha256sum', '/run/cjrepo-trust/ca.pem').split()
+        if not observed or observed[0] != expected:
+            raise ValueError('container CA does not match the configured digest')
+
+
 def verify_running(root: Path, manifest: dict) -> None:
     project, port = runtime_configuration(root)
     identifiers = docker("compose", "--project-directory", str(root), "-p", project,
@@ -129,6 +170,8 @@ def verify_running(root: Path, manifest: dict) -> None:
     if not isinstance(inspected, list) or len(inspected) != 1:
         raise ValueError("cannot identify the running deployment")
     check_running_container(inspected[0], manifest["image"], project, port)
+    check_running_trust(root, inspected[0], identifier,
+                        required=manifest.get('caConfiguration') == 'pem-directory-v1')
     volume = json.loads(docker("volume", "inspect", project + "_cjrepo-data"))
     if not isinstance(volume, list) or len(volume) != 1:
         raise ValueError("cannot identify the persistent volume")

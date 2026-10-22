@@ -19,10 +19,17 @@ services:
       CJREPO_ADDRESS: 0.0.0.0
       CJREPO_PORT: 8080
       CJREPO_STORAGE: /var/lib/cjrepo
+      SSL_CERT_FILE: /run/cjrepo-trust/ca.pem
     labels:
       io.cjrepomesh.distribution: @IMAGE@
     volumes:
       - cjrepo-data:/var/lib/cjrepo
+      - type: bind
+        source: ./trust
+        target: /run/cjrepo-trust
+        read_only: true
+        bind:
+          create_host_path: false
 volumes:
   cjrepo-data:
     labels:

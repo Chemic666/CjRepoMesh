@@ -20,11 +20,13 @@ API说明可参考[官方TLS配置接口](https://gitcode.com/Cangjie/cangjie_st
 
 原生Linux进程在启动前设置 `SSL_CERT_FILE` 为可信CA文件路径即可；私钥不交给仓库进程。默认TCP建连30秒（可用 `CJREPO_CONNECT_TIMEOUT_SECONDS` 调整1–300），TLS握手另用stdx的30秒读写等待。后者是每次I/O等待设置，不是握手总预算；DNS、慢速分片握手及完整操作绝对时限没有因此获得保证。
 
-离线镜像具有TLS库但不带公共根CA集合。容器使用HTTPS时，CA文件必须在容器内可读，并为服务进程设置其容器路径；仅在.env设置宿主文件路径不够。标准七文件包未附带CA或额外挂载配置，默认Hosted接收仍走本机HTTP。受保护CA文件的只读挂载属于具体部署配置，需另行验证，不能通过关闭身份校验解决文件或证书问题。
+离线镜像具有TLS库但不带公共根CA集合。新七文件工具包可在首次配置时用 `configure.py --ca-file` 导入可信PEM证书，固定只读挂载至容器，SSL_CERT_FILE使用容器内路径；仅在.env设置宿主路径仍不够。默认不导入CA时保持空trust目录，Hosted接收走本机HTTP。证书来源仍由团队可信渠道确认，不通过关闭身份校验处理文件或证书问题，见[初始化与运行诊断](../deployment/portable/README.md)。
 
 服务端专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <已有真实默认组织CJP及meta-data.json目录> --evidence-dir <新证据目录>`。使用已有OpenSSL和匹配SDK/stdx；18项包含Mirror/Sync的可信DNS/IP、Proxy可信IP、未知CA/错误DNS/IP/仅clientAuth用途拒绝，以及先成功读取索引、再遇到错误制品或发布连接证书的检查。记录HTTP到达阶段、认证、真实发布帧及失败存储保持；Sync发布正向是协议夹具，不证明夹具持久化。
 
-最新6f5d服务端在原生Linux18/18（15.38s），465c镜像内同脚本18/18（13.74s）；镜像内仅测试Python/OpenSSL使用只读工具挂载，服务端使用镜像自带库，临时CA不安装到系统。容器专项未使用标准Compose的CA挂载，不能称其已验收。旧1ec3服务端同脚本6/18，合法HTTPS报未配置TLS；六项早拒绝不能证明旧TLS身份通过。准确产物与准备失败记录见[验证报告](verification-report.md)。
+最新6f5d服务端在原生Linux18/18（15.38s），465c镜像内同脚本18/18（13.74s）；镜像内仅测试Python/OpenSSL使用只读工具挂载，服务端使用镜像自带库，临时CA不安装到系统。该批容器专项当时未使用标准Compose的CA挂载。旧1ec3服务端同脚本6/18，合法HTTPS报未配置TLS；六项早拒绝不能证明旧TLS身份通过。准确产物与准备失败记录见[验证报告](verification-report.md)。
+
+后续同镜像的新CA工具包已通过标准Compose新安装10/10（20.52s）：实际导入合成CA、核对容器实际只读挂载与摘要、错误DNS证书拒绝且未发送HTTP、同一Proxy恢复后通过HTTPS读取真实CJP、CA篡改诊断拒绝、上游停服使用缓存及重建保留。默认Hosted包另16/16；相关Linux39/39、Windows35通过4链接跳过。服务端/镜像未重建，18项是同二进制既有证据，不称新工具包重新执行；仍未验收生产CA分发、原安装轮换、入站网关或跨主机。
 
 ## 团队CA与任务环境
 
