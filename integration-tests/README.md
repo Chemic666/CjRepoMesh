@@ -270,6 +270,21 @@ python3 integration-tests/compatibility/maple_local_workspace.py \
 .\benchmark\proxy\run.ps1
 ```
 
+## 来源基线多图兼容性
+
+使用与单图专项相同的固定Linux客户端、已有SDK/stdx和真实meshdep包目录：
+
+```bash
+python3 integration-tests/compatibility/source_baseline_graphs.py \
+  --cjpm /path/to/enhanced/cjpm \
+  --package-dir /path/to/real-meshdep-package \
+  --evidence-dir /path/to/new-graph-evidence
+```
+
+入口使用新目录、每例独立HOME/缓存和本机HTTP合成仓，真实打包parent→meshdep，构建两个工作空间成员及带独立依赖的build.cj。核对整图/成员子集、同图/异图脚本、绝对/相对基线路径、pre/post执行标记、真实应用输出、制品请求及来源/批准文件。`--case <名称>` 可重复指定定向用例；摘要标明实际执行数量，未知名称使运行失败。
+
+不同图不能靠批准集合取并集通过；主图拒绝前，已批准脚本图可能已经执行、下载并写入来源输出。该测试验证每图边界，不提供整命令原子拒绝、脚本沙箱、嵌套Git/本地脚本或增量脚本缓存保证。完整使用边界见[CI来源基线](../docs/repository-source-baseline.md)，原始日志与合成材料留在本地证据目录。
+
 ## Docker 私有仓持久化专项
 
 先通过 `deployment/docker/up.ps1` 构建当前服务端镜像，然后在 Windows 上运行：
