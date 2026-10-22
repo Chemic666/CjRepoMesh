@@ -81,18 +81,23 @@ def main():
                 '-days','1','-keyout','ca.key','-out','ca.pem','-addext','basicConstraints=critical,CA:TRUE')
         for number,(label,san) in enumerate((('good','DNS:localhost,IP:127.0.0.1'),
                 ('wrongip','IP:127.0.0.2'),('wrongdns','DNS:wrong.invalid'),
-                ('clientonly','DNS:localhost,IP:127.0.0.1')),1):
+                ('clientonly','DNS:localhost,IP:127.0.0.1'),('expired','DNS:localhost,IP:127.0.0.1')),1):
             openssl('req','-newkey','rsa:2048','-nodes','-subj','/CN=localhost','-keyout',label+'.key','-out',label+'.csr')
             (cert/(label+'.ext')).write_text('subjectAltName='+san+'\nextendedKeyUsage='+
                 ('clientAuth' if label == 'clientonly' else 'serverAuth')+'\n')
             openssl('x509','-req','-in',label+'.csr','-CA','ca.pem','-CAkey','ca.key','-set_serial',str(number),
-                    '-days','1','-extfile',label+'.ext','-out',label+'.pem')
+                    '-days','-1' if label == 'expired' else '1','-extfile',label+'.ext','-out',label+'.pem')
         for key in cert.glob('*.key'): key.chmod(0o600)
         (cert/'empty-ca').mkdir()
+        # Prove the negative fixture differs in validity, not trust/name/purpose.
+        openssl('verify','-CAfile','ca.pem','-purpose','sslserver','good.pem')
+        expiry=subprocess.run(['openssl','verify','-CAfile','ca.pem','-purpose','sslserver','expired.pem'],
+            cwd=cert,capture_output=True,timeout=30)
+        assert expiry.returncode != 0 and b'error 10 at 0 depth' in expiry.stdout+expiry.stderr,'expired leaf fixture was not validated'
 
         class Fixture:
             def __init__(self, certificate='good', *, destination=False, existing=False, flip=None, dns=False):
-                self.requests=[]; fixture=self
+                self.requests=[]; self.handshakes=[]; self.handshake_changed=threading.Condition(); fixture=self
                 self.context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 self.context.minimum_version=ssl.TLSVersion.TLSv1_2
                 self.context.load_cert_chain(cert/(certificate+'.pem'),cert/(certificate+'.key'))
@@ -112,8 +117,24 @@ def main():
                         self.close_connection=True
                     do_GET=do_POST=handle_registry
                     def log_message(self,*args): pass
-                self.http=ThreadingHTTPServer(('127.0.0.1',0),Handler); self.http.daemon_threads=True
-                self.http.socket=self.context.wrap_socket(self.http.socket,server_side=True)
+                class HttpsServer(ThreadingHTTPServer):
+                    daemon_threads=True
+                    def get_request(self):
+                        raw,address=super().get_request();raw.settimeout(5)
+                        event=dict(status='attempted')
+                        with fixture.handshake_changed:fixture.handshakes.append(event)
+                        try:
+                            connection=fixture.context.wrap_socket(raw,server_side=True)
+                        except OSError as failure:
+                            with fixture.handshake_changed:
+                                event.update(status='failed',reason=getattr(failure,'reason',type(failure).__name__))
+                                fixture.handshake_changed.notify_all()
+                            raw.close();raise
+                        with fixture.handshake_changed:
+                            event.update(status='succeeded',tls=connection.version())
+                            fixture.handshake_changed.notify_all()
+                        return connection,address
+                self.http=HttpsServer(('127.0.0.1',0),Handler)
                 self.base=f'https://{"localhost" if dns else "127.0.0.1"}:{self.http.server_port}'
                 self.thread=threading.Thread(target=self.http.serve_forever,daemon=True); self.thread.start()
             def close(self):
@@ -122,15 +143,21 @@ def main():
         cases=[('mirror',mode) for mode in ('trusted-ip','trusted-dns','untrusted-ca','wrong-ip','wrong-dns','client-only','source-artifact')]
         cases += [('proxy',mode) for mode in ('trusted-ip','wrong-ip','source-artifact')]
         cases += [('sync',mode) for mode in ('trusted-ip','trusted-dns','source-index','source-artifact','destination-index','destination-artifact','publish-ip','publish-dns')]
+        cases += [('mirror','expired-ip'),('mirror','expired-dns'),('proxy','expired-ip'),
+                  ('sync','expired-source-artifact'),('sync','expired-destination-index'),('sync','expired-publish')]
         for operation,mode in cases:
             label=operation+'-'+mode; folder=report/label; folder.mkdir(); (folder/'home').mkdir()
             storage=folder/'storage'; storage.mkdir(); source=destination=None; facts={}; passed=False; error=''
             try:
-                dns=mode in ('trusted-dns','wrong-dns','publish-dns')
-                certificate={'wrong-ip':'wrongip','wrong-dns':'wrongdns','client-only':'clientonly','source-index':'wrongip'}.get(mode,'good')
-                source=Fixture(certificate,flip='wrongip' if mode == 'source-artifact' else None,dns=dns)
-                destination=Fixture('wrongip' if mode == 'destination-index' else 'good',destination=True,
-                    existing=mode == 'destination-artifact',flip='wrongdns' if mode == 'publish-dns' else
+                dns=mode in ('trusted-dns','wrong-dns','publish-dns','expired-dns')
+                certificate={'wrong-ip':'wrongip','wrong-dns':'wrongdns','client-only':'clientonly','source-index':'wrongip',
+                    'expired-ip':'expired','expired-dns':'expired'}.get(mode,'good')
+                source=Fixture(certificate,flip='expired' if mode == 'expired-source-artifact' else
+                    'wrongip' if mode == 'source-artifact' else None,dns=dns)
+                destination=Fixture('expired' if mode == 'expired-destination-index' else
+                    'wrongip' if mode == 'destination-index' else 'good',destination=True,
+                    existing=mode == 'destination-artifact',flip='expired' if mode == 'expired-publish' else
+                    'wrongdns' if mode == 'publish-dns' else
                     'wrongip' if mode in ('destination-artifact','publish-ip') else None,dns=dns)
                 env=dict(environment,HOME=str(folder/'home'),USERPROFILE=str(folder/'home'),CJREPO_STORAGE=str(storage),
                     CJREPO_UPSTREAM_TOKEN=source_token,CJREPO_SYNC_DESTINATION_TOKEN=publish_token,
@@ -168,16 +195,30 @@ def main():
                         if operation == 'mirror': assert any(n.endswith('.cjp') and h == digest(artifact) for n,h in files(storage).items())
                         else: assert any(r['method'] == 'POST' and r['realPublishFrame'] for r in destination.requests)
                     else: assert result.returncode != 0 and 'result=SYNCED' not in output and not files(storage)
-                wanted_source=[index_path,artifact_path] if good or mode.startswith('publish-') else [index_path] if mode in ('source-artifact','destination-index','destination-artifact') else []
-                wanted_destination=([index_path,'/pkg/'+name] if good else [index_path] if mode in ('source-artifact','destination-artifact','publish-ip','publish-dns') else []) if operation == 'sync' else []
+                wanted_source=([index_path,artifact_path] if good or mode.startswith('publish-') or mode == 'expired-publish'
+                    else [index_path] if mode in ('source-artifact','destination-index','destination-artifact',
+                    'expired-source-artifact','expired-destination-index') else [])
+                wanted_destination=([index_path,'/pkg/'+name] if good else [index_path] if mode in
+                    ('source-artifact','destination-artifact','publish-ip','publish-dns','expired-source-artifact','expired-publish')
+                    else []) if operation == 'sync' else []
                 assert [r['path'] for r in source.requests] == wanted_source,'source HTTP stage mismatch'
                 assert [r['path'] for r in destination.requests] == wanted_destination,'destination HTTP stage mismatch'
                 assert all(r['authorized'] and r['tls'] for r in source.requests+destination.requests)
+                if mode.startswith('expired-'):
+                    target=destination if mode in ('expired-destination-index','expired-publish') else source
+                    with target.handshake_changed:
+                        observed=target.handshake_changed.wait_for(lambda:any(
+                            h.get('status') == 'failed' and h.get('reason') in
+                            ('SSLV3_ALERT_CERTIFICATE_EXPIRED','TLSV1_ALERT_CERTIFICATE_EXPIRED')
+                            for h in target.handshakes),timeout=2)
+                    assert observed,'target connection did not report a certificate-expired TLS alert'
+                    facts['expiredTlsAlertObserved']=True
                 passed=True
             except (AssertionError,OSError,ValueError,subprocess.SubprocessError) as failure:
                 error=str(failure) or type(failure).__name__
             finally:
                 facts.update(sourceRequests=source.requests if source else [],destinationRequests=destination.requests if destination else [],storage=files(storage))
+                facts.update(sourceHandshakes=source.handshakes if source else [],destinationHandshakes=destination.handshakes if destination else [])
                 for fixture in (destination,source):
                     if fixture: fixture.close()
                 if (folder/'server.log').exists(): (folder/'server.log').write_text(clean((folder/'server.log').read_text()))
@@ -188,7 +229,8 @@ def main():
         realArtifactSha256=digest(artifact),cases=results,limits=[
             'Owned localhost/IPv4 HTTPS protocol fixtures; process-only CA, temporary keys removed; no OS trust changes.',
             'Successful Sync POST validates the real frame, not fixture persistence; core Sync covers genuine destination storage.',
-            'No production gateway, cross-host, IPv6, expiry/revocation, mTLS, Windows Cangjie or complete Maple acceptance.'])
+            'Expired leaf fixtures are checked by OpenSSL; no future-validity, expired-root, revocation or clock-change acceptance.',
+            'No production gateway, cross-host, IPv6, mTLS, Windows Cangjie or complete Maple acceptance.'])
     (report/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     print(f'Server HTTPS identity: {summary["passed"]}/{len(results)}; success={summary["success"]}',flush=True)
     return int(not summary['success'])

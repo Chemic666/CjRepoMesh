@@ -22,9 +22,11 @@ API说明可参考[官方TLS配置接口](https://gitcode.com/Cangjie/cangjie_st
 
 离线镜像具有TLS库但不带公共根CA集合。新七文件工具包可在首次配置时用 `configure.py --ca-file` 导入可信PEM证书，固定只读挂载至容器，SSL_CERT_FILE使用容器内路径；仅在.env设置宿主路径仍不够。默认不导入CA时保持空trust目录，Hosted接收走本机HTTP。证书来源仍由团队可信渠道确认，不通过关闭身份校验处理文件或证书问题，见[初始化与运行诊断](../deployment/portable/README.md)。
 
-服务端专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <已有真实默认组织CJP及meta-data.json目录> --evidence-dir <新证据目录>`。使用已有OpenSSL和匹配SDK/stdx；18项包含Mirror/Sync的可信DNS/IP、Proxy可信IP、未知CA/错误DNS/IP/仅clientAuth用途拒绝，以及先成功读取索引、再遇到错误制品或发布连接证书的检查。记录HTTP到达阶段、认证、真实发布帧及失败存储保持；Sync发布正向是协议夹具，不证明夹具持久化。
+服务端专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <已有真实默认组织CJP及meta-data.json目录> --evidence-dir <新证据目录>`。使用已有OpenSSL和匹配SDK/stdx；原18项包含Mirror/Sync的可信DNS/IP、Proxy可信IP、未知CA/错误DNS/IP/仅clientAuth用途拒绝，以及先成功读取索引、再遇到错误制品或发布连接证书的检查。记录HTTP到达阶段、认证、真实发布帧及失败存储保持；Sync发布正向是协议夹具，不证明夹具持久化。
 
 最新6f5d服务端在原生Linux18/18（15.38s），465c镜像内同脚本18/18（13.74s）；镜像内仅测试Python/OpenSSL使用只读工具挂载，服务端使用镜像自带库，临时CA不安装到系统。该批容器专项当时未使用标准Compose的CA挂载。旧1ec3服务端同脚本6/18，合法HTTPS报未配置TLS；六项早拒绝不能证明旧TLS身份通过。准确产物与准备失败记录见[验证报告](verification-report.md)。
+
+同一6f5d服务端后续扩展为24项，原生Linux **24/24（19.96s）**、465c镜像 **24/24（18.28s）**。新增六项过期叶证书拒绝：Mirror的DNS/IP、Proxy IP，以及Sync源制品、目标索引与发布连接。证书仍有正确SAN、可信签发和serverAuth；先用OpenSSL确认叶证书已过期，再要求实际目标握手收到certificate_expired告警，并核对允许的前置HTTP请求、过期连接零HTTP和存储保持。静态复核曾发现初稿可能把其他TLS失败当过期拒绝；改用clientAuth证书的负对照使初稿错误通过24/24，补强后正确拒绝六项、18/24，最终正常夹具才是上述24/24。未改产品或重建二进制；仍未覆盖未来生效、过期根、吊销、改钟或生产CA分发。
 
 后续同镜像的新CA工具包已通过标准Compose新安装10/10（20.52s）：实际导入合成CA、核对容器实际只读挂载与摘要、错误DNS证书拒绝且未发送HTTP、同一Proxy恢复后通过HTTPS读取真实CJP、CA篡改诊断拒绝、上游停服使用缓存及重建保留。默认Hosted包另16/16；相关Linux39/39、Windows35通过4链接跳过。服务端/镜像未重建，18项是同二进制既有证据，不称新工具包重新执行；仍未验收生产CA分发、原安装轮换、入站网关或跨主机。
 
@@ -65,4 +67,4 @@ python3 integration-tests/compatibility/tls_identity.py \
 
 名称修复阶段的同脚本旧客户端 **7/12**，修复客户端 `14d6f505…` **12/12、14.25秒**。扩展跳转用例后，该客户端实际 **12/15**：发布包体被307转发到本机明文HTTP目标，认证头已被移除；三项跳转检查均未通过。禁止自动跳转的新Linux客户端 **15/15、18.68秒**，SHA-256为 `06ae2c1b7a058502f531da257c6ff8d1f316dbe57a599cab1421e1d9e8acb458`。旧/新15项使用同一脚本摘要；源码、各阶段失败证据和同产物综合回归见[验证报告](verification-report.md)。
 
-以上客户端历史批次仅实测Linux、DNS localhost与IPv4回环，以及所列三种自动跳转拒绝；该批没有改变服务端镜像。后续服务端出站TLS见前节及最新验证记录，不回填成当次客户端批次的成绩。IPv6、过期/吊销、mTLS、公有CA线上服务、成熟网关/跨主机HTTPS、绝对握手预算及完整官方集合仍未由这些本机夹具证明。源码提交与推送状态见交付记录。
+以上客户端历史批次仅实测Linux、DNS localhost与IPv4回环，以及所列三种自动跳转拒绝；该批没有改变服务端镜像。后续服务端出站TLS及过期叶证书见前节与最新验证记录，不回填成客户端验收。客户端过期证书、两端吊销、IPv6、mTLS、公有CA线上服务、成熟网关/跨主机HTTPS、绝对握手预算及完整官方集合仍未由这些本机夹具证明。源码提交与推送状态见交付记录。
