@@ -11,7 +11,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前状态（2026-10-22）**：客户端 `ba9b9317…`、服务端 `8fc30842…` / 镜像 `bad02ad7…`，当前身份及验收范围统一以[固定候选清单](docs/candidate-acceptance.md)首节为准。新组合原生核心4/4，客户端TLS19/19、服务端TLS24/24；在线explain明确标为忽略锁定/传递约束的候选预览，服务端新增发布及上游实际字节限制。来源强制校验、离线快照和完整资源配额仍未实现。详细证据见[验证记录](docs/verification-report.md)，双端发布身份见[交付记录](docs/delivery-record.md)。
+**当前状态（2026-10-22）**：客户端 `8da52a11…`、未变服务端 `8fc30842…` / 镜像 `bad02ad7…`，身份及验收范围统一以[固定候选清单](docs/candidate-acceptance.md)首节为准。新增可选[CI来源基线](docs/repository-source-baseline.md)：最终仓库图确定后、制品下载前核对独立批准集合，专项37/37，新组合原生核心4/4、客户端TLS19/19。Docker新组合整包接收受其自身启动错误阻断，未继承旧27/27。离线快照、签名/缓存再验真、脚本沙箱和完整资源配额仍未实现。详细证据见[验证记录](docs/verification-report.md)，双端发布记录见[交付记录](docs/delivery-record.md)。
 
 历史5f8f/b3ce组合有冷恢复15/15及特定版本升级回退14/14，容量样本另属6f5d/465c；不将这些成绩移算给新组合。当前Windows原生全量、完整官方Maple、跨主机入站HTTPS、生产信任分发/轮换及新组合冷恢复/升级/容量仍待验收。使用条件和规模应以实际项目验证，不能按本机短测推算团队人数或生产SLA。
 
@@ -53,6 +53,7 @@ Repository Resolution                Dependency Resolution
 - `cjpm repo explain` 解释版本、来源、替换与路由；
 - `cjpm repo doctor` 诊断连接、认证、元数据 API 和回退判定；
 - `cjpm-provenance.json` 保存最终来源和 SHA-256，支持离线审计；
+- 可选 `CJREPOMESH_SOURCE_BASELINE` 在仓库制品下载前核对独立批准的完整来源集合，失配即拒绝；
 - 并发原子发布、Proxy 首次填充合并与索引 TTL；
 - 保留原始样本的可重复 Proxy Benchmark。
 

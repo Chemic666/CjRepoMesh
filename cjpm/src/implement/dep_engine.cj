@@ -88,7 +88,8 @@ public class DepAnalysisEngine {
     // repo-deps are expected to depend on only repo-deps
     public func analyseRepoDeps(): Bool {
         if (this.repoDepList.isEmpty()) {
-            return true
+            return verifyRepositorySourceBaseline(this.rootModulePath, this.currentState.fixedVersionMap,
+                this.indexMap, this.sourceDepotMap)
         }
 
         this.repositoryRouter = RepositoryRouter.new() ?? return false
@@ -446,6 +447,11 @@ public class DepAnalysisEngine {
                     return false
                 }
             }
+        }
+
+        if (!verifyRepositorySourceBaseline(this.rootModulePath, this.currentState.fixedVersionMap,
+            this.indexMap, this.sourceDepotMap)) {
+            return false
         }
 
         for ((fullName, version) in this.currentState.fixedVersionMap) {

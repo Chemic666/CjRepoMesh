@@ -210,6 +210,19 @@ python3 integration-tests/compatibility/run.py \
 
 HTTPS名称与IP SAN的Linux真实客户端回归另见[客户端HTTPS说明](../docs/https-client.md#可复验验证)。15项使用已有OpenSSL、SDK及真实组织CJP，在本机合成CA夹具中核对身份、401、实际下载构建，以及302索引和307发布/下载不自动跳转；不安装系统根证书、不运行Windows仓颉，也不等同于真实反向代理部署。
 
+## 可选仓库来源基线
+
+使用已有Linux SDK/stdx、增强客户端和真实meshdep1.0.0包目录（包含meta-data.json与CJP），不运行Windows仓颉：
+
+```bash
+python3 integration-tests/compatibility/source_baseline.py \
+  --cjpm /path/to/enhanced/cjpm \
+  --package-dir /path/to/real-meshdep-package \
+  --evidence-dir /path/to/new-baseline-evidence
+```
+
+入口要求新的证据目录，启动本机合成仓，真实构建parent→meshdep及消费应用；核对最终传递来源、匹配/顺序/替换、字段漂移、空图/热缓存、类型/大小/路径错误，以及拒绝时零制品请求、旧来源输出和批准文件保持。`--case <名称>` 可重复指定定向检查，始终保留未启用控制；目录内保存摘要及原始日志，按内部材料保管。此项不验证多图脚本接入、签名、已解包缓存真实性、Git/本地输入或脚本沙箱。用法和边界见[CI来源基线](../docs/repository-source-baseline.md)。
+
 ## 官方 Maple 框架选定用例对照
 
 准备独立检出的官方 `cangjie_test_framework`、`cangjie_test`，以及同一源码基线的原版与增强版 Linux cjpm。加载 SDK 与 stdx 后运行：
