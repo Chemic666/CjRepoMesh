@@ -121,3 +121,7 @@ main.exe sync-manifest http://source:8080 http://destination:8080 mirror.txt
 持续同步清单可使用 `main.exe sync-watch http://source:8080 http://destination:8080 mirror.txt 60`。它按间隔运行同一增量同步逻辑，每轮重新读取清单，失败轮次下轮重试；需由外部进程管理器负责开机启动和进程异常重启。多个 watcher 同时处理同一清单不提供分布式租约或协调。
 
 当前限制：读取鉴权需显式配置，默认仍为公开读取；存储锁为按包键固定分片，并非每包独占锁；Mirror/Sync 已支持默认仓和命名组织仓的显式批量清单与单进程周期轮询，但无持久化游标、字节级断点续传或分布式协调。Docker Compose 部署入口见 [部署说明](../deployment/docker/README.md)。
+
+本分支对Proxy/Mirror/Sync所有共享上游读取以及Sync发布显式禁用自动重定向，包括同源跳转。源/目标配置应直接返回仓库响应；Proxy转交上游非200状态且不填充缓存，Mirror/Sync将相关3xx作为失败返回，不把跳转后的内容或发布结果视为成功。先检查仓库或反向代理端点，不通过重新启用自动跳转兼容需要跳转的服务。
+
+实际Linux HTTP回环的302索引、307制品/发布及正常直连结果见[验证记录](../docs/verification-report.md)。这些用例不等同TLS身份、跨主机或Windows原生验收。

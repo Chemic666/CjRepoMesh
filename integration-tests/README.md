@@ -175,6 +175,8 @@ python integration-tests\deployment\portable.py --bundle <未初始化交付目�
 
 `--team-sdk`与`--team-client`须同时指定；SDK需含cjlint。`--team-native`为可选只读工具挂载：`bin/`放ar和ld，`lib/`放它们所需库，`system/`按原绝对路径保存GCC和系统启动/链接输入。它只解决最小服务端运行镜像缺少构建工具的问题，不能把跨系统ABI不匹配的工具任意混用；正式自托管任务机应预先具备完整匹配工具链。本入口不安装或下载工具。
 
+服务端出站跳转专项在已有Linux环境运行：`python3 integration-tests/compatibility/server_redirects.py --server <已有Linux服务端> --package-dir <已有真实默认组织CJP及meta-data.json目录> --evidence-dir <新证据目录>`。12项使用自有回环夹具，覆盖Proxy/Mirror/Sync三个正常直连以及九个源/目标索引302、制品307和发布307拒绝；核对指定路径到达、跳转目标零请求、完整发布帧和失败存储保持。Sync发布正向只验证协议帧，真实目的端存储由核心Sync组另行验证；不覆盖TLS/跨主机或Windows。
+
 验证实际交付组合时，将 `--team-client <文件>` 换成 `--team-client-bundle <完整客户端交付目录>`，两者互斥且均须搭配SDK。新模式在创建证据目录/访问Docker前用源码仓库的可信校验器检查包，不执行待测包中的Python代码；任务只读挂载整个目录，通过包内run.sh执行。摘要记录实际二进制和清单SHA-256，结束再次检查包不变，共21项。启动器需容器内已有Python 3；可在任务专用的 `--team-native` 目录下提供已有 `bin/python3`、对应 `lib/python3.X` 标准库及匹配共享库，不向最小服务端镜像安装工具。应先在相同只读挂载条件下运行包的 `--help` 检查依赖。六项离线回归只验证预检和参数拒绝，不代替真实编译。
 
 可选模式在原12项上增加8项，共20项：无凭据准备目录、真实构建发布、只读CI编译运行、第二个独立冷任务、应用运行失败退出码、错误读取令牌、读取令牌越权发布拒绝，以及失败后制品和服务凭据保持。SDK/客户端只读挂载，任务通过本次内部Docker网络访问服务，主机仍仅本机监听。两次成功消费核对同一包的实际来源和SHA-256；失败应用仍可能有解析记录，但不得继续解释或返回成功。这不替代Windows仓颉、全新主机、内网HTTPS或完整官方验收。

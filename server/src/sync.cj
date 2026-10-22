@@ -256,7 +256,7 @@ func runSync(arguments: Array<String>): Bool {
         frame.add(all: encodeLittleEndianSize(artifact.size))
         frame.add(all: artifact)
 
-        let client = ClientBuilder().noProxy().build()
+        let client = ClientBuilder().noProxy().autoRedirect(false).build()
         try {
             let requestBuilder = HttpRequestBuilder()
                 .method("POST")

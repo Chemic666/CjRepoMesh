@@ -180,7 +180,7 @@ class ProxyArtifactHandler <: HttpRequestHandler {
 }
 
 func fetchUpstream(upstream: String, token: String, path: String): (UInt16, Array<UInt8>) {
-    let client = ClientBuilder().noProxy().build()
+    let client = ClientBuilder().noProxy().autoRedirect(false).build()
     try {
         let requestBuilder = HttpRequestBuilder().method("GET").url("${upstream}${path}")
         if (!token.isEmpty()) {
