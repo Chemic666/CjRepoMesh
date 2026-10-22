@@ -11,7 +11,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前状态（2026-10-22）**：客户端 `8da52a11…`、未变服务端 `8fc30842…` / 镜像 `bad02ad7…`，身份及验收范围统一以[固定候选清单](docs/candidate-acceptance.md)首节为准。新增可选[CI来源基线](docs/repository-source-baseline.md)：最终仓库图确定后、制品下载前核对独立批准集合，专项37/37，新组合原生核心4/4、客户端TLS19/19。Docker新组合整包接收受其自身启动错误阻断，未继承旧27/27。离线快照、签名/缓存再验真、脚本沙箱和完整资源配额仍未实现。详细证据见[验证记录](docs/verification-report.md)，双端发布记录见[交付记录](docs/delivery-record.md)。
+**当前状态（2026-10-22）**：客户端 `8da52a11…`、未变服务端 `8fc30842…` / 镜像 `bad02ad7…`，身份及验收范围统一以[固定候选清单](docs/candidate-acceptance.md)首节为准。新增可选[CI来源基线](docs/repository-source-baseline.md)：最终仓库图确定后、制品下载前核对独立批准集合，专项37/37，新组合原生核心4/4、客户端TLS19/19。Docker恢复后新组合整包接收与真实团队任务另行复验27/27（112.62s），清理无错误，首轮启动失败记录保留。离线快照、签名/缓存再验真、脚本沙箱和完整资源配额仍未实现。详细证据见[验证记录](docs/verification-report.md)，双端发布记录见[交付记录](docs/delivery-record.md)。
 
 历史5f8f/b3ce组合有冷恢复15/15及特定版本升级回退14/14，容量样本另属6f5d/465c；不将这些成绩移算给新组合。当前Windows原生全量、完整官方Maple、跨主机入站HTTPS、生产信任分发/轮换及新组合冷恢复/升级/容量仍待验收。使用条件和规模应以实际项目验证，不能按本机短测推算团队人数或生产SLA。
 
