@@ -49,7 +49,7 @@ private func configuredProxyTtlSeconds(): Int64 {
         }
         return value
     } catch (_: Exception) {
-        eprintln("Warning: invalid CJREPO_PROXY_TTL_SECONDS '${raw}', using 86400")
+        eprintln("Warning: invalid CJREPO_PROXY_TTL_SECONDS, using 86400")
         return 86400
     }
 }

@@ -2,31 +2,18 @@
 
 > 面向仓颉与 cjpm 的原生多仓依赖和轻量企业私有仓基础设施
 
-2026-10-21 客户端可靠性、离线交付及开发者/CI示例已同步至AtomGit和GitHub，两端内容一致、保留各自历史，见[交付记录](docs/delivery-record.md)。参赛者已授权后续阶段验收后自主双端推送；实际产物结果及Windows未测边界见[验证记录](docs/verification-report.md)。
+为团队提供私有包发布、多仓路由、代理缓存、镜像同步和依赖来源解释，复用原 cjpm 版本求解器。当前交付定位是单实例团队试点：服务端有 Linux amd64 离线容器包，开发者与 CI 使用增强客户端及匹配的仓颉工具链。
 
-2026-10-22 服务端补齐HTTPS上游与Sync目标：验证证书链及URL的DNS/IP身份后才发送HTTP，修复合法HTTPS未配置TLS的问题。最新6f5d服务端原生与465c镜像内专项各18/18，真实三组3/3、TCP14/14、跳转12/12及新离线包接收16/16。CA文件需单独配置，握手参数不是整体时限；入站网关、跨主机和新镜像冷恢复仍未验收，详情见[最新验证记录](docs/verification-report.md)。
+从需要完成的任务进入：
 
-新离线包已补齐[可选CA初始化](deployment/portable/README.md)：PEM证书导入、容器只读挂载与实际摘要诊断；标准Compose真实HTTPS代理、错误身份拒绝、离线缓存和重建10/10。仅刷新交付工具，镜像/二进制不变；原部署CA轮换、系统证书分发和入站HTTPS网关仍未提供。
+- **看实际效果**：[七阶段连贯演练](integration-tests/showcase/README.md)与[演示和代码讲解](docs/demo-runbook.md)。
+- **接收并运行仓库**：[离线服务端](deployment/portable/README.md)，包括完整性校验、私有配置、可选 CA 和只读运行诊断。
+- **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
+- **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-当前固定客户端 `6a7b3acb…` 已完成[所列Linux候选范围的综合验收](docs/candidate-acceptance.md)：核心4/4、两组增量各7/7、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38、就绪调整1、归档稳定化1、离线HLT95分别通过。无SDK来源查看13项、配置40项、运行8项及包接收为已核对的同一二进制有效证据，本轮未重复执行；完整Maple、Windows及跨主机验收仍未完成。
+**当前状态（2026-10-22）**：客户端固定为 `6a7b3acb…`，最新服务端为 `5f8f1325…` / 镜像 `b3ce9d31…`。客户端已有所列 Linux 综合验收及后续 TLS19项；当前服务端已实际检查私有读写、容器重建、令牌配置漂移、Proxy离线构建及TLS身份/过期拒绝。各项绑定具体产物，完整摘要和执行范围见[验证记录](docs/verification-report.md)与[固定候选清单](docs/candidate-acceptance.md)。源码按授权同步至AtomGit/GitHub，提交身份见[交付记录](docs/delivery-record.md)。
 
-此客户端支持无SDK执行 `repo explain <包名> --recorded`，读取当前目录已有来源记录，保留配置、格式和安全地址拒绝；其他在线与构建命令仍需SDK。当前交付包不变，各历史候选结果分别保留。
-
-前一c12运行状态修订使应用失败时 `cjpm run` 返回1，成功仍为0，不再错误报告完成；真实8项及多仓客户端组通过。该修复保留在新源码，最新实际回归见[验证记录](docs/verification-report.md)。
-
-接收方已有离线包时，见[离线服务端交付](deployment/portable/README.md)：只用Python 3与Docker Compose即可导入、校验、配置和启动，服务端运行不依赖源码/仓颉SDK/开发机WSL。当前仅Linux amd64容器、本机监听与实例级读写令牌；不据此宣称内网HTTPS或完整企业生产验收已完成。
-
-2026-10-22补齐服务端交付文件链接和悬空输出路径拒绝；Linux回归12/12，Windows Python9通过3跳过，并在隔离用户环境的Windows宿主实际接收12/12。新版服务端包更新接收工具，镜像和服务端未重建；仍使用既有Docker Desktop引擎，不冒充全新主机验收，见[验证记录](docs/verification-report.md)首节。
-
-[开发者发布与只读CI示例](examples/team/README.md)提供独立任务目录：发布者构建上传私有包，消费任务仅用读取令牌编译运行，并记录实际来源与摘要。任务机需已有Linux仓颉工具链及增强版cjpm；服务端离线包不包含这些开发工具。
-
-维护时参考[单实例升级与回滚](docs/upgrade-and-rollback.md)：停服快照恢复至新卷，并核对包内容、凭据和产物身份。两个固定Linux镜像已有隔离演练；从旧快照恢复会丢弃快照之后的发布，不承诺任意版本无损回退。
-
-[容量样本](docs/capacity-report.md)提供固定资源下的并发、延迟、内存和数据完整性记录，帮助规划实际试用验证；当前是64包/256版本的本机合成热路径样本，不换算团队人数或生产容量上限。
-
-HTTPS准备见[客户端身份与CA说明](docs/https-client.md)：本地修订核对DNS名称或IP SAN，并禁止自动跳转，已有真实CJP下载构建验证；成熟网关及跨主机HTTPS部署仍待验收。
-
-前一综合验收产物 `af3516e8…` 修复保留target换仓仍运行旧程序的问题，覆盖源码路径身份、静态库内容指纹及传递静态链接；四组受控时间戳/三包回归和旧热缓存升级各7/7。同一产物另通过核心4/4、配置40/40、旧单仓差分7/7、HTTPS15/15、网络14/14、脱敏10/10；Maple原断言38项通过，刷新项就绪调整1项及归档稳定化1项分列。[Linux客户端离线包](deployment/client/README.md)已完成隔离接收验证，接收者无需编译cjpm，大多数命令仍需匹配SDK。摘要见[验证记录](docs/verification-report.md)。旧06ae的HLT95/95不移算给新产物；完整HLT/LLT及当前Windows原生验收仍未完成。
+Windows原生全量、完整官方Maple、跨主机入站HTTPS及生产信任分发/轮换仍待验收。上一版6f5d/465c已有配置/CA/数据冷恢复、特定版本升级回滚和有界容量样本；这些成绩不自动继承给最新二进制。使用条件和规模应以实际项目验证，不能按本机短测推算团队人数或生产SLA。
 
 CjRepoMesh 对应仓颉生态创新开发挑战赛推荐技术课题 **#6 仓颉中心仓多仓配置与私有化体系建设**。项目在不重写 cjpm 版本求解器的前提下，增加公共仓、私有仓、代理仓和镜像仓之间的路由、优先级、安全回退、来源审计与同步能力，并提供仓颉原生的私有中心仓服务端。
 
@@ -56,10 +43,10 @@ Repository Resolution                Dependency Resolution
 | --- | --- | --- |
 | 多仓配置及优先级查找 | 命名仓库、`priority`、`enabled`、`token-env`、确定性排序 | 多仓与旧配置兼容测试 |
 | 多仓解析、冲突和强制替换 | 跨仓候选聚合、同版本选源、原生 `[replace]` | 版本/来源冲突及替换矩阵 |
-| 私有中心仓一键部署 | Windows 构建、后台启动、健康诊断、安全停止、持久化重启 | Deployment 端到端测试 |
+| 私有中心仓部署 | Linux离线Compose交付；已有Windows部署脚本，原生全量待验收 | 新包接收及历史Deployment记录分列 |
 | 镜像、代理及仓间同步 | Proxy、批量 Mirror、批量 CjRepo-to-CjRepo Sync | 离线、损坏、并发、幂等和部分失败测试 |
 
-赛事要求之外的冲奖增强包括：
+补充能力包括：
 
 - `exclusive` 私有命名空间隔离；
 - 401/403 安全阻断，禁止认证失败后回退公共仓；
