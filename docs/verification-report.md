@@ -8,6 +8,20 @@
 > 历史基线：Windows 五组 `8e33119`；早期 Linux 四组与 Docker 复核 `e5be054`
 > 历史结论（2026-09-26）：在本地交付材料提交 `98e9f849` 上，从 Windows 工作区挂载路径真实重编译服务端并运行 Linux 四组，4/4 PASS、252.01 秒，随后 Docker Doctor 9/9。当时 Windows 原生构建被 Application Control 阻断；该限制不代表 2026-10-20 的实际环境。历史远端 HEAD、视频及 Maple 子集记录见各日期章节，不作为当前远端或最终产物的验收声明。
 
+## 2026-10-22 当前固定组合冷恢复与升级回退
+
+直接检查并解包当前固定的客户端 `CjRepoMesh-client-linux-amd64-8da52a114207.tar.gz` 和服务端 `CjRepoMesh-server-linux-amd64-bad02ad70507-payload-limits.zip`，完整归档SHA-256仍分别为 `a36ff1cc6a8e52037f0cf53e8cf500ccc6f51b13141aa61a7ad3f89d61f5588a`、`2af4b009ac445ff6630c69a45a43766f3dbce6a743e529956498eb23b5100673`。核对八/七文件、清单、ZIP CRC、逐文件摘要和实际镜像/二进制身份，不重制包、不重建产品。完整客户端8da5、服务端8fc3和bad0镜像身份仍见[固定候选](candidate-acceptance.md)首节。
+
+**CA/配置/数据冷恢复15/15，58.31s：** 标准Compose实测CA只读挂载/摘要、错误DNS拒绝且零HTTP、真实HTTPS填充meshdep缓存；停源并备份完整数据与受保护配置/CA，恢复至新项目、新卷。原服务和HTTPS上游均离线时，以原令牌私有读取；完整8da5交付客户端在独立空缓存/target内实际编译运行，输出 `high-1.0.0`。恢复实例重建后数据、配置和CA保留，源/备份不变，合成私钥清理完成。客户端使用默认模式，没有启用 `CJREPOMESH_SOURCE_BASELINE`；仅覆盖一个默认组织缓存包。
+
+**上一版→当前版停服升级/回退14/14，16.36s：** 旧镜像 `sha256:b3ce9d31b757e12e855445eb0ddd3a20689a781b5fe4dea494441c21be482eec` / 服务端 `5f8f13254f27379fe407f98d4ac1bd892b124a5ddb8fab2cab24953cc0e55b3b` 到当前bad0/8fc3。停止旧写入、完整快照、新卷候选读取和company组织teamhello发布、旧版读取候选写入及兼容降级保持通过。受控无效启动退出2且数据保持；独立旧快照回退明确不含快照后的组织发布，回退后重新发布、重复拒绝和重建保持均通过。升级链不执行客户端编译，也不迁移CA/Compose或HTTPS信任配置，不能把两条链合称升级时已完成信任迁移或业务切换。
+
+两条运行均清理无错误，外层76.11s。前后核对Windows生产源码、运行器、现有Linux SDK/native工具、OpenSSL、真实CJP及两份原归档摘要；分别检查恢复的三份数据归档，以及升级基线/候选/兼容降级/拒绝启动/回退归档的文件集合与逐文件SHA-256。源归档、旧产物和原数据均保持。只使用已有镜像及只读挂载工具，没有下载/安装、Windows仓颉执行或系统防护变更。
+
+首轮仅在测试准备阶段错误要求归档Compose与源码模板逐字节一致；交付包固定镜像而模板待替换，尚未进入Docker演练。保留首轮 `test-runs/maintenance-current-20261022/`，修正编排断言后在新目录 `test-runs/maintenance-current-verified-20261022/` 完成上述两条链。后者含完整解包输入、摘要、日志和合成配置/凭据/快照，均留在本地，不进入Git。
+
+本阶段仅更新当前候选、维护和交付说明，不改生产代码、运行器或产物。容量、完整Maple、Windows、全新主机/跨主机、入站HTTPS、在线备份、写入中崩溃、断电持久性、生产CA/凭据轮换与自动业务切换仍未验收。此前恢复/升级记录属于各自旧组合，不被覆盖；来源基线37项、多图、核心/TLS和团队27项没有在本阶段重跑。
+
 ## 2026-10-22 来源基线多图兼容性
 
 本阶段只新增 `integration-tests/compatibility/source_baseline_graphs.py` 和使用/验收说明，不改生产代码、求解器、lockfile、二进制或归档。复用固定8da5客户端，完整SHA-256仍为 `8da52a1142072653b8f2edd62f54942e90fca0ca65c06ccf6d865fbf563439e9`；执行前后核对客户端、现有SDK编译器、Windows生产输入及冻结运行器摘要。Windows保存源码，WSL执行Linux验证，不执行Windows仓颉、不下载安装工具。
