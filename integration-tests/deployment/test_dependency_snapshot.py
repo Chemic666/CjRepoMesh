@@ -8,6 +8,7 @@ import io
 import json
 from pathlib import Path
 import runpy
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -168,6 +169,16 @@ class DependencySnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.export()
         self.assertEqual(b'keep', (self.output/'owner').read_bytes())
 
+    def test_snapshot_output_cannot_be_inside_a_source_backup(self):
+        before = {path.name: path.read_bytes() for path in self.backup.iterdir()}
+        with self.assertRaisesRegex(ValueError, 'outside'):
+            self.module.export_snapshot(self.backup, self.approval, self.backup/'nested-output')
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.backup.iterdir()})
+        sources = self.origin_graph()
+        with self.assertRaisesRegex(ValueError, 'outside'):
+            self.module.export_set(sources, self.approval, self.backup/'nested-set')
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.backup.iterdir()})
+
     def test_verification_requires_exact_external_approval_bytes(self):
         self.export(); self.approval.write_bytes(self.approval.read_bytes()+b'\n')
         with self.assertRaises(ValueError): self.module.verify_snapshot(self.output, self.approval)
@@ -224,6 +235,8 @@ class DependencySnapshotTests(unittest.TestCase):
         legacy = {'image.tar', 'compose.yaml', 'configure.py', 'verify.py', 'README.md', 'LICENSE'}
         for capabilities, extra in (({}, set()), ({'maintenance': 'cold-backup-v1'}, {'maintenance.py'}),
                 ({'maintenance': 'cold-backup-v1', 'dependencySnapshot': 'approved-set-v1'},
+                 {'maintenance.py', 'snapshot.py'}),
+                ({'maintenance': 'cold-backup-v1', 'dependencySnapshot': 'approved-origins-v2'},
                  {'maintenance.py', 'snapshot.py'})):
             names = legacy | extra
             for name in names: (target/name).write_bytes(b'synthetic-bundle-file')
@@ -236,6 +249,112 @@ class DependencySnapshotTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.module.verify_bundle(target)
         (target/'manifest.json').write_text(json.dumps(value)); (target/'snapshot.py').unlink()
         with self.assertRaises((ValueError, OSError)): self.module.verify_bundle(target)
+
+    def origin_graph(self):
+        self.assertTrue(callable(getattr(self.module, 'export_set', None)),
+                        'full-approval origin snapshot set is not implemented')
+        self.approved['packages'][1]['repository'] = 'internal'
+        self.approved['packages'][1]['registry'] = 'https://private.example/team'
+        self.approval.write_text(json.dumps(self.approved), encoding='utf-8')
+        return {'home': self.backup, 'internal': self.backup}
+
+    def test_origin_set_keeps_full_approval_and_cross_origin_dependency(self):
+        sources = self.origin_graph(); before = self.approval.read_bytes()
+        value = self.module.export_set(sources, self.approval, self.output)
+        self.assertEqual('cjrepomesh-dependency-snapshot-set', value['kind'])
+        self.assertEqual(hashlib.sha256(before).hexdigest(), value['baselineSha256'])
+        self.assertEqual(2, len(value['origins']))
+        self.assertEqual({'snapshot-set.json'} | {item['directory'] for item in value['origins']},
+                         {path.name for path in self.output.iterdir()})
+        combined = set()
+        for origin in value['origins']:
+            child = self.output/origin['directory']
+            selected = self.module.verify_snapshot(child, self.approval)
+            self.assertEqual(2, selected['formatVersion'])
+            self.assertEqual('exact-registry-v1', selected['selection'])
+            self.assertEqual(origin['registry'], selected['registry'])
+            self.assertEqual(value['baselineSha256'], selected['baselineSha256'])
+            self.assertEqual({'snapshot.json', 'data.tar'}, {path.name for path in child.iterdir()})
+            expected = {path for item in self.approved['packages'] if item['registry'] == origin['registry']
+                        for path in self.paths(item['package'])}
+            self.assertEqual(expected, set(selected['storage']['files']))
+            combined.update(expected)
+        self.assertEqual(4, len(combined))
+        self.assertEqual(before, self.approval.read_bytes())
+        self.assertEqual(value, self.module.verify_set(self.output, self.approval))
+
+    def test_origin_set_requires_exact_mapping_before_creating_output(self):
+        sources = self.origin_graph()
+        for mapping in ({}, {'home': self.backup}, {**sources, 'unapproved': self.backup}):
+            with self.subTest(mapping=list(mapping)):
+                with self.assertRaises(ValueError): self.module.export_set(mapping, self.approval, self.output)
+                self.assertFalse(self.output.exists())
+        self.approved['packages'][1]['registry'] = REGISTRY
+        self.approval.write_text(json.dumps(self.approved))
+        with self.assertRaises(ValueError): self.module.export_set(sources, self.approval, self.output)
+        self.assertFalse(self.output.exists())
+        value = self.module.export_set({'internal': self.backup}, self.approval, self.output)
+        self.assertEqual(1, len(value['origins']), 'same-URL config aliases need one storage snapshot')
+
+    def test_all_origins_preflight_before_output_even_if_later_backup_fails(self):
+        self.origin_graph(); good = self.backup
+        self.backup = self.root/'bad-home'; shutil.copytree(good, self.backup)
+        self.artifacts['meshdep'] += b'wrong-source-bytes'; self.write_backup()
+        with self.assertRaisesRegex(ValueError, 'approved SHA-256'):
+            self.module.export_set({'internal': good, 'home': self.backup}, self.approval, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_origin_set_rejects_forged_missing_duplicate_and_swapped_origins(self):
+        sources = self.origin_graph(); value = self.module.export_set(sources, self.approval, self.output)
+        path = self.output/'snapshot-set.json'
+        variants = []
+        missing = copy.deepcopy(value); missing['origins'] = missing['origins'][:1]; variants.append(missing)
+        duplicate = copy.deepcopy(value); duplicate['origins'][1]['registry'] = duplicate['origins'][0]['registry']; variants.append(duplicate)
+        swapped = copy.deepcopy(value)
+        swapped['origins'][0]['registry'], swapped['origins'][1]['registry'] = swapped['origins'][1]['registry'], swapped['origins'][0]['registry']
+        variants.append(swapped)
+        for mutation in ({'directory': '../outside'}, {'snapshotManifestSha256': '0'*64}):
+            wrong = copy.deepcopy(value); wrong['origins'][0].update(mutation); variants.append(wrong)
+        for wrong in variants:
+            path.write_text(json.dumps(wrong))
+            with self.assertRaises(ValueError): self.module.verify_set(self.output, self.approval)
+        path.write_text(json.dumps(value)); (self.output/'unapproved').mkdir()
+        with self.assertRaises(ValueError): self.module.verify_set(self.output, self.approval)
+
+    def test_component_resealing_cannot_expand_into_another_origin(self):
+        sources = self.origin_graph(); value = self.module.export_set(sources, self.approval, self.output)
+        set_root = self.output
+        origin = next(item for item in value['origins'] if item['registry'] != REGISTRY)
+        self.output = set_root/origin['directory']
+        with tarfile.open(self.output/'data.tar', 'a:') as archive:
+            data = self.artifacts['meshdep']; item = tarfile.TarInfo(self.paths('meshdep')[1])
+            item.size = len(data); item.mode = 0o644; archive.addfile(item, io.BytesIO(data))
+        self.reseal_snapshot()
+        origin['snapshotManifestSha256'] = hashlib.sha256((self.output/'snapshot.json').read_bytes()).hexdigest()
+        (set_root/'snapshot-set.json').write_text(json.dumps(value))
+        with self.assertRaises(ValueError): self.module.verify_set(set_root, self.approval)
+
+    def test_new_components_require_new_capability_before_docker(self):
+        sources = self.origin_graph(); value = self.module.export_set(sources, self.approval, self.output)
+        child = self.output/value['origins'][0]['directory']
+        target = self.root/'target'; target.mkdir()
+        manifest = dict(image=IMAGE, dependencySnapshot='approved-set-v1')
+        with patch.object(self.module, 'verify_bundle', return_value=manifest), patch.object(
+                self.module, 'deployment', side_effect=AssertionError('must refuse before Docker')) as deploy:
+            with self.assertRaises(ValueError): self.module.seed(target, child, self.approval)
+            deploy.assert_not_called()
+
+    def test_ambiguous_repository_name_and_duplicate_cli_sources_reject(self):
+        self.origin_graph(); self.approved['packages'][1]['repository'] = 'home'
+        self.approval.write_text(json.dumps(self.approved))
+        with self.assertRaises(ValueError):
+            self.module.export_set({'home': self.backup}, self.approval, self.output)
+        self.assertFalse(self.output.exists())
+        nonce = 'private-source-path-marker'
+        result = subprocess.run([sys.executable, SOURCE/'snapshot.py', 'export-set', '--source', 'home', nonce,
+            '--source', 'home', nonce, '--baseline', self.approval, '--output', self.output], capture_output=True, text=True)
+        self.assertEqual(1, result.returncode)
+        self.assertNotIn(nonce, result.stdout+result.stderr)
 
 
 class SnapshotAcceptanceCleanupTests(unittest.TestCase):

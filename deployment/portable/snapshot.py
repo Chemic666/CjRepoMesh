@@ -20,6 +20,7 @@ from maintenance import (MaintenanceError, archive_manifest, create_restore_volu
 from verify import digest, regular_file, verify_bundle
 
 CAPABILITY = 'approved-set-v1'
+SET_CAPABILITY = 'approved-origins-v2'
 SHA256 = r'[a-f0-9]{64}'
 SEGMENT = r'[A-Za-z0-9][A-Za-z0-9._+-]*'
 
@@ -69,13 +70,13 @@ def package_parts(full: str) -> tuple[str, str]:
     return org, name
 
 
-def approval(path: Path) -> tuple[bytes, dict[str, dict], str]:
+def approved_graph(path: Path) -> tuple[bytes, dict[str, dict]]:
     data = bounded_bytes(path, 1024 * 1024)
     value = parse_json(data)
     if (not isinstance(value, dict) or type(value.get('formatVersion')) is not int or
             value['formatVersion'] != 1 or not isinstance(value.get('packages'), list) or not value['packages']):
         raise SnapshotError('approval requires a nonempty provenance-v1 package set')
-    entries, origins = {}, set()
+    entries, repositories = {}, {}
     for entry in value['packages']:
         if (not isinstance(entry, dict) or any(not isinstance(entry.get(key), str) or not entry[key]
                 for key in ('package', 'version', 'repository', 'registry', 'sha256')) or
@@ -94,11 +95,19 @@ def approval(path: Path) -> tuple[bytes, dict[str, dict], str]:
                 raise ValueError()
         except ValueError:
             raise SnapshotError('approval registry requires a credential-free HTTP(S) address') from None
-        origins.add(address)
+        if entry['repository'] in repositories and repositories[entry['repository']] != address:
+            raise SnapshotError('one approved repository name identifies multiple registry addresses')
+        repositories[entry['repository']] = address
         entries[entry['package']] = entry
+    return data, dict(sorted(entries.items()))
+
+
+def approval(path: Path) -> tuple[bytes, dict[str, dict], str]:
+    data, entries = approved_graph(path)
+    origins = {entry['registry'] for entry in entries.values()}
     if len(origins) != 1:
         raise SnapshotError('snapshot requires one exact registry origin; no source merging')
-    return data, dict(sorted(entries.items())), origins.pop()
+    return data, entries, origins.pop()
 
 
 def storage_paths(entry: dict) -> tuple[str, str]:
@@ -152,7 +161,8 @@ def selected_index(archive, member, entry: dict, packages: dict, *, single: bool
     return (json.dumps(selected, ensure_ascii=True, separators=(',', ':')) + '\n').encode('utf-8')
 
 
-def selected_files(archive, members: dict, storage: dict, entries: dict, *, single: bool) -> dict[str, bytes]:
+def selected_files(archive, members: dict, storage: dict, entries: dict, *, single: bool,
+                   full_graph: dict | None = None) -> dict[str, bytes]:
     indexes = {}
     for entry in entries.values():
         index, artifact = storage_paths(entry)
@@ -160,7 +170,8 @@ def selected_files(archive, members: dict, storage: dict, entries: dict, *, sing
             raise SnapshotError('approved package is missing from stored index or artifacts')
         if storage['files'][artifact]['sha256'] != entry['sha256']:
             raise SnapshotError('stored artifact differs from independently approved SHA-256')
-        indexes[index] = selected_index(archive, members[index], entry, entries, single=single)
+        indexes[index] = selected_index(archive, members[index], entry,
+                                        entries if full_graph is None else full_graph, single=single)
     return indexes
 
 
@@ -169,13 +180,24 @@ def expected_directories(paths) -> list[str]:
                    if parent.as_posix() != '.'})
 
 
-def export_snapshot(backup: Path, baseline: Path, output: Path) -> dict:
+def require_external_output(output: Path, backups) -> None:
     require_absent(output)
-    approved, entries, registry = approval(baseline)
+    if any(output.resolve().is_relative_to(backup.resolve()) for backup in backups):
+        raise SnapshotError('snapshot output must be outside all source backups')
+
+
+def preflight(backup: Path, entries: dict, full_graph: dict) -> tuple[dict, dict]:
     source = verify_backup(backup)
     with tarfile.open(backup/'data.tar', 'r:') as archive:
+        indexes = selected_files(archive, member_map(archive), source['storage'], entries,
+                                 single=False, full_graph=full_graph)
+    return source, indexes
+
+
+def write_snapshot(backup: Path, source: dict, approved: bytes, entries: dict, indexes: dict,
+                   registry: str, output: Path, *, version: int) -> None:
+    with tarfile.open(backup/'data.tar', 'r:') as archive:
         members = member_map(archive)
-        indexes = selected_files(archive, members, source['storage'], entries, single=False)
         paths = sorted(path for entry in entries.values() for path in storage_paths(entry))
         output.mkdir(mode=0o700)
         with private_file(output/'data.tar') as stream, tarfile.open(fileobj=stream, mode='w:') as target:
@@ -192,21 +214,43 @@ def export_snapshot(backup: Path, baseline: Path, output: Path) -> dict:
                     with archive.extractfile(members[name]) as content:
                         target.addfile(item, content)
     storage = archive_manifest(output/'data.tar')
-    value = dict(formatVersion=1, kind='cjrepomesh-dependency-snapshot',
+    value = dict(formatVersion=version, kind='cjrepomesh-dependency-snapshot',
         createdAtUtc=datetime.now(timezone.utc).isoformat(), registry=registry, image=source['image'],
         baselineSha256=hashlib.sha256(approved).hexdigest(), storage=storage,
         files={'data.tar': dict(bytes=(output/'data.tar').stat().st_size, sha256=digest(output/'data.tar'))})
+    if version == 2:
+        value['selection'] = 'exact-registry-v1'
     write_private(output/'snapshot.json', (json.dumps(value, indent=2) + '\n').encode('utf-8'))
+
+
+def export_snapshot(backup: Path, baseline: Path, output: Path) -> dict:
+    require_external_output(output, [backup])
+    approved, entries, registry = approval(baseline)
+    source, indexes = preflight(backup, entries, entries)
+    write_snapshot(backup, source, approved, entries, indexes, registry, output, version=1)
     return verify_snapshot(output, baseline)
 
 
 def verify_snapshot(root: Path, baseline: Path) -> dict:
-    approved, entries, registry = approval(baseline)
     if (not root.is_dir() or not ordinary_directory(root) or
             {item.name for item in root.iterdir()} != {'snapshot.json', 'data.tar'}):
         raise SnapshotError('snapshot requires exactly its manifest and data archive')
     value = parse_json(bounded_bytes(root/'snapshot.json', 16 * 1024 * 1024))
-    if (not isinstance(value, dict) or type(value.get('formatVersion')) is not int or value['formatVersion'] != 1 or
+    if (not isinstance(value, dict) or type(value.get('formatVersion')) is not int or
+            value['formatVersion'] not in (1, 2)):
+        raise SnapshotError('unsupported snapshot format')
+    if value['formatVersion'] == 1:
+        approved, entries, registry = approval(baseline)
+        full_graph = entries
+    else:
+        approved, full_graph = approved_graph(baseline)
+        registry = value.get('registry')
+        if not isinstance(registry, str) or value.get('selection') != 'exact-registry-v1':
+            raise SnapshotError('invalid snapshot origin selection')
+        entries = {name: entry for name, entry in full_graph.items() if entry['registry'] == registry}
+        if not entries:
+            raise SnapshotError('snapshot origin is absent from independent approval')
+    if (
             value.get('kind') != 'cjrepomesh-dependency-snapshot' or value.get('registry') != registry or
             value.get('baselineSha256') != hashlib.sha256(approved).hexdigest() or
             not isinstance(value.get('files'), dict) or set(value['files']) != {'data.tar'}):
@@ -222,7 +266,72 @@ def verify_snapshot(root: Path, baseline: Path) -> dict:
             storage['directories'] != expected_directories(paths)):
         raise SnapshotError('snapshot storage is not exactly the independently approved set')
     with tarfile.open(path, 'r:') as archive:
-        selected_files(archive, member_map(archive), storage, entries, single=True)
+        selected_files(archive, member_map(archive), storage, entries, single=True, full_graph=full_graph)
+    return value
+
+
+def export_set(backups: dict[str, Path], baseline: Path, output: Path) -> dict:
+    require_external_output(output, backups.values())
+    approved, full_graph = approved_graph(baseline)
+    repositories = {entry['repository']: entry['registry'] for entry in full_graph.values()}
+    origins = {entry['registry'] for entry in full_graph.values()}
+    sources = {}
+    for name, backup in backups.items():
+        if name not in repositories or repositories[name] in sources:
+            raise SnapshotError('each approved original registry requires exactly one source backup')
+        sources[repositories[name]] = backup
+    if set(sources) != origins:
+        raise SnapshotError('source backups do not exactly cover all approved registry origins')
+    prepared = []
+    for registry in sorted(origins):
+        entries = {name: entry for name, entry in full_graph.items() if entry['registry'] == registry}
+        source, indexes = preflight(sources[registry], entries, full_graph)
+        prepared.append((registry, entries, source, indexes))
+    # Every origin passed before output exists. Later failures retain partial
+    # output; protect backups, approval and Docker administration from mutation.
+    output.mkdir(mode=0o700)
+    components = []
+    for number, (registry, entries, source, indexes) in enumerate(prepared, 1):
+        directory = f'origin-{number:04d}'
+        write_snapshot(sources[registry], source, approved, entries, indexes, registry, output/directory, version=2)
+        components.append(dict(directory=directory, registry=registry,
+                               snapshotManifestSha256=digest(output/directory/'snapshot.json')))
+    value = dict(formatVersion=1, kind='cjrepomesh-dependency-snapshot-set',
+        createdAtUtc=datetime.now(timezone.utc).isoformat(),
+        baselineSha256=hashlib.sha256(approved).hexdigest(), origins=components)
+    write_private(output/'snapshot-set.json', (json.dumps(value, indent=2)+'\n').encode('utf-8'))
+    return verify_set(output, baseline)
+
+
+def verify_set(root: Path, baseline: Path) -> dict:
+    approved, full_graph = approved_graph(baseline)
+    if not root.is_dir() or not ordinary_directory(root):
+        raise SnapshotError('snapshot set requires an ordinary directory')
+    value = parse_json(bounded_bytes(root/'snapshot-set.json', 16 * 1024 * 1024))
+    if (not isinstance(value, dict) or type(value.get('formatVersion')) is not int or value['formatVersion'] != 1 or
+            value.get('kind') != 'cjrepomesh-dependency-snapshot-set' or
+            value.get('baselineSha256') != hashlib.sha256(approved).hexdigest() or
+            not isinstance(value.get('origins'), list)):
+        raise SnapshotError('snapshot set format or complete independent approval differs')
+    directories, origins = set(), set()
+    for origin in value['origins']:
+        if (not isinstance(origin, dict) or not isinstance(origin.get('directory'), str) or
+                not re.fullmatch(r'origin-[0-9]{4}', origin['directory']) or
+                not isinstance(origin.get('registry'), str) or
+                not isinstance(origin.get('snapshotManifestSha256'), str) or
+                not re.fullmatch(SHA256, origin['snapshotManifestSha256']) or
+                origin['directory'] in directories or origin['registry'] in origins):
+            raise SnapshotError('snapshot set has invalid or duplicate origin bindings')
+        directories.add(origin['directory']); origins.add(origin['registry'])
+    if (origins != {entry['registry'] for entry in full_graph.values()} or
+            {path.name for path in root.iterdir()} != directories | {'snapshot-set.json'}):
+        raise SnapshotError('snapshot set does not exactly cover the complete approved origins')
+    for origin in value['origins']:
+        child = root/origin['directory']
+        selected = verify_snapshot(child, baseline)
+        if (selected['formatVersion'] != 2 or selected['registry'] != origin['registry'] or
+                digest(child/'snapshot.json') != origin['snapshotManifestSha256']):
+            raise SnapshotError('snapshot set component binding differs')
     return value
 
 
@@ -231,7 +340,9 @@ def seed(root: Path, source: Path, baseline: Path) -> dict:
     value = verify_snapshot(source, baseline)
     require_absent(root/'snapshot-import.json')
     manifest = verify_bundle(root)
-    if manifest.get('dependencySnapshot') != CAPABILITY:
+    capability = manifest.get('dependencySnapshot')
+    if (capability not in (CAPABILITY, SET_CAPABILITY) or
+            (value['formatVersion'] == 2 and capability != SET_CAPABILITY)):
         raise SnapshotError('target bundle does not support approved dependency snapshots')
     if manifest['image'] != value['image']:
         raise SnapshotError('snapshot seed requires the exact exported image and server identity')
@@ -269,15 +380,29 @@ def main() -> int:
     export = commands.add_parser('export', help='select approved packages from a verified stopped backup')
     export.add_argument('--backup', type=Path, required=True)
     export.add_argument('--output', type=Path, required=True, help='new private output directory')
+    export_group = commands.add_parser('export-set', help='preserve every original registry of a full approved graph')
+    export_group.add_argument('--source', nargs=2, action='append', required=True, metavar=('REPOSITORY', 'BACKUP_DIR'))
+    export_group.add_argument('--output', type=Path, required=True)
+    verify_group = commands.add_parser('verify-set', help='verify complete origin coverage and all components')
+    verify_group.add_argument('--snapshot-set', type=Path, required=True)
     for name in ('verify', 'seed'):
         commands.add_parser(name).add_argument('--snapshot', type=Path, required=True)
-    for command in (export, *[commands.choices[name] for name in ('verify', 'seed')]):
+    for command in (export, export_group, verify_group, *[commands.choices[name] for name in ('verify', 'seed')]):
         command.add_argument('--baseline', type=Path, required=True, help='external independently approved file')
     args = parser.parse_args()
     try:
         if args.command == 'export':
             export_snapshot(args.backup.absolute(), args.baseline.absolute(), args.output.absolute())
             print('PASS: selected dependency snapshot exported; configuration and unrelated packages excluded')
+        elif args.command == 'export-set':
+            sources = {name: Path(path).absolute() for name, path in args.source}
+            if len(sources) != len(args.source):
+                raise SnapshotError('duplicate source repository mapping')
+            export_set(sources, args.baseline.absolute(), args.output.absolute())
+            print('PASS: complete approved origin set exported; original registry identities preserved')
+        elif args.command == 'verify-set':
+            verify_set(args.snapshot_set.absolute(), args.baseline.absolute())
+            print('PASS: complete approved origin coverage and each selected artifact verified')
         elif args.command == 'verify':
             verify_snapshot(args.snapshot.absolute(), args.baseline.absolute())
             print('PASS: snapshot matches the external approval and selected artifact hashes')

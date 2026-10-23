@@ -1,5 +1,13 @@
 # CjRepoMesh 交付记录
 
+## 2026-10-23 多来源批准快照集合
+
+现有快照工具新增 `export-set / verify-set`，按精确原始URL分别封存，所有分片绑定同一份完整独立批准字节，并校验全部来源覆盖；跨仓传递依赖不再误报缺少依赖。逐来源seed继续使用相同镜像、全新Hosted配置和新卷，保留接收者凭据并保持停服，不自动部署/切流/迁移地址。旧单来源格式及真实旧包互操作保留，新分片要求 `approved-origins-v2`。同时修复v1允许导出到备份内部的问题。客户端067b、服务端8fc3、bad0镜像和原求解器/lockfile/基线本体未变。
+
+完整包真实多来源16/16（143.34s），清理无错误：原始完整批准约束下的跨仓冷编译运行、错放同名同版本制品/缺少来源/同服务URL别名漂移拒绝、未选数据不可读及重建保持。快照Windows/Linux Docker各23/23；相关工具Linux65/65、Windows61通过4跳过；独立只读审查9项合成探针通过，无未解决问题。预期红灯、输入及原始记录保留。没有运行Windows仓颉、安装工具或修复WSL，没有把历史12/21/27项及完整官方矩阵移算为本批通过。
+
+已测试包按完全相同字节冻结为本地九文件归档 `CjRepoMesh-server-linux-amd64-bad02ad70507-origin-snapshots.zip`，38,395,906字节，SHA-256 `cb5e7241ce553baa44d248c67204feba7b37f3d98d8e9bf210bb8f451d5a4292`；旧归档摘要保持。完整身份与范围见[候选清单](candidate-acceptance.md)及[验证记录](verification-report.md)。只提交工具、相关测试和说明；私有配置/批准/快照、SDK、二进制、归档和原始日志在公开源码外保留。按持续授权阶段Commit和双端main普通Push，GitHub沿用独立noreply历史并检查同树；不推送origin、不强推、不建PR/Release。最终提交及远端回读身份记录在本次任务结果和本地交付记录中。
+
 ## 2026-10-23 批准依赖快照与隔离消费
 
 交付包新增 `snapshot.py export / verify / seed`，声明 `dependencySnapshot=approved-set-v1`。从停服备份仅导出一个完全相同原始URL下的独立批准CJP集合及单版本索引，排除运行配置、无关包和版本；seed只创建新Hosted卷并保留接收者自己的凭据，校验回导后保持停服，不覆盖旧卷、不自动切流或改批准。客户端067b、服务端8fc3、bad0镜像及求解器/lockfile/基线本体未改。

@@ -50,9 +50,9 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
         raise ValueError('unsupported bundle CA configuration')
     if manifest.get('maintenance') not in (None, 'cold-backup-v1'):
         raise ValueError('unsupported bundle maintenance capability')
-    if manifest.get('dependencySnapshot') not in (None, 'approved-set-v1'):
+    if manifest.get('dependencySnapshot') not in (None, 'approved-set-v1', 'approved-origins-v2'):
         raise ValueError('unsupported bundle dependency snapshot capability')
-    if manifest.get('dependencySnapshot') == 'approved-set-v1':
+    if manifest.get('dependencySnapshot') in ('approved-set-v1', 'approved-origins-v2'):
         if manifest.get('maintenance') != 'cold-backup-v1':
             raise ValueError('dependency snapshot requires the maintenance capability')
         expected_files = FILES
