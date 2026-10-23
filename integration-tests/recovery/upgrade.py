@@ -18,6 +18,17 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.harness import TestFailure, http_request, publish_frame, wait_for_health, wait_for_ports_closed
 from docker_backup import archive_manifest
+from upgrade_client import consume, verify_inputs
+
+
+def docker_output(command, *, environment, stdin=None, stdout=subprocess.PIPE,
+                  timeout=60, include_stderr=False):
+    result = subprocess.run(command, env=environment, stdin=stdin, stdout=stdout,
+                            stderr=subprocess.STDOUT if include_stderr else subprocess.PIPE,
+                            timeout=timeout)
+    if result.returncode:
+        raise TestFailure('Docker command failed with exit ' + str(result.returncode))
+    return result.stdout or b''
 
 
 def fixture(directory: Path) -> dict:
@@ -50,10 +61,19 @@ def main() -> int:
     parser.add_argument("--seed-package", type=Path, required=True, help="real default-organization bundle directory")
     parser.add_argument("--new-package", type=Path, required=True, help="real named-organization bundle directory")
     parser.add_argument("--evidence-dir", type=Path, required=True, help="new directory; retains synthetic snapshots")
+    parser.add_argument("--client-bundle", type=Path, help="optional complete Linux client for four protected cold consumers")
+    parser.add_argument("--client-sdk", type=Path, help="existing Linux SDK, mounted read-only")
+    parser.add_argument("--client-native", type=Path, help="existing Linux ar/ld and runtime files, mounted read-only")
+    parser.add_argument("--expected-output", default="high-1.0.0", help="seed meshdep registryMarker output in client mode")
     args = parser.parse_args()
+    client_manifest = verify_inputs(args, parser)
     seed, addition = fixture(args.seed_package), fixture(args.new_package)
     if seed["organization"] or not addition["organization"]:
         parser.error("use a default-organization seed and a named-organization new package")
+    if client_manifest and (seed['name'] != 'meshdep' or addition['name'] != 'teamhello' or
+                            addition['organization'] != 'company' or addition['version'] != '1.0.0'):
+        parser.error('client mode requires meshdep and company::teamhello 1.0.0 API fixtures')
+    total = 18 if client_manifest else 14
     report = args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     scope = "cjrepomesh-upgrade-" + uuid.uuid4().hex
@@ -70,12 +90,9 @@ def main() -> int:
         port = probe.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
 
-    def docker(*arguments, stdin=None, stdout=subprocess.PIPE, timeout=60):
-        result = subprocess.run(["docker", *map(str, arguments)], env=environment, stdin=stdin,
-                                stdout=stdout, stderr=subprocess.PIPE, timeout=timeout)
-        if result.returncode:
-            raise TestFailure(f"docker {arguments[0]} failed with exit {result.returncode}")
-        return result.stdout or b""
+    def docker(*arguments, stdin=None, stdout=subprocess.PIPE, timeout=60, include_stderr=False):
+        return docker_output(["docker", *map(str, arguments)], environment=environment,
+            stdin=stdin, stdout=stdout, timeout=timeout, include_stderr=include_stderr)
 
     def inspect(identifier):
         return json.loads(docker("inspect", identifier))[0]
@@ -93,7 +110,15 @@ def main() -> int:
 
     def passed(name, **facts):
         stages.append(dict(name=name, facts=facts))
-        print(f"PASS {len(stages)}/14 {name}", flush=True)
+        print(f"PASS {len(stages)}/{total} {name}", flush=True)
+
+    def cold_consumer(name, server, packages):
+        if client_manifest:
+            facts = consume(name=name, server=server, image=identities['candidate']['image'],
+                packages=packages, args=args, manifest=client_manifest, report=report,
+                docker=docker, inspect=inspect, register=containers.append,
+                label_key=label_key, scope=scope, secret_values=secret_values)
+            passed(name + '-protected-cold-client-build-run', **facts)
 
     def create(image, volume=None, *, writable=False, server=False, invalid=False, interactive=False, command=()):
         options = ["create", "--pull=never", "--label", label_key + "=" + scope,
@@ -244,6 +269,7 @@ def main() -> int:
         publish(addition)
         publish(addition, 409)
         read_all([seed, addition])
+        cold_consumer('candidate', server, [seed, addition])
         stop(server, "candidate-after-publication")
         post_upgrade = export(candidate, upgraded, report / "after-upgrade.tar")
         if len(post_upgrade) != 4:
@@ -252,6 +278,7 @@ def main() -> int:
         server = start_server(previous, upgraded)
         read_all([seed, addition])
         publish(addition, 409)
+        cold_consumer('compatible-downgrade', server, [seed, addition])
         stop(server, "previous-reading-candidate-data")
         passed("previous-version-reads-candidate-writes-with-same-credentials")
         if export(previous, upgraded, report / "after-compatible-downgrade.tar") != post_upgrade:
@@ -280,10 +307,12 @@ def main() -> int:
         if request(addition["download"], environment["CJREPO_READ_TOKEN"]).status != 404:
             raise TestFailure("snapshot rollback unexpectedly contains a later publication")
         passed("rollback-serves-seed-and-explicitly-excludes-post-snapshot-write")
+        cold_consumer('snapshot-rollback', server, [seed])
         publish(addition)
         publish(addition, 409)
         read_all([seed, addition])
         passed("rollback-service-accepts-new-publication-and-rejects-duplicates")
+        cold_consumer('rollback-republished', server, [seed, addition])
         stop(server, "rollback-before-restart")
         server = start_server(previous, recovered)
         read_all([seed, addition])
@@ -294,7 +323,10 @@ def main() -> int:
                 hashlib.sha256(backup.read_bytes()).hexdigest() != backup_sha):
             raise TestFailure("original, candidate storage or snapshot was changed by rollback")
         passed("original-candidate-and-snapshot-preserved-independently")
-        success = len(stages) == 14
+        if client_manifest:
+            if verify_inputs(args, parser) != client_manifest:
+                raise TestFailure('client bundle changed during drill')
+        success = len(stages) == total
     except (TestFailure, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as failure:
         error = str(failure) or type(failure).__name__
         print("FAIL upgrade drill: " + error, flush=True)
@@ -325,7 +357,7 @@ def main() -> int:
                 except (TestFailure, OSError, ValueError, KeyError, subprocess.SubprocessError) as failure:
                     cleanup_errors.append("volume " + storage + ": " + str(failure))
         success = success and not cleanup_errors
-        summary = dict(success=success, passed=len(stages), total=14,
+        summary = dict(success=success, passed=len(stages), total=total,
                        seconds=round(time.monotonic() - started, 2), stages=stages,
                        identities=identities, error=error, cleanup_errors=cleanup_errors,
                        runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -335,9 +367,10 @@ def main() -> int:
                        limits=["Existing Docker engine and two specific existing Linux amd64 builds only.",
                                "Controlled startup configuration rejection, not a post-write crash or format migration.",
                                "Snapshot rollback excludes later writes; pause publishers for a real cutover.",
-                               "No client compilation, Windows Cangjie, LAN/HTTPS, automatic upgrade or production cutover."])
+                               ("Four protected Linux cold consumers only; no Windows Cangjie, LAN/HTTPS, CA migration or automatic cutover."
+                                if client_manifest else "No client compilation, Windows Cangjie, LAN/HTTPS, automatic upgrade or production cutover.")])
         (report / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print(f"Upgrade drill: {len(stages)}/14; success={success}; report: {report}", flush=True)
+    print(f"Upgrade drill: {len(stages)}/{total}; success={success}; report: {report}", flush=True)
     return int(not success)
 
 

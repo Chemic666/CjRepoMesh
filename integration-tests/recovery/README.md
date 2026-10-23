@@ -97,7 +97,19 @@ python integration-tests\recovery\upgrade.py --previous-image <old-local-image> 
 
 This creates three new labeled volumes and an ephemeral loopback port. The 14 checkpoints pin distinct image and server identities; publish the old seed; stop all owned writers before a complete archive; restore a byte-identical candidate volume; check new reads/writes and old-version reads of candidate data; reject a controlled invalid startup configuration; restore the original snapshot into another empty volume; verify that later writes are absent; publish again, recreate the recovered server, and preserve original/candidate/backup bytes independently. The same generated read/publish credentials are checked across switches, without recording raw container environments.
 
-Only owned, label-verified resources are removed on success. Failures retain volumes and evidence and attempt to stop owned writers. The runner does not accept existing business volumes and is not an automatic production upgrade command. Snapshot rollback deliberately excludes post-snapshot writes; real maintenance must pause publishers or reconcile later data. The controlled startup failure is not a post-write crash or format migration. This test reads real archives but does not compile client projects. See the [maintenance procedure](../../docs/upgrade-and-rollback.md) and [actual verification scope](../../docs/verification-report.md).
+Only owned, label-verified resources are removed on success. Failures retain volumes and evidence and attempt to stop owned writers. The runner does not accept existing business volumes and is not an automatic production upgrade command. Snapshot rollback deliberately excludes post-snapshot writes; real maintenance must pause publishers or reconcile later data. The controlled startup failure is not a post-write crash or format migration. The default 14-check mode reads real archives without compiling client projects. See the [maintenance procedure](../../docs/upgrade-and-rollback.md) and [actual verification scope](../../docs/verification-report.md).
+
+To include the current complete Linux client, append these existing read-only inputs to the same command:
+
+```cmd
+--client-bundle <complete-Linux-client-directory> --client-sdk <existing-Linux-SDK> --client-native <existing-Linux-tools-directory> --expected-output high-1.0.0
+```
+
+This optional mode requires a default-organization `meshdep` fixture with `registryMarker()` and the real `company::teamhello 1.0.0` fixture with `teamGreeting()`. The expected marker must match the seed CJP. Argument checks and complete-client verification run before Docker operations or evidence creation. No Windows Cangjie executes.
+
+The extended 18-check mode adds four distinct cold consumers: candidate after publication, old server reading candidate data, snapshot rollback before republishing (seed-only graph), and rollback after republishing (both packages). Every consumer starts without cache/target/lock, requires `source-baseline-v1`, builds and runs an actual application, and checks complete provenance against an independent exact graph made from the trusted input CJP identities. Its approval is outside the job and mounted read-only; it is never copied from generated provenance. Separate approvals are needed for the seed-only and two-package graphs.
+
+Consumers use the selected candidate image only as an existing tool container and share the owned server's network namespace at its internal loopback address. The client, SDK and native tools are mounted read-only; only the fresh job and temporary filesystem are writable. Only the generated reading credential is injected, by environment-variable name rather than command-line value. This does not migrate the portable Compose/CA configuration, test HTTPS or any real service cutover, or prove arbitrary older versions compatible. Private evidence retains synthetic data and approvals outside the public checkout.
 
 ## Repository Sync
 
