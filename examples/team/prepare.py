@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
+import runpy
 import shutil
 from urllib.parse import urlsplit
 
@@ -22,15 +25,44 @@ def safe_registry(value: str) -> bool:
         return False
 
 
-def prepare(role: str, registry: str, output: Path) -> None:
+def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
+            ca_sha256: str | None = None) -> None:
     if not safe_registry(registry):
         raise ValueError("registry must be a credential-free HTTP(S) base address")
     if output.exists():
         raise FileExistsError("workspace already exists; use a new directory")
+    if ca_sha256 is not None and ca_file is None:
+        raise ValueError('ca-sha256 requires ca-file')
+    if ca_file is not None and urlsplit(registry).scheme != 'https':
+        raise ValueError('CA options require an HTTPS registry')
+    public_trust = None
+    trust_helper = Path(__file__).with_name('trust.py')
+    if ca_file is not None:
+        public_trust = runpy.run_path(str(trust_helper))['read_ca'](ca_file, ca_sha256)
     source = Path(__file__).resolve().parent / role
     output.mkdir(parents=True, exist_ok=False)
     for name in ("cjpm.toml", "README.md", "run.sh"):
         shutil.copyfile(source / name, output / name)
+    metadata = dict(formatVersion=1, role=role, registry=registry,
+                    package='company::teamhello', version='1.0.0')
+    if public_trust is not None:
+        trust = output / 'trust'
+        (trust / 'empty').mkdir(parents=True)
+        (trust / 'ca.pem').write_bytes(public_trust)
+        if os.name == 'posix':
+            (trust / 'ca.pem').chmod(0o444)
+        digest = hashlib.sha256(public_trust).hexdigest()
+        shutil.copyfile(trust_helper, output / 'trust.py')
+        script = output / 'run.sh'
+        marker = '# Optional process trust is configured by prepare.py.'
+        block = ('if ! python3 "$PWD/trust.py" --sha256 ' + digest + '; then\n'
+                 '    exit 2\nfi\n'
+                 'export SSL_CERT_FILE="$PWD/trust/ca.pem" SSL_CERT_DIR="$PWD/trust/empty"')
+        text = script.read_text(encoding='utf-8')
+        if text.count(marker) != 1:
+            raise ValueError('team task template lacks its process trust insertion point')
+        script.write_text(text.replace(marker, block), encoding='utf-8', newline='\n')
+        metadata['trust'] = dict(mode='process-only', caSha256=digest)
     shutil.copytree(source / "src", output / "src")
     (output / ".home").mkdir()
     config = '[repository.cache]\npath = "cache"\n'
@@ -42,8 +74,7 @@ def prepare(role: str, registry: str, output: Path) -> None:
         config += 'token-env = "CJREPO_READ_TOKEN"\n'
         config += '[[route]]\nnamespace = "company::*"\nregistry = "internal"\nexclusive = true\n'
     (output / "cangjie-repo.toml").write_text(config, encoding="utf-8")
-    (output / "workspace.json").write_text(json.dumps(dict(formatVersion=1, role=role,
-        registry=registry, package="company::teamhello", version="1.0.0"), indent=2) + "\n", encoding="utf-8")
+    (output / "workspace.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -51,9 +82,11 @@ def main() -> int:
     parser.add_argument("--role", required=True, choices=("publisher", "consumer"))
     parser.add_argument("--registry", required=True)
     parser.add_argument("--output", required=True, type=Path, help="new standalone workspace")
+    parser.add_argument('--ca-file', type=Path, help='optional approved public PEM CA for an HTTPS task; copied, never installed')
+    parser.add_argument('--ca-sha256', help='optional independently approved SHA-256 of ca-file')
     args = parser.parse_args()
     try:
-        prepare(args.role, args.registry, args.output.resolve())
+        prepare(args.role, args.registry, args.output.resolve(), args.ca_file, args.ca_sha256)
         print(f"Prepared {args.role} workspace; load your SDK environment and run bash run.sh there.")
         print("Credentials are referenced by environment variable only; none were read or written.")
         return 0

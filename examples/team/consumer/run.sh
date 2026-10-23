@@ -8,6 +8,7 @@ if [[ -z "${CJREPO_READ_TOKEN:-}" || -z "${CJREPOMESH_CJPM:-}" ]]; then
 fi
 unset CJPM_CONFIG CJREPO_PUBLISH_TOKEN
 export HOME="$PWD/.home" USERPROFILE="$PWD/.home"
+# Optional process trust is configured by prepare.py.
 if [[ "${CJREPOMESH_SOURCE_BASELINE+x}" ]]; then
     if ! capability=$("$CJREPOMESH_CJPM" repo supports source-baseline-v1 2>/dev/null) ||
         [[ "$capability" != source-baseline-v1 ]]; then

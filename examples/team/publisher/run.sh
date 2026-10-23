@@ -8,5 +8,6 @@ if [[ -z "${CJREPO_PUBLISH_TOKEN:-}" || -z "${CJREPOMESH_CJPM:-}" ]]; then
 fi
 unset CJPM_CONFIG CJREPO_READ_TOKEN
 export HOME="$PWD/.home" USERPROFILE="$PWD/.home"
+# Optional process trust is configured by prepare.py.
 "$CJREPOMESH_CJPM" bundle
 "$CJREPOMESH_CJPM" publish
