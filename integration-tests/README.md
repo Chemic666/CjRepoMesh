@@ -216,6 +216,26 @@ python3 integration-tests/compatibility/run.py \
 
 HTTPS名称与IP SAN的Linux真实客户端回归另见[客户端HTTPS说明](../docs/https-client.md#可复验验证)。15项使用已有OpenSSL、SDK及真实组织CJP，在本机合成CA夹具中核对身份、401、实际下载构建，以及302索引和307发布/下载不自动跳转；不安装系统根证书、不运行Windows仓颉，也不等同于真实反向代理部署。
 
+## 按批准集合制作依赖快照
+
+接收者操作见[交付包快照说明](../deployment/portable/README.md#按批准集合制作依赖快照)。新九文件包支持从停服备份按独立批准集合导出、离线校验和新卷导入；客户端/服务端二进制不变。单一原始URL、一套完整批准图，不自动合并多仓或改写目标地址，不替代完整仓库备份。
+
+相关纯Python回归另行运行：
+
+```console
+python -m unittest discover -s integration-tests/deployment -p test_dependency_snapshot.py -v
+```
+
+真实完整包验收在Windows宿主编排Linux容器，复用已加载镜像、已有Linux SDK和Python/native工具，不执行Windows仓颉。四个输入目录分别包含 `meta-data.json` 和真实CJP：meshdep 1.0.0/2.0.0、company::baselineparent 1.0.0（依赖meshdep）及无关company::teamhello 1.0.0。标记要求为 `baseline:high-1.0.0`。在新证据目录执行：
+
+```console
+python integration-tests/deployment/dependency_snapshot.py --bundle <未配置的完整新服务端包> --client-bundle <当前完整Linux客户端包> --client-sdk <已有LinuxSDK目录> --native <已有LinuxPython和链接工具目录> --package-dir <meshdep1目录> --package-dir <meshdep2目录> --package-dir <baselineparent目录> --package-dir <teamhello目录> --evidence-dir <新证据目录>
+```
+
+12项覆盖真实发布和停服备份、精确子集及单版本索引、缺失传递依赖、损坏/独立批准漂移拒绝、新配置/新卷seed和重复拒绝、原服务离线后的内部网络空缓存编译运行、匿名读取拒绝、无关包/版本不可读、另一个冷任务的来源漂移拒绝与重建保持。批准集合由冻结真实元数据独立构造，外部只读挂载，不从消费输出自动批准。目标仓及消费者仅接同一自建内部网络，以受控别名保持原URL；SDK/客户端/链接工具只读提供。该网络约束不是完整宿主气隙、任意迁移或所有外部构建输入的离线证明。
+
+仅清理本次随机项目与带本次标签的容器/网络；失败时保留数据卷、配置和输出，成功保留归档及摘要证据。接收工具沿用维护窗口与失败辅助容器诊断规则，不接收业务卷名。已有CA/维护21项及官方/Windows仓颉矩阵不计为本入口重跑。
+
 ## 可选仓库来源基线
 
 使用已有Linux SDK/stdx、增强客户端和真实meshdep1.0.0包目录（包含meta-data.json与CJP），不运行Windows仓颉：

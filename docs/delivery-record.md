@@ -1,5 +1,13 @@
 # CjRepoMesh 交付记录
 
+## 2026-10-23 批准依赖快照与隔离消费
+
+交付包新增 `snapshot.py export / verify / seed`，声明 `dependencySnapshot=approved-set-v1`。从停服备份仅导出一个完全相同原始URL下的独立批准CJP集合及单版本索引，排除运行配置、无关包和版本；seed只创建新Hosted卷并保留接收者自己的凭据，校验回导后保持停服，不覆盖旧卷、不自动切流或改批准。客户端067b、服务端8fc3、bad0镜像及求解器/lockfile/基线本体未改。
+
+最终完整包真实12/12（78.70s），清理无错误：company::baselineparent→meshdep空缓存实际编译运行、独立批准匹配/漂移拒绝、未选包/版本不可读、原服务离线及内部网络约束、重建与原件保持。核心快照Windows/Linux各14/14；审查后清理故障回归Windows1/1，Windows完整15/15；相关既有工具Linux65/65、Windows61通过4跳过。独立审查7项重封装探针通过，一项日志异常跳过清理问题经RED/GREEN修复；失败演练及WSL追加验证启动失败分别保留，未称Linux15项或完整官方/Windows仓颉验收。
+
+新本地归档 `CjRepoMesh-server-linux-amd64-bad02ad70507-dependency-snapshot.zip`，SHA-256 `d427c2259c977d0aa40a7f1b826cbda99dfc05f3568728709cc104e5b66bcdc7`，九成员逐项核对已测试目录；旧包摘要保持。身份、完整边界和证据见[当前候选](candidate-acceptance.md)与[验证记录](verification-report.md)。按持续授权阶段Commit及双端main普通Push，保留GitHub独立noreply历史并验证同树；不推送origin，不强推，不建PR/Release。只提交工具、相关测试和使用/验证说明，私有数据、SDK、二进制、归档及原始日志均留在公开源码之外。最终提交/远端回读身份记录在本次任务结果及本地交付记录中。
+
 ## 2026-10-23 接收端停服备份和独立恢复
 
 交付包新增接收者可调用的维护工具：停服备份、离线完整性校验、相同镜像下未配置目录/新卷恢复；拒绝活跃写入者、已有目标、损坏输入及错误镜像，原部署和备份保留，不自动切流。新八文件包声明 `maintenance=cold-backup-v1`，旧七文件验证保持；客户端067b、服务端8fc3和bad0镜像、求解器、lockfile及基线本体均不变。

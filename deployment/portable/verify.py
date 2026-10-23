@@ -14,7 +14,8 @@ import urllib.error
 import urllib.request
 
 LEGACY_FILES = {"image.tar", "compose.yaml", "configure.py", "verify.py", "README.md", "LICENSE"}
-FILES = LEGACY_FILES | {"maintenance.py"}
+MAINTENANCE_FILES = LEGACY_FILES | {"maintenance.py"}
+FILES = MAINTENANCE_FILES | {"snapshot.py"}
 
 
 def digest(path: Path) -> str:
@@ -49,7 +50,14 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
         raise ValueError('unsupported bundle CA configuration')
     if manifest.get('maintenance') not in (None, 'cold-backup-v1'):
         raise ValueError('unsupported bundle maintenance capability')
-    expected_files = FILES if manifest.get('maintenance') == 'cold-backup-v1' else LEGACY_FILES
+    if manifest.get('dependencySnapshot') not in (None, 'approved-set-v1'):
+        raise ValueError('unsupported bundle dependency snapshot capability')
+    if manifest.get('dependencySnapshot') == 'approved-set-v1':
+        if manifest.get('maintenance') != 'cold-backup-v1':
+            raise ValueError('dependency snapshot requires the maintenance capability')
+        expected_files = FILES
+    else:
+        expected_files = MAINTENANCE_FILES if manifest.get('maintenance') == 'cold-backup-v1' else LEGACY_FILES
     if not isinstance(manifest.get("files"), dict) or set(manifest["files"]) != expected_files:
         raise ValueError("unexpected bundle file list")
     image = manifest["image"]

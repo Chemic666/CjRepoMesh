@@ -41,7 +41,7 @@ python configure.py --port 8080 --ca-file "D:\trusted\team-ca.pem"
 
 输入只允许普通文件、最大1MiB、一个或多个PEM CERTIFICATE块；私钥、其他内容、无效证书和链接文件均拒绝，不回显内容。助手复制证书到本安装的 `trust/ca.pem`，原文件保持；在.env记录摘要，Compose固定以只读bind挂载整个trust目录，并给服务进程设置容器内SSL_CERT_FILE路径。不安装系统CA，不修改宿主信任库。Linux新目录0755、证书0444以便非root容器读取；证书副本不含私钥，.env仍保持私有权限。
 
-不选CA时也会创建空trust目录，默认Hosted流程可用，HTTPS出站仍需信任证书。需要Proxy时，在本部署.env另设CJREPO_UPSTREAM及可选CJREPO_UPSTREAM_TOKEN，再用显式Compose命令启动；令牌不要写进URL。已有.env或trust一律保留并拒绝重新初始化，不提供就地CA轮换或自动迁移。清单声明 `caConfiguration=pem-directory-v1`；当前带维护工具的包为八文件格式，旧包和既有部署不会自动更新。
+不选CA时也会创建空trust目录，默认Hosted流程可用，HTTPS出站仍需信任证书。需要Proxy时，在本部署.env另设CJREPO_UPSTREAM及可选CJREPO_UPSTREAM_TOKEN，再用显式Compose命令启动；令牌不要写进URL。已有.env或trust一律保留并拒绝重新初始化，不提供就地CA轮换或自动迁移。清单声明 `caConfiguration=pem-directory-v1`；当前带维护和依赖快照工具的包为九文件格式，旧包和既有部署不会自动更新。
 
 ## 运行中的部署诊断
 
@@ -92,11 +92,11 @@ docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
 python deployment/portable/package.py --image cjrepomesh:delivery-20261021 --output ../CjRepoMesh-offline
 ```
 
-制作端创建按完整镜像ID命名的本地别名并导出镜像，复制白名单文件，记录服务端及交付文件摘要。只接受新输出目录，不读取开发部署的 `.env`、SDK目录、客户端缓存或业务卷。生成目录包含 `image.tar`、`compose.yaml`、`configure.py`、`verify.py`、`maintenance.py`、`README.md`、`LICENSE` 和 `manifest.json`；复制这八份文件即可交付。若制作失败，应保留失败输出供检查，新运行使用另一个空目录。
+制作端创建按完整镜像ID命名的本地别名并导出镜像，复制白名单文件，记录服务端及交付文件摘要。只接受新输出目录，不读取开发部署的 `.env`、SDK目录、客户端缓存或业务卷。生成目录包含 `image.tar`、`compose.yaml`、`configure.py`、`verify.py`、`maintenance.py`、`snapshot.py`、`README.md`、`LICENSE` 和 `manifest.json`；复制这九份文件即可交付。若制作失败，应保留失败输出供检查，新运行使用另一个空目录。
 
 ## 接收端停服备份与独立恢复
 
-当前八文件包在清单声明 `maintenance=cold-backup-v1`。维护前先核对可信清单和 `python verify.py --running`，暂停发布、Mirror/Sync及其他写入任务，再按上文显式Compose命令停服；工具不自动停止部署或切换入口。不要与其他Docker管理操作并发执行，也不要让多个进程共用可写数据卷。
+带维护工具的包在清单声明 `maintenance=cold-backup-v1`。维护前先核对可信清单和 `python verify.py --running`，暂停发布、Mirror/Sync及其他写入任务，再按上文显式Compose命令停服；工具不自动停止部署或切换入口。不要与其他Docker管理操作并发执行，也不要让多个进程共用可写数据卷。
 
 在原安装目录执行，输出必须是尚不存在的新目录，父目录须已存在：
 
@@ -111,7 +111,7 @@ python maintenance.py verify-backup --backup ../private-backup
 
 首版配置只接受生成器样式的唯一字面量 `KEY=value` 行，以及空行/以 `#` 开头的注释。不接受插值、引号、转义、值内空白、重复键或额外Compose配置变量；读写令牌须非空且不同。遇到已有复杂配置时保持原部署，先独立审核如何转为等价字面量，工具不会自动改写或猜测其含义。
 
-将同一可信八文件包复制到另一个可写目录；该目录不能已有 `.env` 或 `trust`，不用先运行configure。导入并核对原固定镜像后，在这个新安装目录执行：
+将同一可信完整包复制到另一个可写目录；该目录不能已有 `.env` 或 `trust`，不用先运行configure。导入并核对原固定镜像后，在这个新安装目录执行：
 
 ```console
 python maintenance.py restore --backup ../private-backup
@@ -130,3 +130,36 @@ docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
 输出路径已存在时，包括悬空目录链接，应在访问Docker前拒绝；不通过解析链接将它当作新的目标路径。旧交付归档不自动更新，领取新包时核对清单与归档摘要，保留原部署的配置和数据。
 
 当前包为试点交付，未提供自动升级、自动备份、故障切换或容量保证。实际执行记录以源码仓库的验证报告为准。
+
+## 按批准集合制作依赖快照
+
+当前九文件包声明 `dependencySnapshot=approved-set-v1`。它从上节校验通过的停服备份中，导出一个独立批准的仓库依赖集合；与完整备份分开保存。版本一要求非空的来源基线v1、每包唯一、所有条目使用同一个完全相同的仓库URL。仓库配置名、包/组织名、版本和CJP摘要均保留；URL禁止凭据、查询和fragment。不合并不同仓库地址，也不修改批准文件。
+
+先在受保护位置独立审核完整来源基线，包含应用的传递依赖；不要以本次解析输出自动替代审批。保留该批准文件的原始字节。然后在新完整包目录执行：
+
+```console
+python snapshot.py export --backup ../private-backup --baseline ../approved/source.json --output ../private-dependency-snapshot
+python snapshot.py verify --snapshot ../private-dependency-snapshot --baseline ../approved/source.json
+```
+
+新输出目录仅有 `snapshot.json` 与 `data.tar`，先建立私有文件权限再写数据。工具逐项比对真实CJP字节SHA-256与独立批准摘要，核对索引组织/包/版本/摘要并只保留选中版本，排除无关包、其他版本及运行配置/CA。索引中无条件的普通依赖必须出现在批准集合中；缺少传递项会在创建输出前拒绝。版本表达式、目标条件与替换仍交由原求解器判断，名称集合通过不等于版本约束满足。未增加多图脚本或测试构建支持。
+
+验证始终需要外部批准文件，字节摘要须与导出时完全一致，连格式变化也须重新导出。它同时核对快照两文件、完整存储集合、选中索引及实际CJP摘要；链接、越界、重复/冲突路径、重复JSON字段、错误组织、重复索引版本或不匹配均拒绝。批准文件限制1MiB、清单16MiB、单包索引64MiB，制品与归档摘要以分块读取；没有总磁盘/包数量配额。快照仍含内部地址和源码，任意CJP/索引本身也可能含私密信息；导出不等于可以公开，需按内部依赖材料保管。
+
+## 将依赖快照装入新的私有仓
+
+在另一个可信完整包目录，先按首次启动说明加载并核对固定镜像，再生成这个接收者自己的读写凭据。此处需要先configure，与完整备份restore保留旧配置的流程不同。保持Hosted默认配置，不设置上游，也不先启动Compose或创建数据卷：
+
+```console
+python configure.py --port 8081
+python snapshot.py seed --snapshot ../private-dependency-snapshot --baseline ../approved/source.json
+docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
+```
+
+seed要求与快照完全相同的镜像/服务端，只创建本配置对应的新标签卷，拒绝已有卷/导入记录及Proxy配置；不改接收者凭据、CA或批准文件。输入损坏/失配在创建卷前拒绝；解包前再次校验，导入后再只读导出比较完整文件集合及摘要，成功写 `snapshot-import.json` 并保持服务停服。重复seed拒绝，不覆盖数据。失败时保留新卷、校验归档和已有配置，不把半完成目录当成功部署；用新目录、新配置重试，按归属检查失败资源。辅助容器诊断沿用维护工具的保留规则。
+
+启动后先检查实际私有读取、未选中版本不可用，并用当前可信完整客户端、独立只读批准文件和空缓存编译运行预期应用。来源基线绑定原始URL；新地址不会自动匹配。需要稳定受控入口或独立审核目标地址；本工具不改写来源批准、不自动设置DNS或切流。
+
+要声称依赖离线可用，须在原仓库/上游不可达且消费任务没有其他仓库网络出口的隔离环境实际冷构建。快照本身不证明项目所有输入离线：SDK/stdx、客户端、项目源码、Git/本地依赖及脚本外部输入仍须独立提供和约束。它不认证发布者或索引作者，不解包CJP校验内部依赖声明，不重新验真旧源码缓存；快照清单摘要仍需可信渠道核对，没有签名、构建沙箱、完整主机气隙或任意跨主机迁移保证。
+
+新验证器保留真实旧七文件包及仅有维护能力的旧八文件包的精确集合检查，未知快照能力拒绝；不要向旧包手工添加工具或能力字段。

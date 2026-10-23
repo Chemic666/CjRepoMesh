@@ -42,12 +42,13 @@ def package(image: str, output: Path) -> dict:
     docker("image", "tag", identifier, tag)
     docker("image", "save", "--output", str(output / "image.tar"), tag, timeout=300)
     source = Path(__file__).resolve().parent
-    for name in ("configure.py", "verify.py", "maintenance.py", "README.md"):
+    for name in ("configure.py", "verify.py", "maintenance.py", "snapshot.py", "README.md"):
         shutil.copyfile(source / name, output / name)
     shutil.copyfile(source.parents[1] / "LICENSE", output / "LICENSE")
     (output / "compose.yaml").write_text(
         (source / "compose.yaml").read_text(encoding="utf-8").replace("@IMAGE@", tag), encoding="utf-8")
     manifest = dict(formatVersion=1, caConfiguration='pem-directory-v1', maintenance='cold-backup-v1',
+                    dependencySnapshot='approved-set-v1',
                     createdAtUtc=datetime.now(timezone.utc).isoformat(),
                     image=dict(id=identifier, tag=tag, os="linux", architecture="amd64", serverSha256=server_sha),
                     files={name: dict(bytes=(output/name).stat().st_size, sha256=digest(output/name))
