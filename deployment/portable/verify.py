@@ -13,7 +13,8 @@ import subprocess
 import urllib.error
 import urllib.request
 
-FILES = {"image.tar", "compose.yaml", "configure.py", "verify.py", "README.md", "LICENSE"}
+LEGACY_FILES = {"image.tar", "compose.yaml", "configure.py", "verify.py", "README.md", "LICENSE"}
+FILES = LEGACY_FILES | {"maintenance.py"}
 
 
 def digest(path: Path) -> str:
@@ -46,7 +47,10 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
         raise ValueError("unsupported bundle manifest version")
     if manifest.get('caConfiguration') not in (None, 'pem-directory-v1'):
         raise ValueError('unsupported bundle CA configuration')
-    if not isinstance(manifest.get("files"), dict) or set(manifest["files"]) != FILES:
+    if manifest.get('maintenance') not in (None, 'cold-backup-v1'):
+        raise ValueError('unsupported bundle maintenance capability')
+    expected_files = FILES if manifest.get('maintenance') == 'cold-backup-v1' else LEGACY_FILES
+    if not isinstance(manifest.get("files"), dict) or set(manifest["files"]) != expected_files:
         raise ValueError("unexpected bundle file list")
     image = manifest["image"]
     if (not re.fullmatch(r"sha256:[a-f0-9]{64}", image["id"]) or
@@ -54,7 +58,7 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
             image["os"] != "linux" or image["architecture"] != "amd64" or
             not re.fullmatch(r"[a-f0-9]{64}", image["serverSha256"])):
         raise ValueError("unsupported bundle image identity or platform")
-    for name in sorted(FILES):
+    for name in sorted(expected_files):
         path = root / name
         entry = manifest["files"][name]
         if (not isinstance(entry, dict) or not regular_file(path) or type(entry.get("bytes")) is not int or

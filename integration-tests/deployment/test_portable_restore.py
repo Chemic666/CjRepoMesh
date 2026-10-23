@@ -7,6 +7,14 @@ import portable_ca
 
 
 class PortableRestoreTests(unittest.TestCase):
+    def test_command_output_uses_utf8_and_survives_invalid_log_bytes(self):
+        self.assertTrue(hasattr(portable_ca, 'run_process'), 'portable receiver output has no explicit decoding contract')
+        result = portable_ca.run_process((sys.executable, '-c',
+            "import sys;sys.stdout.buffer.write(bytes.fromhex('e4b8ade69687ff'));sys.stderr.buffer.write(bytes.fromhex('e697a5e5bf97fe'))"))
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '\u4e2d\u6587\ufffd')
+        self.assertEqual(result.stderr, '\u65e5\u5fd7\ufffd')
+
     def test_only_project_identity_changes(self):
         before = (b'COMPOSE_PROJECT_NAME=cjrepomesh-1111111111111111\n'
                   b'CJREPO_READ_TOKEN=synthetic-private-value\n'

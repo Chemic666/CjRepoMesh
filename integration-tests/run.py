@@ -68,6 +68,7 @@ def main() -> int:
     )
     results: list[tuple[str, float]] = []
     total_started = time.monotonic()
+    succeeded = False
     try:
         context.cleanup_generated()
         for key in selected:
@@ -78,8 +79,9 @@ def main() -> int:
             elapsed = time.monotonic() - started
             results.append((name, elapsed))
             print(f"=== {name}: PASS ({elapsed:.2f}s) ===", flush=True)
+        succeeded = True
     finally:
-        context.close()
+        context.close(preserve=not succeeded)
 
     print("\n=== CjRepoMesh core integration summary ===")
     width = max(len(name) for name, _elapsed in results)

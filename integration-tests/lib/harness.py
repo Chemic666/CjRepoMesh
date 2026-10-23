@@ -115,10 +115,14 @@ def http_request(
         raise TestFailure(f"HTTP {method} failed for {url}: {error}") from error
 
 
-def wait_for_health(port: int, *, attempts: int = 50, interval: float = 0.1) -> None:
+def wait_for_health(port: int, *, attempts: int = 50, interval: float = 0.1,
+                    process: subprocess.Popen | None = None, log_path: Path | None = None) -> None:
     url = f"http://127.0.0.1:{port}/health"
     last_error: Exception | None = None
     for _ in range(attempts):
+        if process is not None and process.poll() is not None:
+            location = f"; child log: {log_path}" if log_path is not None else ""
+            raise TestFailure(f"Repository on port {port} exited with code {process.returncode}{location}")
         try:
             result = http_request("GET", url, timeout=1.0)
             if result.status == 200 and json.loads(result.body).get("status") == "ok":
@@ -127,7 +131,8 @@ def wait_for_health(port: int, *, attempts: int = 50, interval: float = 0.1) -> 
             last_error = error
         time.sleep(interval)
     suffix = f": {last_error}" if last_error else ""
-    raise TestFailure(f"Repository on port {port} did not become ready{suffix}")
+    location = f"; child log: {log_path}" if log_path is not None else ""
+    raise TestFailure(f"Repository on port {port} did not become ready{suffix}{location}")
 
 
 def wait_for_port(port: int, *, attempts: int = 50, interval: float = 0.05) -> None:

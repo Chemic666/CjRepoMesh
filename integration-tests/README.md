@@ -2,6 +2,8 @@
 
 四组核心测试由同一个 Python 标准库运行器编排，Windows 与 Linux 共用夹具、断言、安全边界和清理逻辑；PowerShell 与 Bash 仅负责加载平台环境。Windows 一键部署是平台专属的第五组。
 
+核心入口失败时保留该次唯一 `.tmp/run-*` 目录及生成现场，并报告位置；成功仍按原流程清理。服务健康等待观察本次子进程早退码和对应日志位置，不打印日志正文。失败目录可能含内部地址和合成数据，应按内部证据保管；保留日志不等于已确定启动失败根因。合成回归入口为 `python -m unittest discover -s integration-tests -p test_harness_evidence.py`。
+
 如果希望先理解完整使用场景，见[连贯企业依赖演练](showcase/README.md)。一个入口串起同名公共高版本对照、私有命名空间保护、错误令牌阻断、上游停服、私有副本与离线来源解释，使用真实包和全新客户端缓存。它不替代四组回归或官方测试。
 
 固定客户端、服务端、交付包及同一产物的新执行/引用证据集中在[固定候选验收清单](../docs/candidate-acceptance.md)，其中仍未验收项单独列出。
@@ -189,9 +191,13 @@ TTL告警专项：`python3 integration-tests/compatibility/server_proxy_ttl.py -
 
 服务端HTTPS专项：`python3 integration-tests/compatibility/server_tls_identity.py --server <Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新证据目录>`。已有Linux OpenSSL生成合成CA/证书，0700临时目录退出清除；CA只给子进程，不改系统信任。当前24项保留原18项合法HTTPS、未知CA、错误DNS/IP/用途及后阶段连接身份检查，另加Mirror DNS/IP、Proxy IP、Sync源制品/目标索引/发布的六项过期叶证书拒绝。过期夹具先由OpenSSL确认error10，再要求目标实际握手收到certificate_expired告警；不能仅凭非零退出/502和零HTTP判通过。精确HTTP到达阶段、真实CJP/发布帧、认证及文件保持仍检查。需加载匹配SDK/stdx，不执行Windows仓颉；Sync夹具不提供真实持久化，真实目的仓由核心Sync组另验。镜像内复验另需既有Python/OpenSSL测试工具，不装入服务镜像；不将本机夹具称为成熟网关、跨主机或标准Compose CA验收，也未覆盖未来生效、过期根、吊销和改钟。
 
-标准七文件包的CA/Compose流程另用 `python integration-tests/deployment/portable_ca.py --bundle <尚未初始化的新包> --package-dir <已有真实默认CJP目录> --native <已有Linux Python及lib工具目录> --openssl <已有Linux OpenSSL可执行文件> --evidence-dir <新证据目录>`。先按包说明加载固定镜像；脚本不拉取/构建镜像，不需SDK。10项在自建Compose项目验证CA导入、只读挂载与实际摘要、错误DNS证书/无令牌拒绝、同代理恢复后真实HTTPS取包、CA篡改诊断、上游离线缓存和重建保持；TLS夹具仅共享本次服务的网络命名空间，工具只读挂给夹具，不挂给服务。结束清理自建容器/卷和合成私钥，证据目录保留；不测试真实CA分发、原部署轮换、入站网关或跨主机。
+声明CA能力的完整服务端包可用 `python integration-tests/deployment/portable_ca.py --bundle <尚未初始化的新包> --package-dir <已有真实默认CJP目录> --native <已有Linux Python及lib工具目录> --openssl <已有Linux OpenSSL可执行文件> --evidence-dir <新证据目录>`。先按包说明加载固定镜像；脚本不拉取/构建镜像，不需SDK。10项在自建Compose项目验证CA导入、只读挂载与实际摘要、错误DNS证书/无令牌拒绝、同代理恢复后真实HTTPS取包、CA篡改诊断、上游离线缓存和重建保持；TLS夹具仅共享本次服务的网络命名空间，工具只读挂给夹具，不挂给服务。结束清理自建容器/卷和合成私钥，证据目录保留；不测试真实CA分发、原部署轮换、入站网关或跨主机。
 
-接收工具的Python回归可用 `python -m unittest discover -s integration-tests/deployment -p "test_portable*.py"`，共39项：普通七文件校验/初始化、运行诊断和CA/失败清理/异常脱敏。无需Docker或仓颉；健康诊断两项需要本机回环权限，不能把沙箱连接拒绝改成跳过或弱化断言。Windows链接权限不足时有4项跳过，Linux实际39项全过，具体记录见[验证报告](../docs/verification-report.md)。
+接收工具的Python回归可用 `python -m unittest discover -s integration-tests/deployment -p "test_portable*.py"`，当前共65项：新旧包校验/初始化、运行诊断、CA，以及维护归档/配置/卷拒绝、辅助容器失败保留和日志解码。无需Docker或仓颉；健康诊断两项需要本机回环权限，不能把沙箱连接拒绝改成跳过或弱化断言。Windows链接权限不足时有4项跳过，Linux实际65项全过，具体记录见[验证报告](../docs/verification-report.md)。
+
+新八文件维护包的完整恢复验收复用同一入口，在上述CA命令上增加 `--cold-restore --maintenance --hosted-package-dir <已有真实company::teamhello-1.0.0的CJP及meta-data.json目录> --client-bundle <完整当前Linux客户端目录> --client-sdk <已有LinuxSDK目录>`。默认CJP须为meshdep，标记默认期望 `high-1.0.0`，可用 `--expected-output` 明确覆盖。21项实际调用包内维护工具，覆盖真实内部包发布/只读发布401/重复409、原服务与其他运行写入者阻断、停服备份、损坏/已有配置/错误镜像拒绝、新卷恢复、独立两包基线空缓存构建与漂移拒绝、原件及重建保持。批准记录来自冻结的两个制品元数据，不使用本次消费输出自动批准；只读挂载到任务外部。此入口仍只操作其新建合成安装，真实部署使用[维护工具](../deployment/portable/README.md#接收端停服备份与独立恢复)。
+
+maintenance验收失败时尝试停止本次写入实例、保留失败卷和证据，不删除业务或其他项目资源；成功只清理本次创建的资源。容器日志使用UTF-8及替换解码，收集日志失败也继续尝试安全停服。不要把这一个双包图推算成多图脚本、完整官方测试、生产切流、入站HTTPS或全新主机通过。
 
 验证实际交付组合时，将 `--team-client <文件>` 换成 `--team-client-bundle <完整客户端交付目录>`，两者互斥且均须搭配SDK。新模式在创建证据目录/访问Docker前用源码仓库的可信校验器检查包，不执行待测包中的Python代码；任务只读挂载整个目录，通过包内run.sh执行。摘要记录实际二进制和清单SHA-256，结束再次检查包不变，共21项。启动器需容器内已有Python 3；可在任务专用的 `--team-native` 目录下提供已有 `bin/python3`、对应 `lib/python3.X` 标准库及匹配共享库，不向最小服务端镜像安装工具。应先在相同只读挂载条件下运行包的 `--help` 检查依赖。六项离线回归只验证预检和参数拒绝，不代替真实编译。
 

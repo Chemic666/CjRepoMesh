@@ -67,6 +67,8 @@ CJREPOMESH_SOURCE_BASELINE=/protected/workspace-app-a.json /path/to/cjpm build -
 
 ## 能力边界与复验
 
+接收端[停服备份和独立恢复](../deployment/portable/README.md#接收端停服备份与独立恢复)不会修改批准文件。当前组合已对一个包含Hosted内部组织包及Proxy包的双包图完成恢复后空缓存基线匹配/漂移拒绝；受控容器环境保持原仓库URL。迁移到不同地址仍需独立审核目标基线，不能因恢复成功自动批准地址变化；这不扩大为异图脚本支持。
+
 这不是签名/发布者身份认证，也不重新验证已解包源码缓存、Git/本地依赖、SDK或编译结果。它不提供构建脚本沙箱或“检查前零代码执行”保证。多图仅验证上表选定的Linux场景，不代表任意工作空间、嵌套本地/Git依赖脚本、增量脚本缓存或多版本冲突均兼容。硬链接别名、恶意并发文件替换不属于保证，应使用受保护的工作目录、独立基线和隔离缓存。
 
 Linux真实两层CJP、匹配/替换/热缓存及非法输入回归入口是 `integration-tests/compatibility/source_baseline.py`；多图入口为 `integration-tests/compatibility/source_baseline_graphs.py`。使用方法见[构建与验证说明](../integration-tests/README.md)。当前产物的实际执行结果以[验证记录](verification-report.md)为准，不扩大为Windows或完整Maple验收。

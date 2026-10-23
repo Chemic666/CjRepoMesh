@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -55,7 +56,10 @@ class TestContext:
         ).resolve()
         self.temp_root.mkdir()
 
-    def close(self) -> None:
+    def close(self, *, preserve: bool = False) -> None:
+        if preserve:
+            print(f"Failed run evidence retained at {self.temp_root}", file=sys.stderr, flush=True)
+            return
         self.cleanup_generated()
         if self.temp_root.exists():
             shutil.rmtree(self.temp_root)
@@ -632,7 +636,7 @@ def _start_server(
         env=env,
         output_path=context.temp_root / output_name,
     )
-    wait_for_health(port)
+    wait_for_health(port, process=process, log_path=context.temp_root / output_name)
     return process
 
 

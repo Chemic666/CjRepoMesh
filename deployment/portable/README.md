@@ -41,7 +41,7 @@ python configure.py --port 8080 --ca-file "D:\trusted\team-ca.pem"
 
 输入只允许普通文件、最大1MiB、一个或多个PEM CERTIFICATE块；私钥、其他内容、无效证书和链接文件均拒绝，不回显内容。助手复制证书到本安装的 `trust/ca.pem`，原文件保持；在.env记录摘要，Compose固定以只读bind挂载整个trust目录，并给服务进程设置容器内SSL_CERT_FILE路径。不安装系统CA，不修改宿主信任库。Linux新目录0755、证书0444以便非root容器读取；证书副本不含私钥，.env仍保持私有权限。
 
-不选CA时也会创建空trust目录，默认Hosted流程可用，HTTPS出站仍需信任证书。需要Proxy时，在本部署.env另设CJREPO_UPSTREAM及可选CJREPO_UPSTREAM_TOKEN，再用显式Compose命令启动；令牌不要写进URL。已有.env或trust一律保留并拒绝重新初始化，不提供就地CA轮换或自动迁移。新包清单声明 `caConfiguration=pem-directory-v1`；仍是七文件格式，旧包和既有部署不会自动更新。
+不选CA时也会创建空trust目录，默认Hosted流程可用，HTTPS出站仍需信任证书。需要Proxy时，在本部署.env另设CJREPO_UPSTREAM及可选CJREPO_UPSTREAM_TOKEN，再用显式Compose命令启动；令牌不要写进URL。已有.env或trust一律保留并拒绝重新初始化，不提供就地CA轮换或自动迁移。清单声明 `caConfiguration=pem-directory-v1`；当前带维护工具的包为八文件格式，旧包和既有部署不会自动更新。
 
 ## 运行中的部署诊断
 
@@ -92,7 +92,40 @@ docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
 python deployment/portable/package.py --image cjrepomesh:delivery-20261021 --output ../CjRepoMesh-offline
 ```
 
-制作端创建按完整镜像ID命名的本地别名并导出镜像，复制白名单文件，记录服务端及交付文件摘要。只接受新输出目录，不读取开发部署的 `.env`、SDK目录、客户端缓存或业务卷。生成目录包含 `image.tar`、`compose.yaml`、`configure.py`、`verify.py`、`README.md`、`LICENSE` 和 `manifest.json`；复制这七份文件即可交付。若制作失败，应保留失败输出供检查，新运行使用另一个空目录。
+制作端创建按完整镜像ID命名的本地别名并导出镜像，复制白名单文件，记录服务端及交付文件摘要。只接受新输出目录，不读取开发部署的 `.env`、SDK目录、客户端缓存或业务卷。生成目录包含 `image.tar`、`compose.yaml`、`configure.py`、`verify.py`、`maintenance.py`、`README.md`、`LICENSE` 和 `manifest.json`；复制这八份文件即可交付。若制作失败，应保留失败输出供检查，新运行使用另一个空目录。
+
+## 接收端停服备份与独立恢复
+
+当前八文件包在清单声明 `maintenance=cold-backup-v1`。维护前先核对可信清单和 `python verify.py --running`，暂停发布、Mirror/Sync及其他写入任务，再按上文显式Compose命令停服；工具不自动停止部署或切换入口。不要与其他Docker管理操作并发执行，也不要让多个进程共用可写数据卷。
+
+在原安装目录执行，输出必须是尚不存在的新目录，父目录须已存在：
+
+```console
+python maintenance.py backup --output ../private-backup
+python maintenance.py verify-backup --backup ../private-backup
+```
+
+备份核对固定镜像/服务端、配置与CA、数据卷标签及仍存在的停服容器身份/凭据；任何运行容器以可写方式挂载该卷都会拒绝，包括其他项目的容器。数据通过无网络、只读挂载的临时容器导出，逐项检查路径、类型、完整文件集合及SHA-256。配置在备份期间变化或末尾检查发现写入者时拒绝完成；这不是与Docker管理器共享锁的在线快照，操作者必须保持维护窗口。
+
+备份目录包含 `backup.json`、`data.tar`、原 `.env` 及可选 `trust/ca.pem`，含私有制品和凭据，必须通过受保护渠道保管。工具在写入前建立Windows当前用户独占文件权限或Linux0600权限，不打印凭据，不将凭据写入命令行。`verify-backup`不需要Docker，只检查完整性，不认证发行者；通过可信渠道保管备份和清单，不能用可一并篡改的摘要代替信任。
+
+首版配置只接受生成器样式的唯一字面量 `KEY=value` 行，以及空行/以 `#` 开头的注释。不接受插值、引号、转义、值内空白、重复键或额外Compose配置变量；读写令牌须非空且不同。遇到已有复杂配置时保持原部署，先独立审核如何转为等价字面量，工具不会自动改写或猜测其含义。
+
+将同一可信八文件包复制到另一个可写目录；该目录不能已有 `.env` 或 `trust`，不用先运行configure。导入并核对原固定镜像后，在这个新安装目录执行：
+
+```console
+python maintenance.py restore --backup ../private-backup
+python verify.py --docker
+docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
+```
+
+恢复只接受与备份完全相同的镜像/服务端身份。它校验全部输入后生成不同的项目名和新数据卷，拒绝已有卷；保留原配置字节及读写凭据，只改变项目名。若明确需要其他本机端口，在restore时加 `--port 8081`；工具不自动寻找端口。解包后再次导出并比较完整文件集合/摘要，成功生成 `restore.json`，服务仍保持停服，由操作者核对后启动。原实例、卷和备份不会删除或覆盖。
+
+恢复失败时保留新配置、新卷和可能的 `restore-check-*.tar` 供本地排查，服务不会由本工具启动；不要在这个半完成目录重试或手工把它当作成功部署。保留证据，使用另一个未配置的完整包和新卷重新恢复。成功后仅清理本次有身份标签的临时容器；传输失败时核对身份，停止仍运行的辅助容器并保留它及Docker日志，提示其ID。辅助容器日志可能包含私有制品数据，继续按内部材料保管，排障后由操作者核对归属再清理。
+
+等待恢复实例healthy后，运行 `python verify.py --running`，核对私有读取与发布权限、包摘要，并用独立消费任务完成空缓存构建/运行，再决定入口切换。使用来源基线时应保留经过审核的仓库URL；若迁移地址改变，需独立审核目标基线，工具不改批准文件。记录本身不证明构建成功。旧七文件包仍按原清单验证，不会自动获得维护工具；不要零散替换验证器或伪造能力字段。
+
+本功能是停服快照和独立恢复，不提供自动升级、在线备份、CA/凭据轮换、断电持久性、恶意并发替换防护或跨主机入站HTTPS保证。解包只接受索引/制品目录下的普通文件和目录，链接、特殊文件、越界及冲突路径均拒绝；不将未校验归档直接交给宿主解包器。
 
 输出路径已存在时，包括悬空目录链接，应在访问Docker前拒绝；不通过解析链接将它当作新的目标路径。旧交付归档不自动更新，领取新包时核对清单与归档摘要，保留原部署的配置和数据。
 
