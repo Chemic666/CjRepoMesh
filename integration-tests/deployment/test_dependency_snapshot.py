@@ -358,6 +358,50 @@ class DependencySnapshotTests(unittest.TestCase):
 
 
 class SnapshotAcceptanceCleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_parent = SOURCE.parents[1]/'integration-tests/.tmp'
+        self.temporary_parent.mkdir(parents=True, exist_ok=True)
+
+    def recorded_runner(self):
+        functions = runpy.run_path(str(SOURCE.parents[1]/'integration-tests/deployment/dependency_snapshot.py'))
+        self.assertIn('run_recorded', functions, 'creation must register success before recording diagnostics')
+        return functions['run_recorded']
+
+    def test_created_resources_register_before_real_log_write_failure(self):
+        runner = self.recorded_runner()
+        for kind in ('network', 'consumer'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(dir=self.temporary_parent) as temporary:
+                root = Path(temporary)
+                (root/'create.log').mkdir()  # A real output failure after the child exits successfully.
+                owned = []
+                with self.assertRaises(OSError):
+                    runner('create', [sys.executable, '-c', 'print("created")'], directory=root,
+                        report=root, environment=None, hidden=[], created=lambda: owned.append(kind))
+                self.assertEqual([kind], owned)
+
+    def test_failed_creation_does_not_register_even_when_log_write_fails(self):
+        runner = self.recorded_runner()
+        with tempfile.TemporaryDirectory(dir=self.temporary_parent) as temporary:
+            root = Path(temporary); (root/'create.log').mkdir(); owned = []
+            with self.assertRaises(OSError):
+                runner('create', [sys.executable, '-c', 'raise SystemExit(4)'], directory=root,
+                    report=root, environment=None, hidden=[], created=lambda: owned.append('uncreated'))
+            self.assertEqual([], owned)
+
+    def test_recorded_success_keeps_output_redaction_and_exactly_once_registration(self):
+        runner = self.recorded_runner()
+        with tempfile.TemporaryDirectory(dir=self.temporary_parent) as temporary:
+            root = Path(temporary); owned = []
+            def created():
+                self.assertFalse((root/'create.log').exists())
+                owned.append('created')
+            output = runner('create', [sys.executable, '-c',
+                'import sys; print("synthetic-private-token"); print("stderr", file=sys.stderr)'],
+                directory=root, report=root, environment=None, hidden=['synthetic-private-token'], created=created)
+            self.assertEqual(['created'], owned)
+            self.assertEqual('synthetic-private-token\n', output)
+            self.assertEqual('[REDACTED]\nstderr\n', (root/'create.log').read_text())
+
     def test_failed_log_capture_still_stops_owned_resources_and_preserves_failure_state(self):
         functions = runpy.run_path(str(SOURCE.parents[1]/'integration-tests/deployment/dependency_snapshot.py'))
         self.assertTrue('finish_owned' in functions, 'snapshot acceptance has no independent stop after log failure')

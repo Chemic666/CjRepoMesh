@@ -38,6 +38,22 @@ def finish_owned(capture, stop, errors: list, *, kind: str) -> None:
         errors.append('owned '+kind+' cleanup failed')
 
 
+def run_recorded(label, arguments, *, directory, report, environment, hidden,
+                 success=True, log=True, timeout=120, created=None):
+    result = run_process(arguments, cwd=directory, env=environment, timeout=timeout)
+    # A successful create must be tracked even if recording its output fails.
+    # Cleanup still checks the resource's proof label before acting on it.
+    if result.returncode == 0 and created is not None:
+        created()
+    text = result.stdout+result.stderr
+    for secret in hidden:
+        text = text.replace(secret, '[REDACTED]')
+    if log: (report/(label+'.log')).write_text(text, encoding='utf-8')
+    if success is not None:
+        assert (result.returncode == 0) == success, label+' returned unexpected status'
+    return result.stdout
+
+
 def fingerprint(root: Path) -> dict:
     return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in root.rglob('*') if path.is_file()}
@@ -90,27 +106,20 @@ def main():
         alternate = (meta, data, frame(meta_bytes, data))
     image = server['image']['id']
     started = time.monotonic()
-    stages, projects, jobs, hidden, cleanup = [], [], [], [], []
+    stages, projects, jobs, networks, hidden, cleanup = [], [], [], [], [], []
     total = 16 if args.multi_origin else 12
     isolations = {}
     failure = ''
     proof = 'cjrepomesh-snapshot-'+uuid.uuid4().hex
     network = proof+'-network'
-    network_created = False
     environment = {key: value for key, value in os.environ.items()
                    if not key.upper().startswith(('COMPOSE_', 'CJREPO_', 'CJREPOMESH_'))}
     environment['PYTHONDONTWRITEBYTECODE'] = '1'
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def run(label, arguments, *, directory=report, success=True, log=True, timeout=120):
-        result = run_process(arguments, cwd=directory, env=environment, timeout=timeout)
-        text = result.stdout+result.stderr
-        for secret in hidden:
-            text = text.replace(secret, '[REDACTED]')
-        if log: (report/(label+'.log')).write_text(text, encoding='utf-8')
-        if success is not None:
-            assert (result.returncode == 0) == success, label+' returned unexpected status'
-        return result.stdout
+    def run(label, arguments, *, directory=report, success=True, log=True, timeout=120, created=None):
+        return run_recorded(label, arguments, directory=directory, report=report, environment=environment,
+                            hidden=hidden, success=success, log=log, timeout=timeout, created=created)
 
     def passed(name, **facts):
         stages.append(dict(name=name, **facts)); print('PASS '+name, flush=True)
@@ -171,7 +180,7 @@ def main():
     approval_before = approval.read_bytes()
     try:
         run('network-create', ['docker', 'network', 'create', '--internal', '--label',
-            'cjrepomesh.snapshot-proof='+proof, network]); network_created = True
+            'cjrepomesh.snapshot-proof='+proof, network], created=lambda: networks.append(network))
         net = json.loads(run('network-inspect', ['docker', 'network', 'inspect', network], log=False))[0]
         assert net['Internal'] is True
         original, original_values = configure('original')
@@ -362,7 +371,7 @@ print("PASS private reads and unselected package/version unavailable")
                 '--env', 'CJREPOMESH_SNAPSHOT_INTERNAL_REGISTRY='+internal_registry,
                 '--env', 'CJREPOMESH_SNAPSHOT_MULTI_ORIGIN='+('1' if args.multi_origin else '0'),
                 '--entrypoint', '/bin/bash', image, '-ec', script]
-            run(label+'-create', command); jobs.append(identifier)
+            run(label+'-create', command, created=lambda: jobs.append(identifier))
             run(label+'-run', ['docker', 'start', '--attach', identifier], success=None, timeout=180)
             text = (report/(label+'-run.log')).read_text(encoding='utf-8')
             item = json.loads(run(label+'-state', ['docker', 'inspect', identifier], log=False))[0]
@@ -425,7 +434,7 @@ print("PASS private reads and unselected package/version unavailable")
                 lambda: compose(root, values, 'remove-'+root.name, 'down',
                     *([] if failure or cleanup or len(stages) != total else ['-v']), isolated=root in isolations),
                 cleanup, kind='registry')
-        if network_created:
+        if network in networks:
             try:
                 item = json.loads(run('cleanup-network-identity', ['docker', 'network', 'inspect', network], log=False))[0]
                 assert item['Labels'].get('cjrepomesh.snapshot-proof') == proof
