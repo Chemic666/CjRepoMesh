@@ -7,13 +7,14 @@
 从需要完成的任务进入：
 
 - **看实际效果**：[七阶段连贯演练](integration-tests/showcase/README.md)与[演示和代码讲解](docs/demo-runbook.md)。
+- **首次接收当前固定版本**：[固定双包首次接入](docs/operations.md#固定双包的首次接入)，按包校验、服务接收、发布、独立批准和单次冷消费顺序操作。
 - **接收并运行仓库**：[离线服务端](deployment/portable/README.md)，包括完整性校验、私有配置、可选 CA 和只读运行诊断。
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前状态（2026-10-22）**：客户端 `8da52a11…`、未变服务端 `8fc30842…` / 镜像 `bad02ad7…`，身份及验收范围统一以[固定候选清单](docs/candidate-acceptance.md)首节为准。新增可选[CI来源基线](docs/repository-source-baseline.md)：最终仓库图确定后、制品下载前核对独立批准集合，专项37/37，新组合原生核心4/4、客户端TLS19/19。Docker恢复后新组合整包接收与真实团队任务另行复验27/27（112.62s），清理无错误，首轮启动失败记录保留。离线快照、签名/缓存再验真、脚本沙箱和完整资源配额仍未实现。详细证据见[验证记录](docs/verification-report.md)，双端发布记录见[交付记录](docs/delivery-record.md)。
+**当前状态（2026-10-24）**：固定21文件客户端工具包 `f433b415…`、9文件服务端包 `8fc30842…` / 镜像 `bad02ad7…`，完整归档、清单身份及各批验收范围统一见[固定候选清单](docs/candidate-acceptance.md)首节。当前组合已分别完成包内HTTPS团队流程10/10、Docker接收33/33、停服恢复23/23、具体版本升级回退22/22、多来源离线快照16/16及包内并发单次冷CI12/12；这些是独立演练，不相加包装为一次全量验收。[来源准入](docs/repository-source-baseline.md)支持主图与脚本图分别独立批准，同一客户端已有来源37/37、多图29/29、TLS19/19及原生核心4组通过。详细证据见[验证记录](docs/verification-report.md)，双端发布见[交付记录](docs/delivery-record.md)。
 
-历史5f8f/b3ce组合有冷恢复15/15及特定版本升级回退14/14，容量样本另属6f5d/465c；不将这些成绩移算给新组合。当前Windows原生全量、完整官方Maple、跨主机入站HTTPS、生产信任分发/轮换及新组合冷恢复/升级/容量仍待验收。使用条件和规模应以实际项目验证，不能按本机短测推算团队人数或生产SLA。
+当前Windows原生全量、完整官方Maple、最终客户端在全新/跨主机环境的完整验收、来源排他性与生产信任/凭据轮换仍未完成；旧产物的跨机成绩不移算。服务端有独立的有界Hosted容量样本，不代表当前工具包团队负载或长期生产容量。签名、已解包缓存再验真、脚本沙箱、流式落盘和完整资源配额仍未实现；使用条件和规模应以实际项目验证，不按本机短测推算团队人数或SLA。
 
 CjRepoMesh 对应仓颉生态创新开发挑战赛推荐技术课题 **#6 仓颉中心仓多仓配置与私有化体系建设**。项目在不重写 cjpm 版本求解器的前提下，增加公共仓、私有仓、代理仓和镜像仓之间的路由、优先级、安全回退、来源审计与同步能力，并提供仓颉原生的私有中心仓服务端。
 
@@ -120,26 +121,17 @@ meshdep = "[1.0.0, 3.0.0)"
 meshdep = "1.0.0"
 ```
 
-## Windows 快速开始
+## Windows源码部署入口（历史保留）
 
-前置条件：本机已经准备仓颉 SDK、stdx 和 Windows 构建工具。本项目的部署与验证脚本不会自动下载或安装依赖。
+当前接收路径使用上面的固定Linux双包；Windows宿主运行Python/Docker管理工具，仓颉应用在已有Linux/WSL工具链中构建。本机暂停执行Windows仓颉程序，不以历史Windows部署或下面的原生接口示例作为当前验证建议。
 
-```powershell
-# 一条命令构建、启动并完成健康检查
-.\deployment\windows\start.ps1 -PublishToken "change-this-token"
-
-# 检查进程、存储和 HTTP 健康状态
-.\deployment\windows\doctor.ps1
-
-# 停止服务；持久化数据不会被删除
-.\deployment\windows\stop.ps1
-```
+已有Windows源码部署脚本及SDK/构建工具前置条件保留在[Windows部署说明](deployment/windows/README.md)；这些脚本不会自动下载安装依赖，不应为运行它们修改系统防护。
 
 默认地址为 `http://127.0.0.1:8080`，数据保存在 `deployment/windows/data`。端口、存储、Proxy 上游和索引 TTL 均可通过参数配置，详见 [Windows 部署说明](deployment/windows/README.md)。
 
-## Docker Compose 快速开始
+## 源码开发的Docker构建入口（保留）
 
-在 WSL 中完成 Linux 构建且 Docker Desktop 已启动后：
+本节面向已有源码与Linux构建产物的开发者。固定服务端包的接收者直接导入包内镜像，不需要先构建服务端或安装仓颉SDK。开发者在WSL完成Linux构建且Docker Desktop已启动后：
 
 ```powershell
 .\deployment\docker\up.ps1
@@ -190,7 +182,7 @@ Sync 先比较 Source 和 Destination 索引的指定版本与 SHA-256：相同�
 
 ## 验证
 
-Windows 一条命令顺序执行四组共享核心测试与一组平台部署测试：
+历史Windows入口可顺序执行四组共享核心测试与一组平台部署测试；本机当前暂停执行Windows仓颉程序，不将其作为当前固定交付的执行步骤：
 
 ```powershell
 .\integration-tests\run-all.ps1
@@ -216,9 +208,9 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
 
-当前固定客户端6a7与官方原版单仓差分 **7/7 PASS**；增强版Maple **原断言38项、就绪调整1项、归档稳定化1项、HLT离线95/101** 分别通过，共113份真实调用日志。原刷新失败保留，不称39项未经调整通过；本轮Maple只执行增强版，完整HLT/LLT仍未完成。身份和本轮新执行/引用的区别见[固定候选验收清单](docs/candidate-acceptance.md)，详情见[验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md)与[Docker历史记录](docs/docker-verification.md)。
+历史6a7客户端与官方原版单仓差分 **7/7 PASS**；当批增强版Maple **原断言38项、就绪调整1项、归档稳定化1项、HLT离线95/101** 分别通过，共113份真实调用日志。原刷新失败保留，不称39项未经调整通过；当批Maple只执行增强版，完整HLT/LLT仍未完成。这些结果不移算为当前f433重跑，身份及执行/引用的区别见[固定候选验收清单](docs/candidate-acceptance.md)，详情见[验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md)与[Docker历史记录](docs/docker-verification.md)。
 
-历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批仍为各自历史产物记录，不移算为本轮6a7执行，也不代表完整HLT/LLT。
+历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批仍为各自历史产物记录，不移算为后续产物执行，也不代表完整HLT/LLT。
 
 上述核心回归覆盖跨仓传递依赖的相容版本选源、不可解冲突、来源 SHA-256 实值核对、独占命名空间故障矩阵，以及篡改制品拒绝与同缓存恢复。正式视频和签字 PDF 等材料已由参赛者完成提交，状态见 [提交检查表](docs/submission-checklist.md)；另保留 [早期可编辑技术答辩参考稿](submission/CjRepoMesh-technical-defense-redesign-2026-09-23.pptx)。
 

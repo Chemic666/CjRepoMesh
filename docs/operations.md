@@ -4,8 +4,75 @@
 
 ## 首次使用
 
+### 固定双包的首次接入
+
+当前接收路径使用[候选清单](candidate-acceptance.md)首节的21文件Linux客户端团队包与9文件服务端包。公开仓库提供源码、工具及摘要，不包含SDK、交付归档或凭据；由管理员通过受控渠道提供完整包，并独立核对归档和清单摘要。客户端需要已有Linux amd64 SDK1.1.3、stdx1.1.3.1、Python3.10+及编译链接工具；服务端运行只需已有Python/Docker Compose。不要混用历史包或只复制启动器。
+
+下面串起固定示例company::teamhello 1.0.0的流程。命令中的127.0.0.1示例仅适用于服务与任务确实共享同一回环网络环境的Linux部署。Windows宿主、WSL和容器不必共享回环，不能因为在同一台电脑就沿用此地址；先由管理员确认任务环境中可达且获准的仓库URL，再一致替换发布、消费和批准中的原URL。本文不为套用示例自动修改绑定、路由或来源规则。已有项目应保留自己的源码、依赖和运行入口，不用示例目录或批准文件覆盖它。
+
+1. **接收新服务目录。** 在尚未初始化的服务端包目录，按[服务端接收步骤](../deployment/portable/README.md#接收端首次启动)校验文件、导入image.tar、校验已加载镜像，再configure及显式Compose启动。Docker变为healthy后执行 `python verify.py --running`。已有部署保留.env、项目名和卷，不重跑初始化。读/写凭据由管理员分别私密交付，不把.env发给只读CI。
+2. **准备客户端环境。** 在发布和消费的受保护Linux会话中分别执行以下准备，将 `CJREPOMESH_CLIENT` 设为完整工具包的绝对路径，先校验，再加载已有SDK/stdx。使用干净角色会话，不继承其他项目的来源批准设置；SDK环境应在开启严格未定义变量检查之前加载，不安装或修改系统信任：
+
+   ```bash
+   export CJREPOMESH_CLIENT=/absolute/path/to/client-bundle
+   python3 "$CJREPOMESH_CLIENT/verify.py"
+   source /existing/cangjie/envsetup.sh
+   export CANGJIE_STDX_PATH=/existing/stdx/linux_x86_64_cjnative/static/stdx
+   export CJREPOMESH_CJPM="$CJREPOMESH_CLIENT/run.sh"
+   ```
+
+3. **发布受控示例。** 仅给发布会话注入受保护的CJREPO_PUBLISH_TOKEN，使用包外新任务目录。以下绝对路径为待替换占位；生成目录的父目录必须可写：
+
+   ```bash
+   : "${CJREPO_PUBLISH_TOKEN:?先由受保护渠道注入发布令牌}"
+   python3 "$CJREPOMESH_CLIENT/prepare-team.py" --role publisher --registry http://127.0.0.1:8080 --output /private/jobs/publisher-001
+   (cd /private/jobs/publisher-001 && bash run.sh)
+   ```
+
+   退出0后核对该任务target中的真实CJP与meta-data.json。重复发布1.0.0返回409时应保留现场，先核对已有版本，不把冲突当成功，也不为了重跑删除仓库数据。
+4. **独立批准消费来源。** 维护者审核目标版本与实际CJP的SHA-256，决定是否批准；文件保存在任务输出之外的受保护位置，只读交付CI。固定示例的结构如下，摘要必须替换为独立核对的64位小写SHA-256；不要从本次消费者provenance自动生成批准。repository必须是准备器实际使用的internal，registry须与准备时的原始URL完全一致：
+
+   ```json
+   {
+     "formatVersion": 1,
+     "packages": [{
+       "package": "company::teamhello",
+       "version": "1.0.0",
+       "repository": "internal",
+       "registry": "http://127.0.0.1:8080",
+       "sha256": "<独立审核的64位小写SHA-256>"
+     }]
+   }
+   ```
+
+   真实项目须批准完整最终图，含传递依赖及选中替换项；主图与脚本图不同时按[分图规则](repository-source-baseline.md#工作空间与构建脚本)分别批准。更换地址、仓库名、版本或摘要需重新审核，不能缩小批准集合来消除拒绝。
+5. **单次冷消费。** 在已加载同一工具链的消费会话只注入CJREPO_READ_TOKEN，不配置发布凭据；将CJREPOMESH_SOURCE_BASELINE设为上述批准文件的绝对路径，再准备另一个新目录：
+
+   ```bash
+   unset CJREPO_PUBLISH_TOKEN
+   : "${CJREPO_READ_TOKEN:?先由受保护渠道注入读取令牌}"
+   export CJREPOMESH_SOURCE_BASELINE=/protected/teamhello-1.0.0.json
+   python3 "$CJREPOMESH_CLIENT/prepare-team.py" --role consumer --registry http://127.0.0.1:8080 --single-use --output /private/jobs/consumer-001
+   (cd /private/jobs/consumer-001 && bash run.sh)
+   ```
+
+6. **判定并保留结果。** 任务退出0、应用输出含 `CjRepoMesh team 1.0.0: CI`，且完整来源记录与独立批准一致，才记作该任务成功。保留lockfile、来源记录和受保护日志；provenance本身不证明构建成功。并行CI各用一个全新目录，不共享可写HOME/cache/target。成功或失败后均保留单次领取标记，重试另建目录，不删标记或清缓存复用。
+
+默认服务端包只监听回环HTTP。服务端configure的--ca-file只配置**服务端出站信任**，不会开启入站HTTPS；客户端prepare-team.py的--ca-file/--ca-sha256只配置**任务进程信任**，也不会部署网关。已有且获准的HTTPS入口按[团队CA步骤](../examples/team/README.md#https与已批准的私有ca)传入同一地址、公开CA和独立摘要，不能仅改URL后就认为跨机可用。网络/绑定/来源规则及真实凭据传递另行授权，不沿用历史机器IP、不关闭TLS校验。
+
+| 首次接入失败 | 优先处理 |
+| --- | --- |
+| 包校验或能力查询拒绝 | 核对完整包与可信清单，使用当前兼容客户端；不修改清单或关闭准入 |
+| 401/403 | 核对对应角色令牌及实例；不回退公共仓或把发布凭据交给CI |
+| TLS或来源基线拒绝 | 分别核对端点/SAN/CA，或完整图/仓库名/原URL/SHA；保留批准和现场，不自动批准当前结果 |
+| 单次守卫退出2 | 保留任务与标记，准备新目录；先查前置错误，不把复用拒绝当编译故障 |
+
+此路径复用已验收的包内团队及并发流程；本文命令检查不代表在新主机或实际团队环境重新验收。首次接入后，按本页后续步骤选择诊断、停服完整备份/恢复或依赖快照，保留原数据与凭据。
+
+### 源码开发与其他部署入口
+
 1. 源码构建按 [构建与验证说明](../integration-tests/README.md) 准备已有仓颉SDK、匹配的stdx和平台依赖，不混用Windows/Linux二进制。已有[离线服务端包](../deployment/portable/README.md)时，服务端运行只需Python 3与Docker Compose；开发者构建仓颉应用仍需工具链。
-2. 选择离线包、[Windows 原生部署](../deployment/windows/README.md) 或 [开发镜像部署](../deployment/docker/README.md)。固定数据目录或卷，保存部署参数，令牌单独保管。离线包的 `.env` 同时固定项目名，重建时保留；Compose命令始终显式 `-f compose.yaml`。
+2. 源码开发入口保留[Windows原生部署](../deployment/windows/README.md)和[开发镜像部署](../deployment/docker/README.md)；本机当前暂停Windows仓颉执行，固定包接收不需要重新构建。固定数据目录或卷，保存部署参数，令牌单独保管。离线包的 `.env` 同时固定项目名，重建时保留；Compose命令始终显式 `-f compose.yaml`。
 3. 设置发布令牌。需要私有读取时同时设置读取令牌；客户端用 `token-env`，不要把令牌放进 URL、命令历史或公开配置。
 4. 新离线包在Docker显示healthy后运行 `python verify.py --running`；原生/开发镜像部署使用相应 `doctor.ps1`。诊断会核对本部署身份，不能仅凭HTTP响应认定正确。成功后仍应实际发布一个测试包、下载并核对 SHA-256，再验证客户端构建。
 5. 多仓项目按 [配置说明](multirepo-implementation.md) 设置地址、优先级和路由。内部包使用独占路由时，公共仓不会作为后备。

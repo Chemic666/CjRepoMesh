@@ -2,7 +2,7 @@
 
 已获得声明 `teamPreparation=single-use-cold-v1` 的完整客户端团队包时，可离线执行 `python3 /path/to/client-bundle/prepare-team.py` 并传入下文相同参数，无需检出源码。该入口先校验整个包，只创建包外新目录；下文的 `examples/team/prepare.py` 是源码仓库路径，用工具包时替换为上述入口。实际编译仍需已有SDK/stdx，任务凭据及独立来源批准继续由外部提供。
 
-本例提供可复制的私有库发布任务与消费任务。服务端可用[离线服务端包](../../deployment/portable/README.md)启动；任务执行机仍需现有Linux仓颉SDK（含cjlint）、匹配的增强版cjpm及本机归档/链接工具和开发链接文件（如ar、ld、GCC/系统启动对象）。准备目录只需要Python 3.10+，`run.sh`为Linux/Bash任务入口，不安装工具链、不下载依赖。Windows原生仓颉执行当前暂停，示例的真实编译验收在Linux容器中进行。
+本例提供可复制的私有库发布任务与消费任务；首次接收当前固定双包时，先按[完整接入顺序](../../docs/operations.md#固定双包的首次接入)核对包、角色凭据和独立批准。服务端可用[离线服务端包](../../deployment/portable/README.md)启动；任务执行机仍需现有Linux仓颉SDK（含cjlint）、匹配的增强版cjpm及本机归档/链接工具和开发链接文件（如ar、ld、GCC/系统启动对象）。准备目录只需要Python 3.10+，`run.sh`为Linux/Bash任务入口，不安装工具链、不下载依赖。Windows原生仓颉执行当前暂停，真实编译分别在Linux/WSL或Linux容器中验收，范围见对应记录。
 
 ## 任务角色
 
@@ -74,7 +74,7 @@ python examples/team/prepare.py --role consumer --registry https://repo.example.
 
 ## 接入CI
 
-在已经有工具链的自托管Linux任务机上，依次检出源码、生成新的消费目录、由CI注入读取秘密、加载SDK环境并执行 `bash run.sh`。当前示例不依赖某家CI服务，也不创建远端流水线。让任务执行失败时直接保留非零退出状态。
+在已经有工具链的自托管Linux任务机上，固定工具包方式直接通过包内prepare-team.py生成新消费目录，无需检出工具源码；仅源码方式需要检出本仓库并调用examples/team/prepare.py。由CI注入读取秘密及独立批准、加载SDK环境，再执行任务的 `bash run.sh`；普通项目源码仍由自己的构建流程提供。当前示例不依赖某家CI服务，也不创建远端流水线。让任务执行失败时直接保留非零退出状态。
 
 可在CI内部保存锁文件、`cjpm-provenance.json`和编译日志以定位依赖来源；解析记录不证明整个编译成功，应同时检查任务退出状态和运行输出。报告和日志可能包含内部仓库地址与工作路径，按团队的内部材料保管。
 
