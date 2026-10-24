@@ -1,6 +1,7 @@
 """Optional cold consumers for the owned upgrade drill, never business volumes."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import runpy
 import shutil
@@ -27,6 +28,11 @@ def verify_inputs(args, parser):
 
 def task_state(root):
     """Compare entry types and bytes, including empty directories; never follow links."""
+    if os.name == 'nt':
+        path = str(root.absolute())
+        if not path.startswith('\\\\?\\'):
+            path = '\\\\?\\UNC\\' + path[2:] if path.startswith('\\\\') else '\\\\?\\' + path
+        root = Path(path)
     result = {}
     for path in sorted(root.rglob('*')):
         mode = path.lstat().st_mode

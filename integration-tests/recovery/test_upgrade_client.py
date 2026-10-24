@@ -2,7 +2,8 @@
 import importlib.util
 import hashlib
 import os
-from pathlib import Path
+import shutil
+from pathlib import Path, PureWindowsPath
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,30 @@ class UpgradeClientTests(unittest.TestCase):
 
     def test_sdk_requires_client_bundle_before_fixture_or_docker(self):
         self.assertIn('client-sdk/client-native require client-bundle', self.invoke('--client-sdk', self.sdk))
+
+    @unittest.skipUnless(os.name == 'nt', 'extended Windows path regression')
+    def test_upgrade_task_snapshot_reads_long_windows_cache_paths(self):
+        spec = importlib.util.spec_from_file_location('upgrade_client', SCRIPT.with_name('upgrade_client.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = self.work / 'long-upgrade-job'
+        self.assertTrue(root.resolve().is_relative_to((ROOT / 'integration-tests/.tmp').resolve()))
+        extended = Path('\\\\?\\' + str(root.absolute()))
+        relative = Path('cache') / ('a' * 80) / ('b' * 80) / ('c' * 80) / 'source.cj'
+        short_checkout = PureWindowsPath('C:/r/integration-tests/.tmp/upgrade-client-12345678/long-upgrade-job')
+        self.assertGreater(len(str(short_checkout / relative.as_posix())), 260)
+        self.assertGreater(len(str(root / relative)), 260)
+        target = extended / relative
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b'owned long-path upgrade source')
+        try:
+            before = module.task_state(root)
+            self.assertEqual(before[relative.as_posix()], ['file', hashlib.sha256(target.read_bytes()).hexdigest()])
+            target.write_bytes(b'changed owned source')
+            self.assertNotEqual(module.task_state(root), before)
+        finally:
+            # Only this checked, newly owned test directory is removed.
+            shutil.rmtree(extended)
 
     def test_single_use_requires_bundle_before_fixture_or_docker(self):
         self.assertIn('single-use-clients requires client-bundle', self.invoke('--single-use-clients'))
