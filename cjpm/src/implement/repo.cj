@@ -60,10 +60,13 @@ public func doRepoDoctor(packageArgument: Option<String>): Bool {
 
     println("Repository Diagnostics")
     println("Package: ${fullName}")
+    println("Checks: metadata only; every allowed repository is probed independently.")
     let router = RepositoryRouter.new() ?? return false
     let candidates = router.getDepots(fullName)
     var allPassed = true
+    var remaining = candidates.size
     for (depot in candidates) {
+        remaining -= 1
         let priority = FINAL_CJPM_CONFIG_INFO.repository[depot.registryName].priority
         println("")
         println("${depot.registryName}")
@@ -80,7 +83,11 @@ public func doRepoDoctor(packageArgument: Option<String>): Bool {
             allPassed = false
             println("  Metadata API   FAIL  status=${depot.lastResponseStatus}")
             println("  Detail         ${output}")
-            println("  Fallback       ${if (RepositoryRouter.canContinueAfter(depot.lastResponseStatus)) { "ALLOWED" } else { "BLOCKED" }}")
+            let canFallback = RepositoryRouter.canContinueAfter(depot.lastResponseStatus) && remaining > 0
+            println("  Fallback       ${if (canFallback) { "ALLOWED" } else { "BLOCKED" }}")
+            if (RepositoryRouter.canContinueAfter(depot.lastResponseStatus) && remaining == 0) {
+                println("  Reason         no remaining route-allowed repository")
+            }
         }
     }
     println("")

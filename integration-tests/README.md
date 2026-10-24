@@ -88,6 +88,14 @@ python integration-tests\compatibility\config_validation.py --cjpm cjpm\target\r
 
 它覆盖错误类型在网络请求前被拒绝、TOML 日期/时间不能冒充字符串、危险 URL 与历史来源记录的凭据回显阻断、合法独占路由和旧单仓缺省配置。来源格式用例保留版本1正例，要求拒绝负数、零、未来版本及Int64极大版本号；失败时无来源成功输出、无仓库请求且原记录字节不变。
 
+Doctor回退标签的Linux定向回归入口：
+
+```bash
+python3 integration-tests/compatibility/doctor_fallback.py --cjpm /path/to/enhanced/cjpm --evidence-dir /path/to/new-report
+```
+
+先加载已有SDK/stdx，使用新的私有证据目录。11个本机HTTP元数据场景核对独占/单仓/末仓/禁用后无下一仓、非独占404/503、401/403、路由次序及全200对照；验证真实请求顺序、标签和退出状态，保留配置与输出。doctor独立探测全部允许仓，不等于构建的实际回退；专项不下载CJP、不编译应用或验证TLS。修复源码及私有候选已通过，固定f433包仍可能误报无下一仓时ALLOWED，完整身份见[候选说明](../docs/candidate-acceptance.md)。
+
 HTTP400诊断令牌遮蔽使用独立入口：
 
 ```bash
