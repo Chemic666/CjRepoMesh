@@ -2,12 +2,15 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import runpy
+import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'integration-tests/deployment/portable.py'
@@ -100,6 +103,117 @@ class TeamDeliveryTests(unittest.TestCase):
         self.assertIn('requires team-client-bundle and team-sdk', result.stderr)
         self.assertFalse((self.work / 'evidence').exists())
 
+    def test_packaged_mode_requires_protected_mode_before_side_effects(self):
+        result = self.invoke('--team-packaged')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('team-packaged requires team-protected', result.stderr)
+        self.assertFalse((self.work / 'evidence').exists())
+
+    def test_packaged_mode_refuses_legacy_client_before_evidence(self):
+        sdk = self.work / 'sdk'
+        sdk.mkdir()
+        (sdk / 'envsetup.sh').write_text('# synthetic; never executed\n')
+        result = self.invoke('--team-packaged', '--team-protected', '--team-sdk', sdk,
+                             '--team-client-bundle', self.bundle)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('team preparation capability', result.stderr)
+        self.assertNotIn('untrusted verifier executed', result.stderr)
+        self.assertFalse((self.work / 'evidence').exists())
+
+    def test_required_capability_is_checked_by_trusted_verifier(self):
+        with self.assertRaisesRegex(ValueError, 'team preparation capability'):
+            self.functions['client_bundle_identity'](self.bundle, require_team=True)
+
+    def test_packaged_command_actually_prepares_both_roles_without_source_path(self):
+        kit = self.work / 'team-kit'
+        result = subprocess.run([sys.executable, str(ROOT / 'deployment/client/package.py'),
+            '--cjpm', str(self.bundle / 'cjpm'), '--runtime-dir', str(self.bundle / 'lib'),
+            '--output', str(kit), '--include-team'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for role in ('publisher', 'consumer'):
+            job = self.work / role
+            command = self.functions['team_workspace_command'](kit, role, 'http://cjrepo:8080', job, packaged=True)
+            self.assertEqual(Path(command[1]), kit / 'prepare-team.py')
+            result = subprocess.run(command, cwd=self.work, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            metadata = json.loads((job / 'workspace.json').read_text())
+            self.assertEqual(metadata['role'], role)
+            self.assertEqual('execution' in metadata, role == 'consumer')
+            self.assertEqual((job / 'job.py').exists(), role == 'consumer')
+        identity = self.functions['client_bundle_identity'](kit, require_team=True)
+        self.assertEqual(identity['teamPreparation'], 'single-use-cold-v1')
+
+    def test_default_command_keeps_ordinary_source_preparation(self):
+        command = self.functions['team_workspace_command'](None, 'consumer', 'http://cjrepo:8080', self.work / 'ordinary')
+        self.assertEqual(Path(command[1]), ROOT / 'examples/team/prepare.py')
+        self.assertNotIn('--single-use', command)
+
+    def test_relative_packaged_path_survives_changed_execution_directory(self):
+        kit = self.work / 'relative-kit'
+        result = subprocess.run([sys.executable, str(ROOT / 'deployment/client/package.py'),
+            '--cjpm', str(self.bundle / 'cjpm'), '--runtime-dir', str(self.bundle / 'lib'),
+            '--output', str(kit), '--include-team'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        relative = Path(os.path.relpath(kit, Path.cwd()))
+        identity = self.functions['client_bundle_identity'](relative, require_team=True)
+        self.assertEqual(identity['teamPreparation'], 'single-use-cold-v1')
+        elsewhere = self.work / 'different-cwd'
+        elsewhere.mkdir()
+        command = self.functions['team_workspace_command'](relative, 'consumer', 'http://cjrepo:8080',
+                                                           self.work / 'relative-job', packaged=True)
+        result = subprocess.run(command, cwd=elsewhere, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.work / 'relative-job/job.py').is_file())
+
+    def repeat_fixture(self):
+        job = self.work / 'completed'
+        job.mkdir()
+        (job / '.cjrepomesh-job-started').mkdir()
+        (job / 'target').mkdir()
+        (job / 'target/keep').write_bytes(b'owned original build output')
+        before = self.functions['team_task_state'](job)
+        result = SimpleNamespace(returncode=2, stdout='FAIL: single-use task contains previous cache or build state\n', stderr='')
+        return job, before, result
+
+    def test_repeat_accepts_only_real_guard_refusal_with_preserved_state(self):
+        job, before, result = self.repeat_fixture()
+        self.functions['check_team_repeat'](job, result, before)
+
+    def test_repeat_rejects_success_or_unrelated_failure_or_application_output(self):
+        job, before, result = self.repeat_fixture()
+        for code, output in ((0, result.stdout), (7, result.stdout), (2, 'unrelated failure'),
+                             (2, result.stdout + 'CjRepoMesh team 1.0.0: CI\n')):
+            with self.subTest(code=code, output=output):
+                bad = SimpleNamespace(returncode=code, stdout=output, stderr='')
+                with self.assertRaises(AssertionError):
+                    self.functions['check_team_repeat'](job, bad, before)
+
+    def test_repeat_must_preserve_bytes_and_claim(self):
+        job, before, result = self.repeat_fixture()
+        (job / 'target/keep').write_bytes(b'changed')
+        with self.assertRaises(AssertionError):
+            self.functions['check_team_repeat'](job, result, before)
+        (job / 'target/keep').write_bytes(b'owned original build output')
+        (job / '.cjrepomesh-job-started').rmdir()
+        with self.assertRaises(AssertionError):
+            self.functions['check_team_repeat'](job, result, before)
+
+    @unittest.skipUnless(os.name == 'nt', 'extended Windows path regression')
+    def test_task_state_reads_long_windows_cache_paths_without_policy_changes(self):
+        root = self.work / 'long-job'
+        self.assertTrue(root.resolve().is_relative_to((ROOT / 'integration-tests/.tmp').resolve()))
+        extended = Path('\\\\?\\' + str(root.absolute()))
+        relative = Path('cache') / ('a' * 80) / ('b' * 80) / 'source.cj'
+        target = extended / relative
+        self.assertGreater(len(str(root / relative)), 260)
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b'owned long-path source')
+        try:
+            state = self.functions['team_task_state'](root)
+            self.assertEqual(state[relative.as_posix()], ('file', hashlib.sha256(b'owned long-path source').hexdigest()))
+        finally:
+            # This new directory was checked inside this test's owned workspace.
+            shutil.rmtree(extended)
     def publisher(self):
         publisher = self.work / 'publisher'
         target = publisher / 'target'

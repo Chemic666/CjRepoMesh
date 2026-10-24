@@ -213,6 +213,8 @@ maintenance验收失败时尝试停止本次写入实例、保留失败卷和证
 python integration-tests\deployment\portable.py --bundle <未初始化服务端交付目录> --package-dir <已有真实CJP目录> --team-sdk <已有LinuxSDK目录> --team-client-bundle <完整客户端交付目录> --team-native <已有Linux工具副本目录> --team-protected --check-running --check-credential-drift --evidence-dir <新的私有证据目录>
 ```
 
+使用当前21文件团队客户端包时，给上述命令再加 `--team-packaged`。它要求team-protected及已验证的 `teamPreparation=single-use-cold-v1` 能力，缺失在创建证据/访问Docker前拒绝。七个任务全部调用包内prepare-team.py，consumer选择--single-use；可以在不含examples/team的接收验证树中执行，不调用源码准备器。现有29项之外，两个成功消费者、SHA漂移和应用退出7各增加一次同任务复用拒绝，共33项。每次由新容器运行同一任务，要求实际退出2、守卫诊断、无应用输出、领取目录及全部目录项类型/文件字节保持；外部批准最终核对保持。不测服务端请求计数，不声称拒绝阶段零网络请求。默认不加此选项继续使用原源码任务模式；Docker内部HTTP结果不能替代HTTPS、来源排他性或生产切换验收。
+
 该命令只创建自己的合成实例与凭据，不接入现有业务部署；默认模式和完整客户端原21项入口保留。证据目录含合成凭据和内部材料，勿提交到公开仓库。此流程使用本机Docker内部HTTP，不是HTTPS/跨主机、共享缓存、容量、沙箱或完整来源基线矩阵验收。
 
 可选模式在原12项上增加8项，共20项：无凭据准备目录、真实构建发布、只读CI编译运行、第二个独立冷任务、应用运行失败退出码、错误读取令牌、读取令牌越权发布拒绝，以及失败后制品和服务凭据保持。SDK/客户端只读挂载，任务通过本次内部Docker网络访问服务，主机仍仅本机监听。两次成功消费核对同一包的实际来源和SHA-256；失败应用仍可能有解析记录，但不得继续解释或返回成功。这不替代Windows仓颉、全新主机、内网HTTPS或完整官方验收。

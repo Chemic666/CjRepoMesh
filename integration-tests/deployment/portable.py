@@ -12,6 +12,7 @@ import runpy
 import secrets
 import shutil
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -22,12 +23,54 @@ import urllib.request
 import uuid
 
 
-def client_bundle_identity(root: Path) -> dict:
+def client_bundle_identity(root: Path, *, require_team=False) -> dict:
     # Use the repository's verifier, never execute a candidate's Python code.
     verifier = Path(__file__).resolve().parents[2] / "deployment/client/verify.py"
     manifest = runpy.run_path(str(verifier))["verify_bundle"](root)
-    return dict(mode="client-bundle", binarySha256=manifest["files"]["cjpm"]["sha256"],
-                manifestSha256=hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest())
+    identity = dict(mode="client-bundle", binarySha256=manifest["files"]["cjpm"]["sha256"],
+                    manifestSha256=hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest())
+    if require_team:
+        if manifest.get('capabilities') != {'teamPreparation': 'single-use-cold-v1'}:
+            raise ValueError('verified client lacks the required team preparation capability')
+        identity['teamPreparation'] = 'single-use-cold-v1'
+    return identity
+
+
+def team_workspace_command(client_bundle, role, registry, output, *, packaged=False):
+    script = (client_bundle.resolve() / 'prepare-team.py' if packaged else
+              Path(__file__).resolve().parents[2] / 'examples/team/prepare.py')
+    return [sys.executable, str(script), '--role', role, '--registry', registry, '--output', str(output),
+            *(['--single-use'] if packaged and role == 'consumer' else [])]
+
+
+def team_task_state(root):
+    if os.name == 'nt':
+        path = str(root.absolute())
+        if not path.startswith('\\\\?\\'):
+            path = '\\\\?\\UNC\\' + path[2:] if path.startswith('\\\\') else '\\\\?\\' + path
+        root = Path(path)
+    state = {}
+    for path in sorted(root.rglob('*')):
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            value = ('link', str(path.readlink()))
+        elif stat.S_ISDIR(mode):
+            value = ('directory',)
+        elif stat.S_ISREG(mode):
+            value = ('file', hashlib.sha256(path.read_bytes()).hexdigest())
+        else:
+            raise ValueError('unexpected team task entry type')
+        state[path.relative_to(root).as_posix()] = value
+    return state
+
+
+def check_team_repeat(job, result, before):
+    output = result.stdout + result.stderr
+    assert result.returncode == 2, 'single-use task repeat must exit2'
+    assert any(line.startswith('FAIL: single-use task ') for line in output.splitlines()), 'single-use guard refusal absent'
+    assert 'CjRepoMesh team 1.0.0: CI' not in output and 'Application repository credentials absent' not in output
+    assert (job / '.cjrepomesh-job-started').is_dir(), 'single-use claim not retained'
+    assert team_task_state(job) == before, 'single-use repeat changed task entries or bytes'
 
 
 def team_source_approval(publisher: Path, registry: str) -> dict:
@@ -58,7 +101,11 @@ def main() -> int:
     parser.add_argument("--team-native", type=Path, help="optional existing ar/ld and libraries for a minimal runtime container")
     parser.add_argument('--team-protected', action='store_true',
                         help='require exact independent source admission and no application credential inheritance')
+    parser.add_argument('--team-packaged', action='store_true',
+                        help='require protected mode and verified kit; prepare single-use consumers from the package and check four refusals')
     args = parser.parse_args()
+    if args.team_packaged and not args.team_protected:
+        parser.error('team-packaged requires team-protected')
     if args.team_protected and not (args.team_client_bundle and args.team_sdk):
         parser.error('team-protected requires team-client-bundle and team-sdk')
     if args.check_credential_drift and not args.check_running:
@@ -72,13 +119,14 @@ def main() -> int:
     client_identity = None
     if args.team_client_bundle:
         try:
-            client_identity = client_bundle_identity(args.team_client_bundle)
+            client_identity = client_bundle_identity(args.team_client_bundle, require_team=args.team_packaged)
         except (OSError, ValueError, KeyError, TypeError) as failure:
             parser.error("invalid team client bundle: " + str(failure))
     if args.team_native and (not args.team_sdk or not (args.team_native / "bin/ar").is_file()):
         parser.error("team-native requires team SDK/client and an existing ar")
     total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0) + (2 if args.check_credential_drift else 0)
     total += 2 if args.team_protected else 0
+    total += 4 if args.team_packaged else 0
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -96,6 +144,7 @@ def main() -> int:
     manifest = json.loads((installation / "manifest.json").read_text())
     image_tag = manifest["image"]["tag"]
     stages, error, cleanup_errors = [], "", []
+    prepared_tasks = 0
     started = time.monotonic()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -299,7 +348,6 @@ def main() -> int:
         if args.team_sdk:
             if args.team_client_bundle:
                 passed("delivered-client-verified-before-team-jobs", **client_identity)
-            example = Path(__file__).resolve().parents[2] / "examples" / "team"
             registry = "http://cjrepo:8080"
             network = project + "_default"
             team_root = report / "team"
@@ -309,9 +357,11 @@ def main() -> int:
             approval_bytes = {}
 
             def workspace(label, role):
+                nonlocal prepared_tasks
                 job = team_root / label
-                run("prepare-" + label, (sys.executable, example / "prepare.py", "--role", role,
-                                         "--registry", registry, "--output", job))
+                run("prepare-" + label, team_workspace_command(args.team_client_bundle, role, registry, job,
+                                                               packaged=args.team_packaged))
+                prepared_tasks += 1
                 assert not (job / "cache").exists() and not (job / "cjpm.lock").exists()
                 assert not (job / "cjpm-provenance.json").exists()
                 assert (job / 'run.sh').is_file() and not (job / '.run.sh.tmp').exists()
@@ -364,6 +414,14 @@ def main() -> int:
                            'test -z "${' + other + ':-}"; bash run.sh')
                 return run(label, command, success=success, variables=variables, timeout=180)
 
+            def refuse_repeat(label, job, approval=None):
+                if args.team_packaged:
+                    before = team_task_state(job)
+                    result = job_run(label + '-repeat', job, 'consumer', credentials['CJREPO_READ_TOKEN'],
+                                     success=False, approval=approval)
+                    check_team_repeat(job, result, before)
+                    passed(label + '-single-use-repeat-refused', exitCode=2, taskStateUnchanged=True, claimRetained=True)
+
             publisher = workspace("publisher", "publisher")
             consumer = workspace("consumer", "consumer")
             passed("team-role-workspaces-created-without-secrets")
@@ -400,10 +458,12 @@ def main() -> int:
             result = job_run("team-consume", consumer, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(consumer, result)
             passed("read-only-ci-compiles-and-runs-private-dependency", archive_sha256=expected_sha)
+            refuse_repeat('completed-consumer', consumer)
             repeated = workspace("independent-ci", "consumer")
             result = job_run("team-independent", repeated, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(repeated, result)
             passed("independent-cold-ci-reproduces-source-and-checksum")
+            refuse_repeat('completed-independent-ci', repeated)
             if args.team_protected:
                 drift = json.loads(json.dumps(approved))
                 drift['packages'][0]['sha256'] = '0' * 64
@@ -419,6 +479,7 @@ def main() -> int:
                 assert not (drift_job / 'target/release/bin/main').exists()
                 assert 'Application repository credentials absent' not in result.stdout
                 passed('independent-cold-ci-rejects-source-drift-before-application')
+                refuse_repeat('rejected-source', drift_job, approval=drift_path)
             failed_application = workspace("application-exit-seven", "consumer")
             source = failed_application / "src/main.cj"
             original = source.read_text(encoding="utf-8")
@@ -434,6 +495,7 @@ def main() -> int:
                 assert 'Application repository credentials absent' in result.stdout
                 assert json.loads((failed_application / 'cjpm-provenance.json').read_text()) == approved
             passed("application-runtime-failure-preserves-nonzero-ci-exit")
+            refuse_repeat('failed-application', failed_application)
             denied = workspace("wrong-read-token", "consumer")
             result = job_run("team-denied", denied, "consumer", "synthetic-wrong-read-token", success=False)
             assert "401" in result.stdout + result.stderr
@@ -450,7 +512,7 @@ def main() -> int:
             assert json.loads(stored.decode().strip())["sha256sum"] == expected_sha
             assert hashlib.sha256((installation / ".env").read_bytes()).hexdigest() == credential_sha
             if args.team_client_bundle:
-                assert client_bundle_identity(args.team_client_bundle) == client_identity
+                assert client_bundle_identity(args.team_client_bundle, require_team=args.team_packaged) == client_identity
             assert all(path.read_bytes() == original for path, original in approval_bytes.items())
             passed("failed-team-jobs-preserve-package-and-server-credentials")
     except (OSError, ValueError, KeyError, AssertionError, subprocess.SubprocessError) as failure:
@@ -487,6 +549,8 @@ def main() -> int:
                        runtime_diagnostics=args.check_running,
                        team_client=client_identity,
                        team_protected=args.team_protected,
+                       team_preparation='packaged-single-use' if args.team_packaged else 'source',
+                       team_prepared_tasks=prepared_tasks,
                        limits=["Local receiver-directory simulation on the existing Docker engine, not a fresh host.",
                                ("Real Linux publisher and independent read-only consumer builds; no Windows Cangjie execution."
                                 if args.team_sdk else "Real prebuilt CJP publish/read; no consumer build or Windows Cangjie execution."),
