@@ -22,11 +22,11 @@ from upgrade_client import consume, verify_inputs
 
 
 def docker_output(command, *, environment, stdin=None, stdout=subprocess.PIPE,
-                  timeout=60, include_stderr=False):
+                  timeout=60, include_stderr=False, allowed_exit_codes=(0,)):
     result = subprocess.run(command, env=environment, stdin=stdin, stdout=stdout,
                             stderr=subprocess.STDOUT if include_stderr else subprocess.PIPE,
                             timeout=timeout)
-    if result.returncode:
+    if result.returncode not in allowed_exit_codes:
         raise TestFailure('Docker command failed with exit ' + str(result.returncode))
     return result.stdout or b''
 
@@ -64,6 +64,8 @@ def main() -> int:
     parser.add_argument("--client-bundle", type=Path, help="optional complete Linux client for four protected cold consumers")
     parser.add_argument("--client-sdk", type=Path, help="existing Linux SDK, mounted read-only")
     parser.add_argument("--client-native", type=Path, help="existing Linux ar/ld and runtime files, mounted read-only")
+    parser.add_argument('--single-use-clients', action='store_true',
+                        help='require client-bundle; claim each cold task once and verify repeat refusal (22 checks)')
     parser.add_argument("--expected-output", default="high-1.0.0", help="seed meshdep registryMarker output in client mode")
     args = parser.parse_args()
     client_manifest = verify_inputs(args, parser)
@@ -73,7 +75,7 @@ def main() -> int:
     if client_manifest and (seed['name'] != 'meshdep' or addition['name'] != 'teamhello' or
                             addition['organization'] != 'company' or addition['version'] != '1.0.0'):
         parser.error('client mode requires meshdep and company::teamhello 1.0.0 API fixtures')
-    total = 18 if client_manifest else 14
+    total = 22 if args.single_use_clients else (18 if client_manifest else 14)
     report = args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     scope = "cjrepomesh-upgrade-" + uuid.uuid4().hex
@@ -90,9 +92,10 @@ def main() -> int:
         port = probe.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
 
-    def docker(*arguments, stdin=None, stdout=subprocess.PIPE, timeout=60, include_stderr=False):
+    def docker(*arguments, stdin=None, stdout=subprocess.PIPE, timeout=60, include_stderr=False, allowed_exit_codes=(0,)):
         return docker_output(["docker", *map(str, arguments)], environment=environment,
-            stdin=stdin, stdout=stdout, timeout=timeout, include_stderr=include_stderr)
+            stdin=stdin, stdout=stdout, timeout=timeout, include_stderr=include_stderr,
+            allowed_exit_codes=allowed_exit_codes)
 
     def inspect(identifier):
         return json.loads(docker("inspect", identifier))[0]
@@ -118,7 +121,10 @@ def main() -> int:
                 packages=packages, args=args, manifest=client_manifest, report=report,
                 docker=docker, inspect=inspect, register=containers.append,
                 label_key=label_key, scope=scope, secret_values=secret_values)
+            replay = facts.pop('singleUseReplay', None)
             passed(name + '-protected-cold-client-build-run', **facts)
+            if replay is not None:
+                passed(name + '-single-use-repeat-refused', **replay)
 
     def create(image, volume=None, *, writable=False, server=False, invalid=False, interactive=False, command=()):
         options = ["create", "--pull=never", "--label", label_key + "=" + scope,
@@ -361,6 +367,7 @@ def main() -> int:
                        seconds=round(time.monotonic() - started, 2), stages=stages,
                        identities=identities, error=error, cleanup_errors=cleanup_errors,
                        runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                       single_use_clients=args.single_use_clients,
                        packages=[{key: item[key] for key in ("name", "version", "organization", "sha256")}
                                  for item in (seed, addition)],
                        retained_volumes=volumes if not success else [],

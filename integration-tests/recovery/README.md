@@ -111,6 +111,10 @@ The extended 18-check mode adds four distinct cold consumers: candidate after pu
 
 Consumers use the selected candidate image only as an existing tool container and share the owned server's network namespace at its internal loopback address. The client, SDK and native tools are mounted read-only; only the fresh job and temporary filesystem are writable. Only the generated reading credential is injected, by environment-variable name rather than command-line value. This does not migrate the portable Compose/CA configuration, test HTTPS or any real service cutover, or prove arbitrary older versions compatible. Private evidence retains synthetic data and approvals outside the public checkout.
 
+For four additional single-use replay checks, add `--single-use-clients` to that complete-client command. This option requires `--client-bundle` before any fixture/evidence/Docker operation. The22-stage mode copies the existing team `job.py` guard into each fresh consumer and pins its generated repository configuration. Each task claims once before build, then retains its claim and outputs. The application checks that example read/publish credential variables are absent; only its process loses those variables, so recorded source explanation still uses the read credential.
+
+After each successful build/run and exact provenance check, the runner starts the same stopped consumer again. It requires exit2 and the guard's refusal diagnostic, no application output, and identical task entry types/file bytes plus unchanged independent approval. A wrong exit status, unrelated error or modified state fails the drill. The four refusals are separate checkpoints from the four real builds. Ordinary14/18-stage modes remain available; no task reset or deletion is provided. This is accidental-reuse protection for controlled tasks, not cache-content attestation, hostile concurrency isolation or a measured zero-request guarantee.
+
 ## Repository Sync
 
 ```cmd
