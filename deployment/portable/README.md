@@ -111,7 +111,15 @@ python maintenance.py verify-backup --backup ../private-backup
 
 首版配置只接受生成器样式的唯一字面量 `KEY=value` 行，以及空行/以 `#` 开头的注释。不接受插值、引号、转义、值内空白、重复键或额外Compose配置变量；读写令牌须非空且不同。遇到已有复杂配置时保持原部署，先独立审核如何转为等价字面量，工具不会自动改写或猜测其含义。
 
-将同一可信完整包复制到另一个可写目录；该目录不能已有 `.env` 或 `trust`，不用先运行configure。导入并核对原固定镜像后，在这个新安装目录执行：
+将同一可信完整包复制到另一个可写目录；该目录不能已有 `.env`、`trust` 或 `restore.json`，不用先运行configure。带 `restorePreflight=offline-inputs-v1` 的新包可先在这个目录离线预检，不需要Docker：
+
+```console
+python maintenance.py restore --backup ../private-backup --check-only
+```
+
+若准备使用其他端口，在预检与实际restore命令中都显式加 `--port 8081`。预检核对完整备份、目标文件/镜像/服务端身份、端口取值及目标未配置状态，不调用Docker、不预留项目/卷/端口、不写部署文件或Python缓存。JSON只输出通过标志、镜像/服务端身份、端口、CA是否配置及存储文件数/字节数，不输出令牌、上游地址或制品路径；`inputChecksPassed=true`同时保留 `dockerChecked=false`、`targetModified=false`、`serviceStarted=false`。
+
+这仅证明当前本地输入通过检查，不证明Docker运行态、镜像已导入、端口/磁盘可用或未来并发状态；实际restore仍重新核对。旧包仍可按原流程恢复，但不会自动获得这个选项，不要零散替换脚本或自行修改清单。导入并核对原固定镜像后，继续在新安装目录执行：
 
 ```console
 python maintenance.py restore --backup ../private-backup

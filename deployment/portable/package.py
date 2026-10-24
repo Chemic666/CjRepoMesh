@@ -48,6 +48,7 @@ def package(image: str, output: Path) -> dict:
     (output / "compose.yaml").write_text(
         (source / "compose.yaml").read_text(encoding="utf-8").replace("@IMAGE@", tag), encoding="utf-8")
     manifest = dict(formatVersion=1, caConfiguration='pem-directory-v1', maintenance='cold-backup-v1',
+                    restorePreflight='offline-inputs-v1',
                     dependencySnapshot='approved-origins-v2',
                     createdAtUtc=datetime.now(timezone.utc).isoformat(),
                     image=dict(id=identifier, tag=tag, os="linux", architecture="amd64", serverSha256=server_sha),

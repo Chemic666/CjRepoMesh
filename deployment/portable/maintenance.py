@@ -12,14 +12,18 @@ import re
 import secrets
 import stat
 import subprocess
+import sys
 import tarfile
 
+# Offline inspection must not create local module caches in the delivery.
+sys.dont_write_bytecode = True
 from configure import protect_windows_file, read_ca
 from verify import check_running_credentials, digest, regular_file, verify_bundle
 
 PROJECT = r'cjrepomesh-[a-f0-9]{16}'
 SHA256 = r'[a-f0-9]{64}'
 CAPABILITY = 'cold-backup-v1'
+RESTORE_CHECK_CAPABILITY = 'offline-inputs-v1'
 LABEL = 'io.cjrepomesh.maintenance'
 
 
@@ -332,8 +336,9 @@ def create_restore_volume(image: dict, project: str, operation: str) -> str:
     return volume
 
 
-def restore(root: Path, source: Path, port: int | None = None) -> dict:
-    for name in ('.env', 'trust'):
+def restore_inputs(root: Path, source: Path, port: int | None = None) -> tuple[dict, dict]:
+    """Validate local inputs only; allocate nothing and never contact Docker."""
+    for name in ('.env', 'trust', 'restore.json'):
         require_absent(root/name)
     value = verify_backup(source)
     manifest = verify_bundle(root)
@@ -341,6 +346,25 @@ def restore(root: Path, source: Path, port: int | None = None) -> dict:
         raise MaintenanceError('target bundle does not support stopped maintenance')
     if manifest['image'] != value['image']:
         raise MaintenanceError('restore requires the exact backed-up image and server identity')
+    if port is not None and (type(port) is not int or not 1 <= port <= 65535):
+        raise MaintenanceError('restore port must be between 1 and 65535')
+    return manifest, value
+
+
+def check_restore(root: Path, source: Path, port: int | None = None) -> dict:
+    manifest, value = restore_inputs(root, source, port)
+    if manifest.get('restorePreflight') != RESTORE_CHECK_CAPABILITY:
+        raise MaintenanceError('target bundle does not declare offline restore preflight')
+    return dict(formatVersion=1, kind='cjrepomesh-restore-input-check', inputChecksPassed=True,
+        imageId=manifest['image']['id'], serverSha256=manifest['image']['serverSha256'],
+        port=port if port is not None else int(value['source']['port']), caConfigured=bool(value['caSha256']),
+        storageFiles=len(value['storage']['files']),
+        storageBytes=sum(item['bytes'] for item in value['storage']['files'].values()),
+        dockerChecked=False, targetModified=False, serviceStarted=False)
+
+
+def restore(root: Path, source: Path, port: int | None = None) -> dict:
+    manifest, value = restore_inputs(root, source, port)
     verify_bundle(root, check_docker=True)
     project = 'cjrepomesh-' + secrets.token_hex(8)
     configuration = restored_configuration((source/'.env').read_bytes(), project, port)
@@ -389,6 +413,8 @@ def main() -> int:
     restore_parser = commands.add_parser('restore', help='requires an unconfigured copy of the exact bundle')
     restore_parser.add_argument('--backup', type=Path, required=True)
     restore_parser.add_argument('--port', type=int, help='explicitly select a new loopback port')
+    restore_parser.add_argument('--check-only', action='store_true',
+                                help='check backup and target inputs offline; no Docker or deployment writes')
     args = parser.parse_args()
     try:
         root = Path(__file__).absolute().parent
@@ -398,6 +424,8 @@ def main() -> int:
         elif args.command == 'verify-backup':
             verify_backup(args.backup.absolute())
             print('PASS: backup files and storage integrity; publisher authenticity is not established')
+        elif args.check_only:
+            print(json.dumps(check_restore(root, args.backup.absolute(), args.port), indent=2))
         else:
             result = restore(root, args.backup.absolute(), args.port)
             print('PASS: restored to new project ' + result['project'] + '; service remains stopped')

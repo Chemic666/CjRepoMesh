@@ -2,11 +2,27 @@
 import subprocess
 import sys
 import unittest
+from pathlib import Path
+import tempfile
 
 import portable_ca
 
 
 class PortableRestoreTests(unittest.TestCase):
+    def test_restore_preflight_requires_maintenance_before_side_effects(self):
+        root = Path(__file__).resolve().parents[2]
+        parent = root/'integration-tests/.tmp'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='restore-option-', dir=parent) as temporary:
+            work = Path(temporary)
+            command = [sys.executable, str(root/'integration-tests/deployment/portable_ca.py')]
+            for name in ('bundle', 'package-dir', 'native', 'openssl', 'evidence-dir'):
+                command += ['--'+name, str(work/name)]
+            result = subprocess.run(command + ['--restore-preflight'], capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('restore-preflight requires maintenance', result.stderr)
+            self.assertFalse((work/'evidence-dir').exists())
+
     def test_command_output_uses_utf8_and_survives_invalid_log_bytes(self):
         self.assertTrue(hasattr(portable_ca, 'run_process'), 'portable receiver output has no explicit decoding contract')
         result = portable_ca.run_process((sys.executable, '-c',

@@ -93,18 +93,22 @@ def main():
         parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--cold-restore',action='store_true',help='also recover owned configuration/data and build a real consumer')
     parser.add_argument('--maintenance',action='store_true',help='exercise the receiver backup/restore tool and an independent source baseline; requires cold-restore')
+    parser.add_argument('--restore-preflight',action='store_true',help='also prove offline input preflight before actual maintenance restore')
     parser.add_argument('--hosted-package-dir',type=Path,help='existing real company::teamhello CJP and metadata; required for maintenance')
     parser.add_argument('--client-bundle',type=Path)
     parser.add_argument('--client-sdk',type=Path)
     parser.add_argument('--expected-output',default='high-1.0.0',help='expected marker from the supplied meshdep CJP')
     args=parser.parse_args();bundle=args.bundle.resolve();report=args.evidence_dir.resolve()
+    if args.restore_preflight and not args.maintenance:parser.error('restore-preflight requires maintenance')
     if args.maintenance and not args.cold_restore:parser.error('maintenance requires cold-restore')
     if args.maintenance and not args.hosted_package_dir:parser.error('maintenance requires hosted-package-dir')
     if args.hosted_package_dir and not args.maintenance:parser.error('hosted-package-dir requires maintenance')
     if not (args.native/'bin/python3').is_file() or not args.openssl.is_file(): parser.error('existing Linux Python/native tools and OpenSSL are required')
     source=Path(__file__).resolve().parents[2]
     verifier=runpy.run_path(str(source/'deployment/portable/verify.py'))['verify_bundle']
-    verifier(bundle)
+    verified_bundle=verifier(bundle)
+    if args.restore_preflight and verified_bundle.get('restorePreflight')!='offline-inputs-v1':
+        parser.error('restore-preflight requires a supporting complete bundle')
     if (bundle/'.env').exists() or (bundle/'trust').exists():parser.error('use an unconfigured seven-file bundle')
     client_manifest=None
     if args.cold_restore:
@@ -132,9 +136,10 @@ def main():
     environment={k:v for k,v in os.environ.items() if not k.upper().startswith(('CJREPO_','CJREPOMESH_','COMPOSE_'))}
     token=secrets.token_hex(32);secrets_to_hide=[token];project='';projects=[];containers=[];stages=[];cleanup=[];error='';started=time.monotonic()
     total=21 if args.maintenance else (15 if args.cold_restore else 10)
+    total+=2 if args.restore_preflight else 0
     manifest=json.loads((installation/'manifest.json').read_text());image=manifest['image'];opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    def run(label,arguments,*,success=True,log=True,timeout=120,directory=None):
-        result=run_process(arguments,cwd=directory or installation,env=environment,timeout=timeout)
+    def run(label,arguments,*,success=True,log=True,timeout=120,directory=None,variables=None):
+        result=run_process(arguments,cwd=directory or installation,env=variables if variables is not None else environment,timeout=timeout)
         text=result.stdout+result.stderr
         for secret in secrets_to_hide:text=text.replace(secret,'[REDACTED]')
         if log:(report/(label+'.log')).write_text(text,encoding='utf-8')
@@ -284,6 +289,36 @@ def main():
             installation=report/'restored-installation';shutil.copytree(bundle,installation)
             if args.maintenance:
                 before_volumes=run('volumes-before-rejections',['docker','volume','ls','--quiet'],log=False)
+                if args.restore_preflight:
+                    offline=dict(environment,PATH='')
+                    before_target={p.relative_to(installation).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                                   for p in installation.rglob('*') if p.is_file()}
+                    checked=json.loads(run('offline-restore-check',[sys.executable,'maintenance.py','restore',
+                        '--backup',backup_config,'--check-only'],variables=offline))
+                    assert checked['inputChecksPassed'] and not checked['dockerChecked'] and not checked['targetModified']
+                    assert checked['caConfigured'] and checked['storageFiles']==4
+                    assert checked['imageId']==image['id'] and checked['serverSha256']==image['serverSha256']
+                    selected=json.loads(run('offline-restore-check-port',[sys.executable,'maintenance.py','restore',
+                        '--backup',backup_config,'--check-only','--port',port],variables=offline))
+                    assert selected['port']==int(port)
+                    assert before_target=={p.relative_to(installation).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                                          for p in installation.rglob('*') if p.is_file()}
+                    assert not (installation/'.env').exists() and not (installation/'trust').exists()
+                    passed('offline-restore-input-check-without-docker-or-target-writes',storageFiles=checked['storageFiles'])
+                    run('offline-invalid-port-refused',[sys.executable,'maintenance.py','restore','--backup',backup_config,
+                        '--check-only','--port','0'],variables=offline,success=False)
+                    marker=installation/'restore.json';marker.write_bytes(b'synthetic previous restore evidence')
+                    try:
+                        for suffix in (['--check-only'],[]):
+                            run('existing-restore-marker-'+('check' if suffix else 'restore'),
+                                [sys.executable,'maintenance.py','restore','--backup',backup_config,*suffix],
+                                variables=offline,success=False)
+                        assert marker.read_bytes()==b'synthetic previous restore evidence'
+                        assert not (installation/'.env').exists() and not (installation/'trust').exists()
+                    finally:
+                        marker.unlink()
+                    assert run('volumes-after-offline-checks',['docker','volume','ls','--quiet'],log=False)==before_volumes
+                    passed('invalid-port-and-previous-restore-marker-refused-before-mutation')
                 damaged=report/'damaged-backup';shutil.copytree(backup_config,damaged)
                 (damaged/'data.tar').write_bytes(b'synthetic damaged archive')
                 run('corrupt-backup-refused',[sys.executable,'maintenance.py','restore','--backup',damaged],success=False)
@@ -430,7 +465,7 @@ def main():
             try:path.chmod(0o600);path.unlink()
             except OSError:cleanup.append('synthetic key cleanup failed')
     summary=dict(success=len(stages)==total and not error and not cleanup,passed=len(stages),total=total,seconds=round(time.monotonic()-started,2),
-      image=image,runnerSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),stages=stages,error=error,cleanupErrors=cleanup,
+      image=image,runnerSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),stages=stages,error=error,cleanupErrors=cleanup,restorePreflight=args.restore_preflight,
       limits=['Existing Docker engine, standard Compose and same-network-namespace TLS fixture; no cross-host or inbound TLS gateway.',
               'Read-only existing Python/OpenSSL tools; optional recovery consumer uses existing Linux SDK/tools read-only, no image changes or system CA installation.',
               'Owned synthetic installations only; maintenance mode exercises the receiver tool with one approved graph containing a real Hosted organization package and Proxy package; no business cutover, CA rotation, fresh host, Windows Cangjie or complete Maple.'])

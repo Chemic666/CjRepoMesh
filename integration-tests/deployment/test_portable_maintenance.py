@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+from contextlib import redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -209,6 +212,129 @@ class PortableMaintenanceTests(unittest.TestCase):
                                           sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         (target/'manifest.json').write_text(json.dumps(manifest))
         return target, manifest
+
+    def restore_pair(self):
+        self.snapshot()
+        source = self.root/'backup'
+        source.mkdir()
+        for name in ('data.tar', '.env', 'backup.json'):
+            (self.root/name).rename(source/name)
+        target, manifest = self.bundle()
+        manifest['restorePreflight'] = 'offline-inputs-v1'
+        (target/'manifest.json').write_text(json.dumps(manifest))
+        return source, target, manifest
+
+    def preflight(self, target, source, port=None):
+        self.assertTrue(hasattr(self.module, 'check_restore'), 'offline restore preflight is missing')
+        return self.module.check_restore(target, source, port)
+
+    def test_offline_restore_check_has_no_docker_writes_or_identity_allocation(self):
+        source, target, _ = self.restore_pair()
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')), \
+                patch.object(self.module, 'write_private', side_effect=AssertionError('unexpected write')), \
+                patch.object(self.module.secrets, 'token_hex', side_effect=AssertionError('unexpected allocation')):
+            result = self.preflight(target, source)
+        self.assertTrue(result['inputChecksPassed'])
+        self.assertFalse(result['dockerChecked'])
+        self.assertFalse(result['targetModified'])
+        self.assertEqual((result['port'], result['storageFiles'], result['storageBytes']), (18743, 2, 12))
+        rendered = json.dumps(result)
+        self.assertNotIn('synthetic-read-value', rendered)
+        self.assertNotIn('synthetic-publish-value', rendered)
+        self.assertNotIn('trusted.example', rendered)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes()
+                                 for p in self.root.rglob('*') if p.is_file()})
+
+    def test_offline_restore_check_explicit_port_does_not_rewrite_configuration(self):
+        source, target, _ = self.restore_pair()
+        original = (source/'.env').read_bytes()
+        with patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')):
+            self.assertEqual(self.preflight(target, source, 18744)['port'], 18744)
+        self.assertEqual((source/'.env').read_bytes(), original)
+        self.assertFalse((target/'.env').exists())
+
+    def test_invalid_restore_port_rejected_before_runtime_checks(self):
+        source, target, _ = self.restore_pair()
+        verify = self.module.verify_bundle
+        def offline_bundle(path, *, check_docker=False):
+            self.assertFalse(check_docker, 'runtime check happened before invalid input rejection')
+            return verify(path)
+        for port in (0, 65536, True, '18744'):
+            with self.subTest(port=port), patch.object(self.module, 'verify_bundle', side_effect=offline_bundle):
+                with self.assertRaises(ValueError):
+                    self.module.restore(target, source, port)
+        self.assertFalse((target/'.env').exists())
+
+    def test_existing_restore_record_refused_before_backup_read_or_docker(self):
+        target = self.root/'target'
+        target.mkdir()
+        (target/'restore.json').write_bytes(b'previous restore evidence')
+        with patch.object(self.module, 'verify_backup', side_effect=AssertionError('unexpected backup read')), \
+                patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')):
+            with self.assertRaises(ValueError):
+                self.module.restore(target, self.root/'missing-backup')
+            with self.assertRaises(ValueError):
+                self.preflight(target, self.root/'missing-backup')
+        self.assertEqual((target/'restore.json').read_bytes(), b'previous restore evidence')
+
+    def test_offline_restore_check_rejects_different_server(self):
+        source, target, _ = self.restore_pair()
+        value = json.loads((source/'backup.json').read_text())
+        value['image']['serverSha256'] = 'c' * 64
+        (source/'backup.json').write_text(json.dumps(value))
+        with patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')):
+            with self.assertRaisesRegex(ValueError, 'exact backed-up image'):
+                self.preflight(target, source)
+        self.assertFalse((target/'.env').exists())
+
+    def test_offline_restore_check_rejects_corrupt_backup(self):
+        source, target, _ = self.restore_pair()
+        (source/'data.tar').write_bytes(b'damaged backup evidence')
+        with patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')):
+            with self.assertRaises(ValueError):
+                self.preflight(target, source)
+        self.assertEqual((source/'data.tar').read_bytes(), b'damaged backup evidence')
+        self.assertFalse((target/'.env').exists())
+
+    def test_restore_check_cli_outputs_only_non_sensitive_json(self):
+        source, target, _ = self.restore_pair()
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['maintenance.py', 'restore', '--backup', str(source), '--check-only']), \
+                patch.object(self.module, '__file__', str(target/'maintenance.py')), \
+                patch.object(self.module, 'docker', side_effect=AssertionError('unexpected Docker')), \
+                redirect_stdout(output):
+            self.assertEqual(self.module.main(), 0)
+        self.assertTrue(json.loads(output.getvalue())['inputChecksPassed'])
+        self.assertNotIn('synthetic-read-value', output.getvalue())
+        self.assertFalse((target/'trust').exists())
+
+    def test_restore_check_cli_does_not_create_python_cache(self):
+        source, target, _ = self.restore_pair()
+        environment = dict(os.environ, PATH='')
+        environment.pop('PYTHONDONTWRITEBYTECODE', None)
+        environment.pop('PYTHONPYCACHEPREFIX', None)
+        result = subprocess.run([sys.executable, str(target/'maintenance.py'), 'restore',
+            '--backup', str(source), '--check-only'], env=environment,
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(json.loads(result.stdout)['inputChecksPassed'])
+        self.assertFalse((target/'__pycache__').exists())
+
+    def test_unknown_restore_preflight_capability_is_rejected(self):
+        target, manifest = self.bundle()
+        manifest['restorePreflight'] = 'future-unknown-value'
+        (target/'manifest.json').write_text(json.dumps(manifest))
+        with self.assertRaises(ValueError):
+            self.module.verify_bundle(target)
+
+    def test_legacy_bundle_validates_but_cannot_claim_offline_preflight(self):
+        source, target, manifest = self.restore_pair()
+        del manifest['restorePreflight']
+        (target/'manifest.json').write_text(json.dumps(manifest))
+        self.assertEqual(self.module.verify_bundle(target), manifest)
+        with self.assertRaisesRegex(ValueError, 'preflight'):
+            self.preflight(target, source)
 
     def test_new_bundle_declares_and_verifies_maintenance(self):
         target, manifest = self.bundle()

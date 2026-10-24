@@ -199,6 +199,8 @@ TTL告警专项：`python3 integration-tests/compatibility/server_proxy_ttl.py -
 
 maintenance验收失败时尝试停止本次写入实例、保留失败卷和证据，不删除业务或其他项目资源；成功只清理本次创建的资源。容器日志使用UTF-8及替换解码，收集日志失败也继续尝试安全停服。不要把这一个双包图推算成多图脚本、完整官方测试、生产切流、入站HTTPS或全新主机通过。
 
+对带 `restorePreflight=offline-inputs-v1` 的新包，在上述维护命令中再加 `--restore-preflight`，由21项扩为23项。它先移除子进程PATH中的Docker搜索路径执行 `maintenance.py restore --check-only`，核对默认/显式端口的JSON结果及目标文件原字节；再验证非法端口、已有restore.json在预检和正式恢复前拒绝且不改配置/卷，随后继续原有实际恢复和受保护双包冷构建。该选项要求maintenance及新能力标记，在证据创建前拒绝不兼容参数/包。操作人员的独立预检命令及含义见[维护说明](../deployment/portable/README.md#接收端停服备份与独立恢复)，预检不证明Docker镜像已导入、资源可用或实际恢复已成功。
+
 验证实际交付组合时，将 `--team-client <文件>` 换成 `--team-client-bundle <完整客户端交付目录>`，两者互斥且均须搭配SDK。新模式在创建证据目录/访问Docker前用源码仓库的可信校验器检查包，不执行待测包中的Python代码；任务只读挂载整个目录，通过包内run.sh执行。摘要记录实际二进制和清单SHA-256，结束再次检查包不变，共21项。启动器需容器内已有Python 3；可在任务专用的 `--team-native` 目录下提供已有 `bin/python3`、对应 `lib/python3.X` 标准库及匹配共享库，不向最小服务端镜像安装工具。应先在相同只读挂载条件下运行包的 `--help` 检查依赖。六项离线回归只验证预检和参数拒绝，不代替真实编译。
 
 完整客户端模式还可加 `--team-protected`，在原21项上增加独立批准和SHA漂移拒绝，共23项；它要求 `--team-client-bundle`及SDK，不接受原始单文件客户端。参数不完整或包校验失败在创建证据/访问Docker前拒绝。批准仅根据本次受控发布任务的company::teamhello 1.0.0元数据及实际CJP字节建立，先核对包身份和SHA，不读取消费provenance；它是验收夹具，不是为真实远端解析结果自动批准的工具。
