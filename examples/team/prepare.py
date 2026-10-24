@@ -45,8 +45,9 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
         public_trust = runpy.run_path(str(trust_helper))['read_ca'](ca_file, ca_sha256)
     source = Path(__file__).resolve().parent / role
     output.mkdir(parents=True, exist_ok=False)
-    for name in ("cjpm.toml", "README.md", "run.sh"):
+    for name in ("cjpm.toml", "README.md"):
         shutil.copyfile(source / name, output / name)
+    script_text = (source / 'run.sh').read_text(encoding='utf-8')
     metadata = dict(formatVersion=1, role=role, registry=registry,
                     package='company::teamhello', version='1.0.0')
     if public_trust is not None:
@@ -57,15 +58,13 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
             (trust / 'ca.pem').chmod(0o444)
         digest = hashlib.sha256(public_trust).hexdigest()
         shutil.copyfile(trust_helper, output / 'trust.py')
-        script = output / 'run.sh'
         marker = '# Optional process trust is configured by prepare.py.'
         block = ('if ! python3 "$PWD/trust.py" --sha256 ' + digest + '; then\n'
                  '    exit 2\nfi\n'
                  'export SSL_CERT_FILE="$PWD/trust/ca.pem" SSL_CERT_DIR="$PWD/trust/empty"')
-        text = script.read_text(encoding='utf-8')
-        if text.count(marker) != 1:
+        if script_text.count(marker) != 1:
             raise ValueError('team task template lacks its process trust insertion point')
-        script.write_text(text.replace(marker, block), encoding='utf-8', newline='\n')
+        script_text = script_text.replace(marker, block)
         metadata['trust'] = dict(mode='process-only', caSha256=digest)
     shutil.copytree(source / "src", output / "src")
     (output / ".home").mkdir()
@@ -79,6 +78,9 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
         config += '[[route]]\nnamespace = "company::*"\nregistry = "internal"\nexclusive = true\n'
     (output / "cangjie-repo.toml").write_text(config, encoding="utf-8")
     (output / "workspace.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    pending_script = output / '.run.sh.tmp'
+    pending_script.write_text(script_text, encoding='utf-8', newline='\n')
+    pending_script.replace(output / 'run.sh')
 
 
 def main() -> int:

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from test_portable_ca import CA
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,6 +120,54 @@ class TeamExampleTests(unittest.TestCase):
                     Path(self.temporary.name) / 'unread-ca.pem')
         self.assertFalse(target.exists())
         self.output.lstat()
+
+    def test_trust_copy_failure_keeps_evidence_without_run_entry(self):
+        prepare = runpy.run_path(str(SCRIPT))['prepare']
+        ca = self.input_ca()
+        import shutil
+        copyfile = shutil.copyfile
+        def fail_trust(source, destination, *args, **kwargs):
+            if Path(destination).name == 'trust.py':
+                raise OSError('synthetic trust copy failure')
+            return copyfile(source, destination, *args, **kwargs)
+        with patch('shutil.copyfile', side_effect=fail_trust):
+            with self.assertRaisesRegex(OSError, 'synthetic trust copy failure'):
+                prepare('consumer', 'https://127.0.0.1:18443', self.output, ca)
+        self.assertEqual((self.output / 'trust/ca.pem').read_bytes(), CA)
+        self.assertTrue((self.output / 'cjpm.toml').is_file())
+        self.assertFalse((self.output / 'run.sh').exists())
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('workspace already exists', result.stdout + result.stderr)
+
+    def test_configuration_failure_keeps_evidence_without_run_entry(self):
+        prepare = runpy.run_path(str(SCRIPT))['prepare']
+        write_text = Path.write_text
+        def fail_configuration(path, *args, **kwargs):
+            if path.name == 'cangjie-repo.toml':
+                raise OSError('synthetic configuration write failure')
+            return write_text(path, *args, **kwargs)
+        with patch.object(Path, 'write_text', fail_configuration):
+            with self.assertRaisesRegex(OSError, 'synthetic configuration write failure'):
+                prepare('publisher', 'http://127.0.0.1:18080', self.output)
+        self.assertTrue((self.output / 'src').is_dir())
+        self.assertTrue((self.output / '.home').is_dir())
+        self.assertFalse((self.output / 'run.sh').exists())
+
+    def test_partial_entry_write_keeps_temporary_file_without_run_entry(self):
+        prepare = runpy.run_path(str(SCRIPT))['prepare']
+        write_text = Path.write_text
+        def fail_entry(path, *args, **kwargs):
+            if path.name in ('run.sh', '.run.sh.tmp'):
+                write_text(path, '# incomplete synthetic entry\n', encoding='utf-8')
+                raise OSError('synthetic entry write failure')
+            return write_text(path, *args, **kwargs)
+        with patch.object(Path, 'write_text', fail_entry):
+            with self.assertRaisesRegex(OSError, 'synthetic entry write failure'):
+                prepare('consumer', 'http://127.0.0.1:18080', self.output)
+        self.assertFalse((self.output / 'run.sh').exists())
+        self.assertEqual((self.output / '.run.sh.tmp').read_text(), '# incomplete synthetic entry\n')
+        self.assertTrue((self.output / 'workspace.json').is_file())
 
     def test_unsafe_registry_rejected_before_creating_workspace(self):
         result = self.invoke(registry="http://user:synthetic-secret@localhost:18080")
