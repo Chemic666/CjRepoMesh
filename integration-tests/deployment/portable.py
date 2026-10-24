@@ -30,6 +30,20 @@ def client_bundle_identity(root: Path) -> dict:
                 manifestSha256=hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest())
 
 
+def team_source_approval(publisher: Path, registry: str) -> dict:
+    """Approve only this controlled publisher fixture, never consumer output."""
+    try:
+        index = json.loads((publisher / 'target/meta-data.json').read_text(encoding='utf-8'))['index']
+        archive_sha = hashlib.sha256((publisher / 'target/teamhello-1.0.0.cjp').read_bytes()).hexdigest()
+        if (index['organization'], index['name'], index['version'], index['sha256sum']) != (
+                'company', 'teamhello', '1.0.0', archive_sha):
+            raise ValueError('publisher fixture identity or archive checksum differs')
+    except (KeyError, TypeError, json.JSONDecodeError) as failure:
+        raise ValueError('publisher fixture metadata is invalid') from failure
+    return dict(formatVersion=1, packages=[dict(package='company::teamhello', version='1.0.0',
+        repository='internal', registry=registry, sha256=archive_sha)])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", required=True, type=Path)
@@ -42,7 +56,11 @@ def main() -> int:
     client.add_argument("--team-client", type=Path, help="optional existing Linux enhanced cjpm")
     client.add_argument("--team-client-bundle", type=Path, help="optional complete Linux client delivery directory")
     parser.add_argument("--team-native", type=Path, help="optional existing ar/ld and libraries for a minimal runtime container")
+    parser.add_argument('--team-protected', action='store_true',
+                        help='require exact independent source admission and no application credential inheritance')
     args = parser.parse_args()
+    if args.team_protected and not (args.team_client_bundle and args.team_sdk):
+        parser.error('team-protected requires team-client-bundle and team-sdk')
     if args.check_credential_drift and not args.check_running:
         parser.error('check-credential-drift requires check-running')
     team_client = args.team_client_bundle or args.team_client
@@ -60,6 +78,7 @@ def main() -> int:
     if args.team_native and (not args.team_sdk or not (args.team_native / "bin/ar").is_file()):
         parser.error("team-native requires team SDK/client and an existing ar")
     total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0) + (2 if args.check_credential_drift else 0)
+    total += 2 if args.team_protected else 0
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -285,6 +304,9 @@ def main() -> int:
             network = project + "_default"
             team_root = report / "team"
             team_root.mkdir()
+            approved_path = None
+            approved = None
+            approval_bytes = {}
 
             def workspace(label, role):
                 job = team_root / label
@@ -292,13 +314,31 @@ def main() -> int:
                                          "--registry", registry, "--output", job))
                 assert not (job / "cache").exists() and not (job / "cjpm.lock").exists()
                 assert not (job / "cjpm-provenance.json").exists()
+                assert (job / 'run.sh').is_file() and not (job / '.run.sh.tmp').exists()
+                if args.team_protected and role == 'consumer':
+                    source = job / 'src/main.cj'
+                    text = source.read_text(encoding='utf-8')
+                    assert text.count('    println(teamGreeting("CI"))') == 1
+                    text = text.replace('import company::', 'import std.env.*\nimport company::')
+                    text = text.replace('    println(teamGreeting("CI"))',
+                        '    if (getVariable("CJREPO_READ_TOKEN").isSome() || getVariable("CJREPO_PUBLISH_TOKEN").isSome()) {\n'
+                        '        return 71\n    }\n    println("Application repository credentials absent")\n'
+                        '    println(teamGreeting("CI"))')
+                    source.write_text(text, encoding='utf-8')
                 return job
 
-            def job_run(label, job, role, token, success=True):
+            def job_run(label, job, role, token, success=True, approval=None):
                 key = "CJREPO_PUBLISH_TOKEN" if role == "publisher" else "CJREPO_READ_TOKEN"
                 other = "CJREPO_READ_TOKEN" if role == "publisher" else "CJREPO_PUBLISH_TOKEN"
                 variables = dict(environment)
                 variables[key] = token
+                approval_mount = ()
+                if args.team_protected and role == 'consumer':
+                    selected_approval = approval if approval is not None else approved_path
+                    assert selected_approval is not None and selected_approval.is_file()
+                    approval_mount = ('--mount',
+                        f'type=bind,source={selected_approval.resolve()},target=/approved/source.json,readonly',
+                        '--env', 'CJREPOMESH_SOURCE_BASELINE=/approved/source.json')
                 native_mount = (("--mount", f"type=bind,source={args.team_native.resolve()},target=/opt/native,readonly")
                                 if args.team_native else ())
                 if args.team_native and (args.team_native / "system").is_dir():
@@ -314,6 +354,7 @@ def main() -> int:
                            "--mount", f"type=bind,source={args.team_sdk.resolve()},target=/opt/cangjie,readonly",
                            "--mount", f"type=bind,source={team_client.resolve()},target=/opt/client,readonly",
                            *native_mount,
+                           *approval_mount,
                            "--mount", f"type=bind,source={job},target=/job", "--workdir", "/job",
                            "--env", "CJREPOMESH_CJPM=" + ("/opt/client/run.sh" if args.team_client_bundle else "/opt/client"),
                            "--env", key,
@@ -334,6 +375,15 @@ def main() -> int:
                 assert not any(Path(item.name).name in {"run.sh", "workspace.json", "cangjie-repo.toml", ".env"}
                                for item in archive.getmembers())
             passed("developer-container-publishes-real-private-package", archive_sha256=expected_sha)
+            if args.team_protected:
+                approved = team_source_approval(publisher, registry)
+                approval_root = team_root / 'approvals'
+                approval_root.mkdir()
+                approved_path = approval_root / 'source.json'
+                with approved_path.open('x', encoding='utf-8') as stream:
+                    stream.write(json.dumps(approved, indent=2) + '\n')
+                approval_bytes[approved_path] = approved_path.read_bytes()
+                passed('controlled-publisher-source-approved-before-cold-consumption', archive_sha256=expected_sha)
 
             def check_consumer(job, result):
                 assert "CjRepoMesh team 1.0.0: CI" in result.stdout
@@ -343,6 +393,9 @@ def main() -> int:
                 assert entry["registry"] == registry and entry["sha256"] == expected_sha
                 assert (job / "cjpm.lock").is_file()
                 assert (job / "cache").is_dir() and (job / ".home").is_dir()
+                if args.team_protected:
+                    assert json.loads((job / 'cjpm-provenance.json').read_text()) == approved
+                    assert 'Application repository credentials absent' in result.stdout
 
             result = job_run("team-consume", consumer, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(consumer, result)
@@ -351,6 +404,21 @@ def main() -> int:
             result = job_run("team-independent", repeated, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(repeated, result)
             passed("independent-cold-ci-reproduces-source-and-checksum")
+            if args.team_protected:
+                drift = json.loads(json.dumps(approved))
+                drift['packages'][0]['sha256'] = '0' * 64
+                drift_path = approval_root / 'drift.json'
+                with drift_path.open('x', encoding='utf-8') as stream:
+                    stream.write(json.dumps(drift, indent=2) + '\n')
+                approval_bytes[drift_path] = drift_path.read_bytes()
+                drift_job = workspace('source-drift', 'consumer')
+                result = job_run('team-source-drift', drift_job, 'consumer',
+                    credentials['CJREPO_READ_TOKEN'], success=False, approval=drift_path)
+                assert 'repository source baseline rejected' in result.stdout + result.stderr
+                assert not (drift_job / 'cjpm-provenance.json').exists()
+                assert not (drift_job / 'target/release/bin/main').exists()
+                assert 'Application repository credentials absent' not in result.stdout
+                passed('independent-cold-ci-rejects-source-drift-before-application')
             failed_application = workspace("application-exit-seven", "consumer")
             source = failed_application / "src/main.cj"
             original = source.read_text(encoding="utf-8")
@@ -362,6 +430,9 @@ def main() -> int:
             assert "CjRepoMesh team 1.0.0: CI" in result.stdout
             assert "Recorded resolution:" not in result.stdout
             assert (failed_application / "cjpm-provenance.json").is_file()
+            if args.team_protected:
+                assert 'Application repository credentials absent' in result.stdout
+                assert json.loads((failed_application / 'cjpm-provenance.json').read_text()) == approved
             passed("application-runtime-failure-preserves-nonzero-ci-exit")
             denied = workspace("wrong-read-token", "consumer")
             result = job_run("team-denied", denied, "consumer", "synthetic-wrong-read-token", success=False)
@@ -380,6 +451,7 @@ def main() -> int:
             assert hashlib.sha256((installation / ".env").read_bytes()).hexdigest() == credential_sha
             if args.team_client_bundle:
                 assert client_bundle_identity(args.team_client_bundle) == client_identity
+            assert all(path.read_bytes() == original for path, original in approval_bytes.items())
             passed("failed-team-jobs-preserve-package-and-server-credentials")
     except (OSError, ValueError, KeyError, AssertionError, subprocess.SubprocessError) as failure:
         error = str(failure) or type(failure).__name__
@@ -414,6 +486,7 @@ def main() -> int:
                        team_jobs=bool(args.team_sdk),
                        runtime_diagnostics=args.check_running,
                        team_client=client_identity,
+                       team_protected=args.team_protected,
                        limits=["Local receiver-directory simulation on the existing Docker engine, not a fresh host.",
                                ("Real Linux publisher and independent read-only consumer builds; no Windows Cangjie execution."
                                 if args.team_sdk else "Real prebuilt CJP publish/read; no consumer build or Windows Cangjie execution."),

@@ -87,6 +87,54 @@ class TeamDeliveryTests(unittest.TestCase):
         self.assertIn('integrity', result.stderr)
         self.assertFalse((self.work / 'evidence').exists())
 
+    def test_protected_mode_requires_complete_client_before_side_effects(self):
+        result = self.invoke('--team-protected')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('requires team-client-bundle and team-sdk', result.stderr)
+        self.assertFalse((self.work / 'evidence').exists())
+
+    def test_protected_mode_rejects_raw_client_before_side_effects(self):
+        result = self.invoke('--team-protected', '--team-client', self.work / 'raw-client',
+                             '--team-sdk', self.work / 'sdk')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('requires team-client-bundle and team-sdk', result.stderr)
+        self.assertFalse((self.work / 'evidence').exists())
+
+    def publisher(self):
+        publisher = self.work / 'publisher'
+        target = publisher / 'target'
+        target.mkdir(parents=True)
+        archive = target / 'teamhello-1.0.0.cjp'
+        archive.write_bytes(b'synthetic controlled publisher archive')
+        index = dict(organization='company', name='teamhello', version='1.0.0',
+                     sha256sum=hashlib.sha256(archive.read_bytes()).hexdigest())
+        (target / 'meta-data.json').write_text(json.dumps(dict(index=index)))
+        return publisher, archive, index
+
+    def approval(self, publisher):
+        self.assertTrue('team_source_approval' in self.functions, 'missing controlled fixture approval')
+        return self.functions['team_source_approval'](publisher, 'http://cjrepo:8080')
+
+    def test_approval_refuses_archive_not_matching_controlled_metadata(self):
+        publisher, archive, _ = self.publisher()
+        archive.write_bytes(b'changed bytes after publication')
+        with self.assertRaisesRegex(ValueError, 'publisher fixture'):
+            self.approval(publisher)
+
+    def test_approval_refuses_unexpected_package_identity(self):
+        publisher, _, index = self.publisher()
+        index['organization'] = 'other'
+        (publisher / 'target/meta-data.json').write_text(json.dumps(dict(index=index)))
+        with self.assertRaisesRegex(ValueError, 'publisher fixture'):
+            self.approval(publisher)
+
+    def test_approval_does_not_trust_existing_consumer_provenance(self):
+        publisher, archive, _ = self.publisher()
+        (publisher / 'cjpm-provenance.json').write_text('untrusted consumer provenance')
+        approved = self.approval(publisher)
+        self.assertEqual(approved['packages'][0]['sha256'], hashlib.sha256(archive.read_bytes()).hexdigest())
+        self.assertEqual(approved['packages'][0]['registry'], 'http://cjrepo:8080')
+
 
 if __name__ == '__main__':
     unittest.main()
