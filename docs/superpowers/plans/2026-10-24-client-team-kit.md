@@ -1,0 +1,15 @@
+# Offline client team preparation kit
+
+Execute inline with superpowers:executing-plans under the existing autonomous authorization; one final independent review, then ordinary authorized dual-main delivery. Keep the current source branch, old artifacts and all failure evidence.
+
+Goal: deliver the already implemented HTTPS trust preparation and single-use cold consumer workflow without requiring the receiver to clone the source repository.
+
+Design: optional `deployment/client/package.py --include-team` adds only12 fixed team preparation/template files plus a verified `prepare-team.py` entry to the existing7 manifest files. The new21-member package keeps the same f433 binary and two libraries. A strict optional `teamPreparation=single-use-cold-v1` capability selects the exact extended file/directory set; old8-member packages remain valid, unknown capabilities or missing/extra/linked entries fail. The entry verifies the entire package before loading the packaged preparer, writes no bytecode, rejects output inside the package, and never reads credentials, modifies approvals, contacts a repository or installs trust/tools.
+
+- [x] Observe RED10 (including subcases) for optional packaging; preserve defaults. Final Windows56pass18skip/74 and Linux74/74 cover capabilities/strict file set, corruption/link/containment refusals, relocation/no bytecode, editable task sources from readonly templates and existing team contracts.
+- [x] Implement optional package, strict verifier and verified offline preparation entry; document standalone commands without source-repository dependency.
+- [x] Extend owned HTTPS acceptance with explicit packaged mode, retaining old source mode. Final10/10,20.78s,cleanup empty: publication, approved cold build, state/config/approval refusals, concurrent single claim, status7 retention; eight tasks through kit, no examples directory in receiver validation tree.
+- [x] Freeze35 Windows inputs into separate native copies; new21-member local archive checked against tested readonly bundle. Binary/image/runtime/old archives unchanged. Initial copy-dependency errors and9/10 readonly-mode inheritance failure retained; targeted RED1/GREEN1 fixed only newly owned task src permissions, then complete74-test and actual10-stage rerun in a new directory.
+- [x] Independent whole-stage read-only review and narrow review of runtime-discovered permission fix found no material issues. Current records updated with exact input scope. Ordinary dual-main publication follows explicit-file audit; final commit/readback/tree identities are recorded privately afterward.
+
+Bounds: existing Linux SDK/native tools remain required for actual builds. No physical receiver, business volume, real token/CA/private key, system network/security/trust changes, production CA rotation, source approval changes, signature/sandbox/cache attestation or new binary matrix. File manifests detect transfer damage but do not authenticate a malicious publisher. Partial preparation stays outside the immutable kit; failed evidence is retained privately. Public Git excludes packages, binaries, SDK and raw logs.

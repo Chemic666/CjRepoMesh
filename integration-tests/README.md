@@ -356,6 +356,8 @@ python3 integration-tests/compatibility/team_single_use.py \
 
 先加载既有SDK/stdx并确认OpenSSL可用。两个输出目录必须是不同且互不包含的新路径；默认预期f433客户端/8fc3服务端，可用显式expected-sha256参数核对另一份已独立批准的产物。入口只建立自有回环HTTPS网关/私有仓和合成凭据，不访问物理接收机或改系统信任。九阶段包含真实发布/单次冷消费、重复/预填缓存/配置改动/缺批准设置的无新连接拒绝、双进程一次真实构建、来源漂移后保留领取状态，以及真实应用退出7和重试拒绝。核对请求计数、独立批准、原存储及完整客户端保持；正常退出关闭自有进程，失败保留现场。本专项不是缓存再验真、恶意任务沙箱、Docker整包恢复、跨主机或并发容量验收。
 
+使用带 `teamPreparation=single-use-cold-v1` 的完整客户端团队包时，再加 `--packaged-preparation`。十阶段模式仅通过包内 `prepare-team.py` 创建八个发布/消费任务，不调用源码准备器；增加一次加载准备器前的离线损坏拒绝，随后执行同一真实HTTPS九阶段。摘要记录preparationMode及preparedTaskCount。可在不含examples/team的独立验证副本中运行，确认交付包不依赖源码模板。仍需实际构建工具链；新格式的预检需使用支持该能力的可信源码校验器，旧八文件格式保持兼容。
+
 ## Docker 私有仓持久化专项
 
 先通过 `deployment/docker/up.ps1` 构建当前服务端镜像，然后在 Windows 上运行：

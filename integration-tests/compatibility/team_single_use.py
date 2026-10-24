@@ -23,6 +23,8 @@ for name in ('client-bundle', 'server', 'evidence-dir', 'work-dir'):
     parser.add_argument('--' + name, type=Path, required=True)
 parser.add_argument('--expected-client-sha256', default='f433b415f3c5af15bc795b603b8975694edc4bee1be88284aaefaac79d4d01e3')
 parser.add_argument('--expected-server-sha256', default='8fc30842e87cff0dee34a76898b9ebc339780e7d5d95ea1d78ff7f8b4acfb3df')
+parser.add_argument('--packaged-preparation', action='store_true',
+                    help='prepare only through the verified client kit entry; source templates are not used (10 checks)')
 args = parser.parse_args()
 if os.name != 'posix':
     parser.error('Linux SDK environment required; Windows Cangjie execution is paused')
@@ -44,7 +46,9 @@ hidden = (publish_token, read_token)
 gateways = []
 backend = None
 evidence_owned = False
-result = dict(success=False, passed=0, total=9, stages=[], clientSha256=CLIENT_SHA, serverSha256=SERVER_SHA,
+result = dict(success=False, passed=0, total=10 if args.packaged_preparation else 9,
+              preparationMode='packaged' if args.packaged_preparation else 'source', preparedTaskCount=0,
+              stages=[], clientSha256=CLIENT_SHA, serverSha256=SERVER_SHA,
               receiverAccessed=False, systemTrustModified=False, cleanupErrors=[])
 started = time.monotonic()
 
@@ -141,6 +145,8 @@ try:
     assert sha(CLIENT / 'cjpm') == CLIENT_SHA and sha(SERVER) == SERVER_SHA
     manifest = runpy.run_path(str(SOURCE / 'deployment/client/verify.py'))['verify_bundle'](CLIENT)
     assert manifest['files']['cjpm']['sha256'] == CLIENT_SHA
+    if args.packaged_preparation:
+        assert manifest.get('capabilities') == {'teamPreparation': 'single-use-cold-v1'}, 'team preparation kit required'
     frozen = {item.relative_to(SOURCE).as_posix(): sha(item) for item in (SOURCE / 'examples/team').rglob('*')
               if item.is_file() and item.suffix in ('.py', '.sh', '.cj', '.toml', '.md')}
     frozen['integration-tests/compatibility/team_single_use.py'] = sha(Path(__file__))
@@ -149,6 +155,18 @@ try:
         runnerSha256=sha(Path(__file__))), indent=2), encoding='utf-8')
     base = {k:v for k,v in os.environ.items() if not k.upper().startswith(('CJREPO_', 'CJREPOMESH_'))
             and k.upper() not in ('SSL_CERT_FILE', 'SSL_CERT_DIR', 'CJPM_CONFIG') and 'PROXY' not in k.upper()}
+    if args.packaged_preparation:
+        damaged = WORK / 'damaged-kit'
+        shutil.copytree(CLIENT, damaged)
+        target = damaged / 'team/prepare.py'
+        target.chmod(0o644)
+        target.write_bytes(target.read_bytes() + b'\nraise RuntimeError("untrusted-preparer-must-not-run")\n')
+        code, output = run('offline-corruption-refusal', ['python3', damaged / 'prepare-team.py',
+            '--role', 'consumer', '--registry', 'https://registry.example.invalid',
+            '--output', WORK / 'must-not-be-prepared', '--single-use'], env=base)
+        assert code == 1 and 'untrusted-preparer-must-not-run' not in output
+        assert not (WORK / 'must-not-be-prepared').exists()
+        record('packaged-entry-rejects-corruption-offline-before-task-creation')
     assert shutil.which('openssl')
     certs = WORK / 'certificates'
     certs.mkdir(mode=0o700)
@@ -188,11 +206,20 @@ try:
         assert time.monotonic() < deadline, 'owned backend health timeout'
         time.sleep(0.1)
     good, address = gateway('good')
-    prepare = runpy.run_path(str(SOURCE / 'examples/team/prepare.py'))['prepare']
+    if not args.packaged_preparation:
+        prepare = runpy.run_path(str(SOURCE / 'examples/team/prepare.py'))['prepare']
 
     def task(label, *, role='consumer', endpoint=address, ca='ca.pem'):
         folder = WORK / label
-        prepare(role, endpoint, folder, certs / ca, sha(certs / ca), single_use=(role == 'consumer'))
+        if args.packaged_preparation:
+            code, output = run(label + '-prepare', ['python3', CLIENT / 'prepare-team.py',
+                '--role', role, '--registry', endpoint, '--output', folder,
+                '--ca-file', certs / ca, '--ca-sha256', sha(certs / ca),
+                *(['--single-use'] if role == 'consumer' else [])], env=base)
+            assert code == 0, 'packaged team preparation failed'
+        else:
+            prepare(role, endpoint, folder, certs / ca, sha(certs / ca), single_use=(role == 'consumer'))
+        result['preparedTaskCount'] += 1
         env = dict(base, CJREPOMESH_CJPM=str(CLIENT / 'run.sh'),
                    SSL_CERT_FILE='/inherited/unapproved-ca', SSL_CERT_DIR='/inherited/unapproved-directory')
         env['CJREPO_PUBLISH_TOKEN' if role == 'publisher' else 'CJREPO_READ_TOKEN'] = publish_token if role == 'publisher' else read_token

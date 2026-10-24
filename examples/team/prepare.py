@@ -69,6 +69,11 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
         script_text = script_text.replace(marker, block)
         metadata['trust'] = dict(mode='process-only', caSha256=digest)
     shutil.copytree(source / "src", output / "src")
+    # copytree retains template modes, including a read-only delivery mount.
+    # Only this newly owned task copy becomes editable; keep other permission bits.
+    task_sources = output / 'src'
+    for path in (task_sources, *task_sources.rglob('*')):
+        path.chmod(path.stat().st_mode | (0o700 if path.is_dir() else 0o600))
     (output / ".home").mkdir()
     config = '[repository.cache]\npath = "cache"\n'
     if role == "publisher":

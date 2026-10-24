@@ -210,7 +210,7 @@ class SingleUseTests(unittest.TestCase):
         self.assertTrue((self.root / '.cjrepomesh-job-started').is_dir())
 
     @unittest.skipUnless(os.name == 'posix', 'Linux-only acceptance runner')
-    def test_losing_evidence_creator_cannot_overwrite_winner_summary(self):
+    def test_losing_evidence_creator_cannot_overwrite_winner_summary(self, packaged=False):
         evidence = Path(self.temp.name) / 'competing-evidence'
         work = Path(self.temp.name) / 'acceptance-work'
         expected = b'{"owner":"winning invocation","passed":9}\n'
@@ -219,7 +219,7 @@ class SingleUseTests(unittest.TestCase):
             from pathlib import Path
             import runpy,sys
             from unittest.mock import patch
-            runner,evidence,work=sys.argv[1:]
+            runner,evidence,work,*flags=sys.argv[1:]
             evidence=Path(evidence)
             original=Path.mkdir
             def race(path,*args,**kwargs):
@@ -229,16 +229,21 @@ class SingleUseTests(unittest.TestCase):
                     raise FileExistsError('owned synthetic evidence race')
                 return original(path,*args,**kwargs)
             sys.argv=[runner,'--client-bundle','unused-client','--server','unused-server',
-                      '--evidence-dir',str(evidence),'--work-dir',work]
+                      '--evidence-dir',str(evidence),'--work-dir',work,*flags]
             with patch.object(Path,'mkdir',race):
                 runpy.run_path(runner,run_name='__main__')
         ''')
         result = subprocess.run([sys.executable, '-c', script,
-            str(ROOT / 'integration-tests/compatibility/team_single_use.py'), str(evidence), str(work)],
+            str(ROOT / 'integration-tests/compatibility/team_single_use.py'), str(evidence), str(work),
+            *(['--packaged-preparation'] if packaged else [])],
             capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertEqual((evidence / 'summary.json').read_bytes(), expected)
         self.assertFalse(work.exists())
+
+    @unittest.skipUnless(os.name == 'posix', 'Linux-only acceptance runner')
+    def test_packaged_mode_also_preserves_foreign_evidence(self):
+        self.test_losing_evidence_creator_cannot_overwrite_winner_summary(packaged=True)
 
 
 if __name__ == '__main__':

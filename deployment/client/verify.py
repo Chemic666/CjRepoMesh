@@ -11,7 +11,11 @@ import struct
 
 FILES = {'cjpm', 'lib/libcangjie-runtime.so', 'lib/libboundscheck.so',
          'run.sh', 'verify.py', 'README.md', 'LICENSE'}
-ROOT_ENTRIES = {'cjpm', 'lib', 'run.sh', 'verify.py', 'README.md', 'LICENSE', 'manifest.json'}
+TEAM_CAPABILITY = {'teamPreparation': 'single-use-cold-v1'}
+TEAM_FILES = {'prepare-team.py', 'team/prepare.py', 'team/trust.py', 'team/job.py', 'team/README.md'}
+TEAM_FILES |= {'team/' + role + '/' + name for role in ('publisher', 'consumer')
+               for name in ('cjpm.toml', 'README.md', 'run.sh')}
+TEAM_FILES |= {'team/consumer/src/main.cj', 'team/publisher/src/teamhello.cj'}
 
 
 def digest(path: Path) -> str:
@@ -39,18 +43,34 @@ def require_elf(path: Path) -> None:
 def verify_bundle(root: Path) -> dict:
     if not regular(root / 'lib', directory=True): raise ValueError('lib must be a regular directory')
     if not regular(root / 'manifest.json'): raise ValueError('manifest must be a regular file')
-    if set(p.name for p in root.iterdir()) != ROOT_ENTRIES: raise ValueError('unexpected bundle entry')
-    if set(p.name for p in (root / 'lib').iterdir()) != {'libcangjie-runtime.so', 'libboundscheck.so'}:
-        raise ValueError('unexpected runtime entry')
     manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
     if not isinstance(manifest, dict): raise ValueError('manifest must be an object')
     if type(manifest.get('formatVersion')) is not int or manifest['formatVersion'] != 1:
         raise ValueError('unsupported client manifest version')
     if manifest.get('platform') != dict(os='linux', architecture='amd64'):
         raise ValueError('unsupported client platform')
-    if not isinstance(manifest.get('files'), dict) or set(manifest['files']) != FILES:
+    expected = FILES
+    if 'capabilities' in manifest:
+        if manifest['capabilities'] != TEAM_CAPABILITY:
+            raise ValueError('unsupported client capabilities')
+        expected = FILES | TEAM_FILES
+    if not isinstance(manifest.get('files'), dict) or set(manifest['files']) != expected:
         raise ValueError('unexpected client file list')
-    for name in sorted(FILES):
+    # All paths come from the fixed allowlist, never from arbitrary manifest keys.
+    directories = {Path('.')}
+    for name in expected:
+        directories.update(Path(name).parents)
+    for directory in sorted(directories, key=lambda p: (len(p.parts), str(p))):
+        path = root / directory
+        if not regular(path, directory=True):
+            raise ValueError('bundle paths must be regular directories')
+        children = {Path(name).relative_to(directory).parts[0] for name in expected
+                    if directory in Path(name).parents}
+        if directory == Path('.'):
+            children.add('manifest.json')
+        if {p.name for p in path.iterdir()} != children:
+            raise ValueError('unexpected bundle entry')
+    for name in sorted(expected):
         path, entry = root / name, manifest['files'][name]
         if (not isinstance(entry, dict) or not regular(path) or type(entry.get('bytes')) is not int or
                 entry['bytes'] != path.stat().st_size or not isinstance(entry.get('sha256'), str) or

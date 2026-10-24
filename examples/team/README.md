@@ -1,5 +1,7 @@
 # 开发者发布与只读CI接入示例
 
+已获得声明 `teamPreparation=single-use-cold-v1` 的完整客户端团队包时，可离线执行 `python3 /path/to/client-bundle/prepare-team.py` 并传入下文相同参数，无需检出源码。该入口先校验整个包，只创建包外新目录；下文的 `examples/team/prepare.py` 是源码仓库路径，用工具包时替换为上述入口。实际编译仍需已有SDK/stdx，任务凭据及独立来源批准继续由外部提供。
+
 本例提供可复制的私有库发布任务与消费任务。服务端可用[离线服务端包](../../deployment/portable/README.md)启动；任务执行机仍需现有Linux仓颉SDK（含cjlint）、匹配的增强版cjpm及本机归档/链接工具和开发链接文件（如ar、ld、GCC/系统启动对象）。准备目录只需要Python 3.10+，`run.sh`为Linux/Bash任务入口，不安装工具链、不下载依赖。Windows原生仓颉执行当前暂停，示例的真实编译验收在Linux容器中进行。
 
 ## 任务角色
