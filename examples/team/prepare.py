@@ -29,7 +29,11 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
             ca_sha256: str | None = None) -> None:
     if not safe_registry(registry):
         raise ValueError("registry must be a credential-free HTTP(S) base address")
-    if output.exists():
+    try:
+        output.lstat()
+    except FileNotFoundError:
+        pass
+    else:
         raise FileExistsError("workspace already exists; use a new directory")
     if ca_sha256 is not None and ca_file is None:
         raise ValueError('ca-sha256 requires ca-file')
@@ -86,7 +90,7 @@ def main() -> int:
     parser.add_argument('--ca-sha256', help='optional independently approved SHA-256 of ca-file')
     args = parser.parse_args()
     try:
-        prepare(args.role, args.registry, args.output.resolve(), args.ca_file, args.ca_sha256)
+        prepare(args.role, args.registry, args.output.absolute(), args.ca_file, args.ca_sha256)
         print(f"Prepared {args.role} workspace; load your SDK environment and run bash run.sh there.")
         print("Credentials are referenced by environment variable only; none were read or written.")
         return 0

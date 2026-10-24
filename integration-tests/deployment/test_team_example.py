@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import hashlib
 import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,59 @@ class TeamExampleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(sentinel.read_text(), "keep")
         self.assertFalse((self.output / "cangjie-repo.toml").exists())
+
+    def test_existing_file_not_overwritten(self):
+        self.output.write_text('keep original file')
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.output.read_text(), 'keep original file')
+
+    def output_link(self, target):
+        if os.name == 'nt':
+            missing = not target.exists()
+            if missing:
+                target.mkdir()
+            try:
+                result = subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J',
+                    str(self.output), str(target)], capture_output=True, text=True, timeout=15)
+            finally:
+                if missing:
+                    target.rmdir()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        else:
+            self.output.symlink_to(target, target_is_directory=True)
+
+    def test_dangling_output_link_rejected_without_creating_target(self):
+        target = Path(self.temporary.name) / 'uncreated target'
+        self.output_link(target)
+        before = self.output.lstat()
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('workspace already exists', result.stdout + result.stderr)
+        self.assertFalse(target.exists())
+        self.assertEqual(self.output.lstat().st_mode, before.st_mode)
+
+    def test_output_link_to_existing_directory_preserves_target(self):
+        target = Path(self.temporary.name) / 'existing target'
+        target.mkdir()
+        sentinel = target / 'keep.txt'
+        sentinel.write_text('keep')
+        self.output_link(target)
+        result = self.invoke(role='publisher')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(sentinel.read_text(), 'keep')
+        self.assertEqual(sorted(path.name for path in target.iterdir()), ['keep.txt'])
+        self.output.lstat()
+
+    def test_api_rejects_dangling_output_before_ca_validation(self):
+        target = Path(self.temporary.name) / 'uncreated target'
+        self.output_link(target)
+        prepare = runpy.run_path(str(SCRIPT))['prepare']
+        with self.assertRaisesRegex(FileExistsError, 'workspace already exists'):
+            prepare('consumer', 'https://127.0.0.1:18443', self.output,
+                    Path(self.temporary.name) / 'unread-ca.pem')
+        self.assertFalse(target.exists())
+        self.output.lstat()
 
     def test_unsafe_registry_rejected_before_creating_workspace(self):
         result = self.invoke(registry="http://user:synthetic-secret@localhost:18080")
