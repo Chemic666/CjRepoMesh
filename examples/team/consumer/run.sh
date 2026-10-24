@@ -17,5 +17,8 @@ if [[ "${CJREPOMESH_SOURCE_BASELINE+x}" ]]; then
     fi
 fi
 "$CJREPOMESH_CJPM" build
-./target/release/bin/main
+(
+    unset CJREPO_READ_TOKEN CJREPO_PUBLISH_TOKEN
+    exec ./target/release/bin/main
+)
 "$CJREPOMESH_CJPM" repo explain company::teamhello --recorded

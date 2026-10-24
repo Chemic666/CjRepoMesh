@@ -127,8 +127,12 @@ class TeamExampleTests(unittest.TestCase):
         self.assertIn('trusted CA', result.stdout + result.stderr)
         self.assertFalse(self.output.exists())
 
-    def run_prepared(self, *, tamper=None, role='consumer'):
-        self.prepare_ca(role)
+    def run_prepared(self, *, tamper=None, role='consumer', app_exit=0, trust=True, protected=False):
+        if trust:
+            self.prepare_ca(role)
+        else:
+            result = self.invoke(role)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         if tamper == 'modified':
             path = self.output / 'trust/ca.pem'
             path.chmod(0o600)
@@ -139,23 +143,62 @@ class TeamExampleTests(unittest.TestCase):
             path.unlink()
         elif tamper == 'extra-root':
             (self.output / 'trust/empty/unapproved.pem').write_bytes(CA)
-        moved = self.output.with_name('moved ' + role)
+        moved = self.output.with_name('moved ' + self.output.name)
         self.output.rename(moved)
         self.output = moved
         fake = Path(self.temporary.name) / 'client.py'
         fake.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
-            'with Path("calls.jsonl").open("a") as f: f.write(json.dumps({"args":sys.argv[1:],"ca":os.getenv("SSL_CERT_FILE"),"dir":os.getenv("SSL_CERT_DIR")})+"\\n")\n'
+            'with Path("calls.jsonl").open("a") as f: f.write(json.dumps({"args":sys.argv[1:],"ca":os.getenv("SSL_CERT_FILE"),"dir":os.getenv("SSL_CERT_DIR"),"readPresent":"CJREPO_READ_TOKEN" in os.environ,"publishPresent":"CJREPO_PUBLISH_TOKEN" in os.environ})+"\\n")\n'
             'if sys.argv[1:]==["repo","supports","source-baseline-v1"]: print("source-baseline-v1")\n')
         fake.chmod(0o700)
         binary = moved / 'target/release/bin/main'
         binary.parent.mkdir(parents=True)
-        binary.write_text('#!/bin/sh\nprintf "synthetic app\\n"\n')
+        binary.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
+            'Path("app-environment.json").write_text(json.dumps({'
+            '"readPresent":"CJREPO_READ_TOKEN" in os.environ,'
+            '"publishPresent":"CJREPO_PUBLISH_TOKEN" in os.environ,'
+            '"ca":os.getenv("SSL_CERT_FILE"),"dir":os.getenv("SSL_CERT_DIR"),'
+            '"applicationSetting":os.getenv("TEAM_APPLICATION_SETTING")=="keep"}))\n'
+            'print("synthetic app")\n'
+            f'sys.exit({app_exit})\n')
         binary.chmod(0o700)
         env = {k:v for k,v in os.environ.items() if not k.startswith(('CJREPO_', 'CJREPOMESH_'))}
         env.update(CJREPOMESH_CJPM=str(fake), CJREPO_READ_TOKEN='synthetic-read',
-            CJREPO_PUBLISH_TOKEN='synthetic-publish', SSL_CERT_FILE='/inherited/wrong-ca', SSL_CERT_DIR='/inherited/wrong-dir')
+            CJREPO_PUBLISH_TOKEN='synthetic-publish', SSL_CERT_FILE='/inherited/wrong-ca',
+            SSL_CERT_DIR='/inherited/wrong-dir', TEAM_APPLICATION_SETTING='keep')
+        if protected:
+            env['CJREPOMESH_SOURCE_BASELINE'] = str(moved / 'independent-approval.json')
         result = subprocess.run(['bash', 'run.sh'], cwd=moved, env=env, capture_output=True, text=True, timeout=15)
         return result, moved / 'calls.jsonl'
+
+    @unittest.skipUnless(os.name == 'posix', 'Bash job execution is Linux-only')
+    def test_application_does_not_inherit_repository_credentials(self):
+        for trust in (False, True):
+            with self.subTest(trust=trust):
+                self.output = Path(self.temporary.name) / str(trust)
+                result, calls = self.run_prepared(trust=trust, protected=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                rows = [json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertEqual([row['args'] for row in rows], [
+                    ['repo', 'supports', 'source-baseline-v1'], ['build'],
+                    ['repo', 'explain', 'company::teamhello', '--recorded']])
+                self.assertTrue(all(row['readPresent'] and not row['publishPresent'] for row in rows))
+                app = json.loads((self.output / 'app-environment.json').read_text())
+                self.assertFalse(app['readPresent'])
+                self.assertFalse(app['publishPresent'])
+                self.assertTrue(app['applicationSetting'])
+                self.assertEqual((app['ca'], app['dir']), (rows[1]['ca'], rows[1]['dir']))
+                self.assertNotIn('synthetic-read', result.stdout + result.stderr)
+
+    @unittest.skipUnless(os.name == 'posix', 'Bash job execution is Linux-only')
+    def test_application_failure_preserves_status_and_stops_explanation(self):
+        result, calls = self.run_prepared(app_exit=7)
+        self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+        rows = [json.loads(line) for line in calls.read_text().splitlines()]
+        self.assertEqual([row['args'] for row in rows], [['build']])
+        app = json.loads((self.output / 'app-environment.json').read_text())
+        self.assertFalse(app['readPresent'])
+        self.assertFalse(app['publishPresent'])
 
     @unittest.skipUnless(os.name == 'posix', 'Bash job execution is Linux-only')
     def test_moved_https_jobs_pin_process_trust_for_both_roles(self):

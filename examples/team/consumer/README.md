@@ -3,6 +3,13 @@
 This app consumes only `company::teamhello 1.0.0` using the private namespace
 route. A successful run prints `CjRepoMesh team 1.0.0: CI`.
 
+The built application runs without `CJREPO_READ_TOKEN` or
+`CJREPO_PUBLISH_TOKEN` in its environment. The parent task keeps the read
+token for the subsequent recorded explanation; application failures retain
+their exit status and stop the task. Build processes still receive the read
+token. This limits accidental inheritance and does not sandbox application
+or build code.
+
 When `CJREPOMESH_SOURCE_BASELINE` is set, `run.sh` first requires a successful
 `repo supports source-baseline-v1` response with exactly that stdout marker.
 An unsupported client or malformed response exits 2 before building. Use the
