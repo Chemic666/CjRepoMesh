@@ -12,7 +12,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前状态（2026-10-24）**：固定21文件客户端工具包 `f433b415…`、9文件服务端包 `8fc30842…` / 镜像 `bad02ad7…`，完整归档、清单身份及各批验收范围统一见[固定候选清单](docs/candidate-acceptance.md)首节。当前组合已分别完成包内HTTPS团队流程10/10、Docker接收33/33、停服恢复23/23、具体版本升级回退22/22、多来源离线快照16/16及包内并发单次冷CI12/12；这些是独立演练，不相加包装为一次全量验收。[来源准入](docs/repository-source-baseline.md)支持主图与脚本图分别独立批准，同一客户端已有来源37/37、多图29/29、TLS19/19及原生核心4组通过。详细证据见[验证记录](docs/verification-report.md)，双端发布见[交付记录](docs/delivery-record.md)。
+**当前状态（2026-10-24）**：固定21文件诊断修复客户端工具包 `5dd187b5…`、9文件服务端包 `8fc30842…` / 镜像 `bad02ad7…`，完整归档、清单身份及范围统一见[固定候选清单](docs/candidate-acceptance.md)首节。新包实际诊断11/11、来源基线37/37、工作空间/脚本分图29/29、TLS19/19、包内HTTPS团队10/10及Docker接收33/33；这些是独立流程。同一5dd二进制此前另经脱敏10/10与多仓核心1/1。此前f433包的停服恢复23/23、升级回退22/22、多来源快照16/16和并发冷CI12/12保留原范围，新5dd包尚未重验这些维护/并发链。详细证据见[验证记录](docs/verification-report.md)，双端交付见[交付记录](docs/delivery-record.md)。
 
 当前Windows原生全量、完整官方Maple、最终客户端在全新/跨主机环境的完整验收、来源排他性与生产信任/凭据轮换仍未完成；旧产物的跨机成绩不移算。服务端有独立的有界Hosted容量样本，不代表当前工具包团队负载或长期生产容量。签名、已解包缓存再验真、脚本沙箱、流式落盘和完整资源配额仍未实现；使用条件和规模应以实际项目验证，不按本机短测推算团队人数或SLA。
 
@@ -208,7 +208,7 @@ export CANGJIE_STDX_PATH=/path/to/stdx/linux_x86_64_cjnative/static/stdx
 
 此前固定候选完成 Windows 四组核心 **4/4 PASS、109.36 秒**与 Linux 四组 **4/4 PASS、225.24 秒**；Windows 部署入口的相对路径问题修复后另行复验通过，不表述为同次五组全通过。文件存储冷备份恢复在 Windows / Linux 各 **10/10**，Docker 停服导出、新卷恢复及真实包构建 **9/9**，本次 URL 修复未重复这些专项。这些演练不保证在线备份、业务切换或断电持久性。
 
-历史6a7客户端与官方原版单仓差分 **7/7 PASS**；当批增强版Maple **原断言38项、就绪调整1项、归档稳定化1项、HLT离线95/101** 分别通过，共113份真实调用日志。原刷新失败保留，不称39项未经调整通过；当批Maple只执行增强版，完整HLT/LLT仍未完成。这些结果不移算为当前f433重跑，身份及执行/引用的区别见[固定候选验收清单](docs/candidate-acceptance.md)，详情见[验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md)与[Docker历史记录](docs/docker-verification.md)。
+历史6a7客户端与官方原版单仓差分 **7/7 PASS**；当批增强版Maple **原断言38项、就绪调整1项、归档稳定化1项、HLT离线95/101** 分别通过，共113份真实调用日志。原刷新失败保留，不称39项未经调整通过；当批Maple只执行增强版，完整HLT/LLT仍未完成。这些结果不移算为当前5dd187b5重跑，身份及执行/引用的区别见[固定候选验收清单](docs/candidate-acceptance.md)，详情见[验证记录](docs/verification-report.md)、[官方兼容性记录](docs/official-compatibility-report.md)与[Docker历史记录](docs/docker-verification.md)。
 
 历史2026-10-20批次使用隔离HOME/USERPROFILE执行同一离线打包选择：当时增强版 `7e29eaa7…` 与官方原版各 **95/95 PASS**，190份日志仍保留；10月21日06ae另做增强版95项复验。两批仍为各自历史产物记录，不移算为后续产物执行，也不代表完整HLT/LLT。
 
