@@ -109,6 +109,7 @@ class DepModel {
         // initialize dep-analysis engine
         this.depAnalysisEngine.isTest = this.globalConfig.isTest
         this.depAnalysisEngine.isDebug = this.globalConfig.isDebug
+        this.depAnalysisEngine.isScriptDep = isScriptDep
         this.depAnalysisEngine.rootModulePath = this.globalConfig.modulePath
 
         // move repo-deps from cjpm.lock into engine

@@ -71,7 +71,7 @@ def main():
         assert private not in output, 'diagnostic exposed private configuration or argument'
         return result.returncode, result.stdout, result.stderr
 
-    def query(name, arguments, *, success=False, poisoned=False, selected=None):
+    def query(name, arguments, *, success=False, poisoned=False, selected=None, token='source-baseline-v1'):
         folder = report / name
         folder.mkdir()
         (folder / '.home').mkdir()
@@ -89,9 +89,9 @@ def main():
         code, output, _ = invoke(folder, name, [selected or client, *arguments],
                               dict(CJPM_CONFIG=str(folder / 'unrelated-config')) if poisoned else None)
         if success:
-            assert code == 0 and output.strip() == 'source-baseline-v1', 'offline capability query not recognized'
+            assert code == 0 and output.strip() == token, 'offline capability query not recognized'
         else:
-            assert code != 0 and output.strip() != 'source-baseline-v1', 'unsupported form reported support'
+            assert code != 0 and output.strip() != token, 'unsupported form reported support'
         assert snapshot() == before, 'capability query changed workspace files'
         assert not requests, 'offline query contacted registry'
 
@@ -100,7 +100,8 @@ set -euo pipefail
 printf '%s\n' "$*" >> calls
 if [[ "$1" == repo && "${2:-}" == supports ]]; then
     case "$TEST_SUPPORT" in
-        supported) printf 'source-baseline-v1\n'; exit 0 ;;
+        supported) printf '%s\n' "$3"; exit 0 ;;
+        main-only) [[ "$3" == source-baseline-v1 ]] && { printf 'source-baseline-v1\n'; exit 0; }; exit 1 ;;
         wrapped) printf 'PASS: client bundle integrity\nsource-baseline-v1\n'; exit 0 ;;
         suffix) printf 'source-baseline-v1\nunexpected suffix\n'; exit 0 ;;
         wrong) printf 'some-other-feature\n'; exit 0 ;;
@@ -117,7 +118,7 @@ if [[ "$1" == build ]]; then
 fi
 '''
 
-    def consumer(name, support, *, enabled=True, selected=None, expected=2):
+    def consumer(name, support, *, enabled=True, selected=None, expected=2, script=False):
         folder = report / name
         folder.mkdir()
         shutil.copyfile(root / 'examples/team/consumer/run.sh', folder / 'run.sh')
@@ -130,6 +131,8 @@ fi
         extra = dict(CJREPO_READ_TOKEN='synthetic-read', CJREPOMESH_CJPM=str(selected or wrapper), TEST_SUPPORT=support)
         if enabled:
             extra['CJREPOMESH_SOURCE_BASELINE'] = '' if name == 'explicit-empty-old-client' else str(approved)
+        if script:
+            extra['CJREPOMESH_SCRIPT_SOURCE_BASELINE'] = str(approved)
         code, stdout, stderr = invoke(folder, name, ['bash', 'run.sh'], extra)
         output = stdout + stderr
         assert code == expected, f'expected exit {expected}, got {code}'
@@ -138,13 +141,17 @@ fi
             assert (folder / 'build-started').exists(), 'unprotected or supported build did not run'
         else:
             assert not (folder / 'build-started').exists() and not (folder / 'target').exists(), 'unsupported client began build'
-            assert 'requires source-baseline-v1' in output, 'missing actionable preflight diagnostic'
+            expected_message = 'Protected consumer requires' if script else 'requires source-baseline-v1'
+            assert expected_message in output, 'missing actionable preflight diagnostic'
         if not selected:
+            if script and not enabled:
+                assert not (folder / 'calls').exists(), 'missing main approval reached client'
+                return
             calls = (folder / 'calls').read_text().splitlines()
             if enabled:
                 assert calls[0] == 'repo supports source-baseline-v1'
                 if expected:
-                    assert len(calls) == 1, 'unsupported preflight continued to another command'
+                    assert len(calls) == (2 if script and support == 'main-only' else 1), 'unsupported preflight continued to another command'
             else:
                 assert calls[0] == 'build', 'unconfigured flow gained capability dependency'
 
@@ -156,6 +163,16 @@ fi
         query('query-stderr-wrapper', ['repo', 'supports', 'source-baseline-v1'], success=True, selected=wrapper)
 
     try:
+        for name, poisoned in (('query-script-no-sdk', False), ('query-script-poisoned-config', True)):
+            record(name, lambda name=name, poisoned=poisoned: query(name,
+                   ['repo', 'supports', 'script-source-baseline-v1'], success=True,
+                   poisoned=poisoned, token='script-source-baseline-v1'))
+        record('query-script-extra-argument', lambda: query('query-script-extra-argument',
+               ['repo', 'supports', 'script-source-baseline-v1', 'extra'], token='script-source-baseline-v1'))
+        record('consumer-script-main-only', lambda: consumer('consumer-script-main-only', 'main-only', script=True))
+        record('consumer-script-supported', lambda: consumer('consumer-script-supported', 'supported', script=True, expected=0))
+        record('consumer-script-missing-main', lambda: consumer('consumer-script-missing-main', 'supported',
+               enabled=False, script=True))
         record('query-no-sdk', lambda: query('query-no-sdk', ['repo', 'supports', 'source-baseline-v1'], success=True))
         record('query-poisoned-config', lambda: query('query-poisoned-config', ['repo', 'supports', 'source-baseline-v1'], success=True, poisoned=True))
         record('query-unknown-feature', lambda: query('query-unknown-feature', ['repo', 'supports', private], poisoned=True))

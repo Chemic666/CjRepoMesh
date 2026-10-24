@@ -75,12 +75,13 @@ def main():
         (folder / 'README.md').write_text('# Owned graph fixture\n')
         return folder
 
-    def invoke(folder, label, command, baseline=None, relative=False):
+    def invoke(folder, label, command, baseline=None, relative=False, extra=None):
         home = folder / '.home'
         home.mkdir(exist_ok=True)
         env = dict(base_env, HOME=str(home), USERPROFILE=str(home))
         if baseline is not None:
             env['CJREPOMESH_SOURCE_BASELINE'] = baseline.name if relative else str(baseline)
+        env.update(extra or {})
         result = subprocess.run(list(map(str, command)), cwd=folder, env=env,
                                 capture_output=True, text=True, timeout=100)
         output = result.stdout + result.stderr
@@ -116,7 +117,8 @@ def main():
             f' File.appendTo("script-events", (args[0] + ":" + {marker} + "\\n").toArray())\n return 0\n}}\n')
 
     def run_case(label, setup, baseline, *, reject=False, script_marker=None,
-                 relative=False, member=None, allowed_artifacts=()):
+                 relative=False, member=None, allowed_artifacts=(), script_baseline=None,
+                 script_setting=None, baseline_name='approved.json', script_name='script-approved.json'):
         known_cases.append(label)
         if args.case and label not in args.case:
             return
@@ -129,14 +131,23 @@ def main():
             if baseline is not None:
                 # Synthetic approvals come from owned fixture metadata, never from
                 # the output under test. This is not an approval workflow for users.
-                path = folder / 'approved.json'
+                path = folder / baseline_name
                 path.write_text(json.dumps(baseline))
                 approved_bytes = path.read_bytes()
+            script_path, script_bytes, extra = None, None, {}
+            if script_baseline is not None:
+                script_path = folder / script_name
+                script_path.write_text(json.dumps(script_baseline))
+                script_bytes = script_path.read_bytes()
+                extra['CJREPOMESH_SCRIPT_SOURCE_BASELINE'] = script_path.name if relative else str(script_path)
+            if script_setting is not None:
+                extra['CJREPOMESH_SCRIPT_SOURCE_BASELINE'] = script_setting
             output_path = folder / 'cjpm-provenance.json'
-            old_output = b'previous source output\n'
+            old_output = (script_bytes if script_path == output_path else
+                          approved_bytes if path == output_path else b'previous source output\n')
             output_path.write_bytes(old_output)
             command = [client, 'build'] + (['--member', member] if member else [])
-            code, output = invoke(folder, 'build', command, path, relative)
+            code, output = invoke(folder, 'build', command, path, relative, extra)
             events = requests[before:]
             artifacts = [event['package'] for event in events if event['kind'] == 'artifact']
             if reject:
@@ -145,7 +156,10 @@ def main():
                 if not allowed_artifacts:
                     assert output_path.read_bytes() == old_output, 'rejection replaced previous source output'
                 else:
-                    assert json.loads(output_path.read_text()) == baseline, 'earlier admitted script provenance missing'
+                    previous = json.loads(output_path.read_text())
+                    expected_previous = dict(formatVersion=1, packages=sorted(
+                        (script_baseline or baseline)['packages'], key=lambda x: x['package']))
+                    assert previous == expected_previous, 'earlier admitted script provenance missing'
             else:
                 assert code == 0, 'build failed; inspect build.log'
                 assert artifacts, 'cold build made no artifact requests'
@@ -173,6 +187,8 @@ def main():
                 assert not marker_path.exists(), 'rejected script graph ran its script'
             if path:
                 assert path.read_bytes() == approved_bytes, 'approved baseline changed'
+            if script_path:
+                assert script_path.read_bytes() == script_bytes, 'script approval changed'
         except Exception as failure:
             error = type(failure).__name__ + ': ' + str(failure)
         cases.append(dict(name=label, passed=not error, error=error, requests=requests[before:]))
@@ -217,6 +233,39 @@ def main():
                  script_marker='pre-build:no-script-dependencies')
         run_case('script-approved-before-main-rejection', lambda f: scripted(f, 'meshdep'), mesh, reject=True,
                  allowed_artifacts=('meshdep',), script_marker='pre-build:high-1.0.0')
+        script_drift = copy.deepcopy(mesh)
+        script_drift['packages'][0]['sha256'] = '0' * 64
+        run_case('script-split-approved', lambda f: scripted(f, 'meshdep'), union,
+                 script_baseline=mesh, script_marker='pre-build:high-1.0.0')
+        run_case('script-split-relative', lambda f: scripted(f, 'meshdep'), union, relative=True,
+                 script_baseline=mesh, script_marker='pre-build:high-1.0.0')
+        run_case('script-split-drift', lambda f: scripted(f, 'meshdep'), union,
+                 script_baseline=script_drift, reject=True)
+        run_case('script-same-override-drift', lambda f: scripted(f, 'company::baselineparent'), union,
+                 script_baseline=drift, reject=True)
+        run_case('script-main-drift-after-script', lambda f: scripted(f, 'meshdep'), drift,
+                 script_baseline=mesh, reject=True, allowed_artifacts=('meshdep',),
+                 script_marker='pre-build:high-1.0.0')
+        run_case('script-main-subset-not-widened', lambda f: scripted(f, 'company::baselineparent'), mesh,
+                 script_baseline=union, reject=True, allowed_artifacts=('meshdep', 'baselineparent'),
+                 script_marker='pre-build:baseline:high-1.0.0')
+        run_case('script-split-missing', lambda f: scripted(f, 'company::baselineparent'), union,
+                 script_setting='missing-script-approval.json', reject=True)
+        run_case('script-split-invalid', lambda f: scripted(f, 'company::baselineparent'), union,
+                 script_baseline={'formatVersion': 2, 'packages': []}, reject=True)
+        run_case('script-split-empty', lambda f: scripted(f, 'company::baselineparent'), union,
+                 script_setting='', reject=True)
+        run_case('script-override-without-main', lambda f: scripted(f, 'meshdep'), None,
+                 script_baseline=mesh, reject=True)
+        run_case('main-approval-temporary-alias-during-script', lambda f: scripted(f, 'meshdep'), union,
+                 baseline_name='cjpm-provenance.json.tmp', script_baseline=mesh, reject=True)
+        run_case('script-approval-temporary-alias-during-main', workspace, union,
+                 script_baseline=mesh, script_name='cjpm-provenance.json.tmp', reject=True)
+        run_case('script-approval-final-alias-during-main', workspace, union,
+                 script_baseline=mesh, script_name='cjpm-provenance.json', reject=True)
+        run_case('script-approval-final-alias-during-script', lambda f: scripted(f, 'meshdep'), union,
+                 script_baseline=mesh, script_name='cjpm-provenance.json', reject=True)
+        run_case('main-not-selected-by-script-override', workspace, union, script_baseline=mesh)
         if args.case and set(args.case) - set(known_cases):
             raise ValueError('unknown case selection')
     except Exception as failure:

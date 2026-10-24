@@ -51,7 +51,20 @@ CJREPOMESH_SOURCE_BASELINE=/protected/workspace-full.json /path/to/cjpm build
 CJREPOMESH_SOURCE_BASELINE=/protected/workspace-app-a.json /path/to/cjpm build --member app_a
 ```
 
-`build.cj` 存在非空 `script-dependencies` 时，脚本依赖会另行求解，每个图都与同一环境变量指定的完整基线比较。不要把不同图简单合并成更大的批准集合，或自动按当前图筛选批准条目；精确集合检查会拒绝这种用法。
+`build.cj` 存在非空 `script-dependencies` 时，脚本依赖会另行求解。默认每个图仍与 `CJREPOMESH_SOURCE_BASELINE` 指定的完整基线比较。不要把不同图简单合并成更大的批准集合，或自动按当前图筛选批准条目；精确集合检查会拒绝这种用法。
+
+支持 `script-source-baseline-v1` 的新客户端可为脚本图显式指定另一份独立批准的v1文件：
+
+```bash
+/path/to/client-bundle/run.sh repo supports script-source-baseline-v1
+CJREPOMESH_SOURCE_BASELINE=/protected/main-two-packages.json \
+CJREPOMESH_SCRIPT_SOURCE_BASELINE=/protected/script-meshdep.json \
+  /path/to/client-bundle/run.sh build
+```
+
+两份文件分别精确批准各自的完整包集合、版本、仓库名、URL及SHA-256；不合并、不放宽为子集，也不从当前解析结果生成批准。脚本专用变量只能与主变量一起使用，设置为空拒绝；未设置保持原行为。只有现有脚本依赖分析选择脚本文件，正常主图/成员图仍选择主文件。相对路径按各次分析的根目录解释，CI推荐绝对路径。任一配置文件与当前分析的最终/临时来源输出规范路径冲突都会拒绝，即使该文件属于另一类图，避免写来源时覆盖未选中的批准。
+
+先执行能力查询；旧客户端会忽略未知环境变量，不能据此判断支持。团队consumer入口在设置脚本变量时也要求此能力和主批准，否则在build前拒绝。能力查询不认证二进制；继续使用可信交付和包校验。
 
 | 已实跑场景 | 行为 |
 | --- | --- |
@@ -59,11 +72,11 @@ CJREPOMESH_SOURCE_BASELINE=/protected/workspace-app-a.json /path/to/cjpm build -
 | 仅构建直接使用meshdep的成员 | 整图基线拒绝；该成员自己的单包基线可构建并运行 |
 | 仅构建parent→meshdep成员 | 两包基线可构建并运行 |
 | 脚本与应用都使用parent→meshdep | 同一两包基线分别匹配，pre/post脚本与应用均执行成功 |
-| 脚本仅使用meshdep，应用使用parent→meshdep | 两包基线在脚本图拒绝，未执行脚本、未下载制品；此种异图接入不支持 |
+| 脚本仅使用meshdep，应用使用parent→meshdep | 默认两包基线仍在脚本图拒绝；显式单包脚本批准与双包主批准可分别匹配 |
 | 脚本没有仓库依赖，应用来源漂移 | pre脚本已执行，主图拒绝且零仓库制品请求，不执行post脚本 |
 | 单包基线批准脚本图，随后两包主图拒绝 | 已下载一次meshdep、执行pre脚本并保存脚本图来源；主图不下载、不执行post，批准文件不变 |
 
-上述同图脚本和工作空间整图也验证了根目录相对基线路径；CI仍推荐绝对路径。脚本无仓库依赖不代表脚本安全；多图构建的最终 `cjpm-provenance.json` 也不是整条命令的事务日志，命令失败后可能保留前一个成功图的记录，不能据此判断构建成功。需要不同脚本图与主图同时接入时，应先评估这一限制，不能通过关闭检查、放宽为子集匹配或自动批准本次输出来绕过。
+上述同图脚本和工作空间整图也验证了根目录相对基线路径；CI仍推荐绝对路径。脚本无仓库依赖不代表脚本安全；多图构建的最终 `cjpm-provenance.json` 也不是整条命令的事务日志，命令失败后可能保留前一个成功图的记录，不能据此判断构建成功。脚本批准只在实际发生脚本依赖分析时核对；现有已缓存/已重定位脚本生命周期不因新变量而强制重新分析。所有脚本分析共用这一份脚本批准，多个不同完整脚本图仍需分别设计构建入口，不能通过关闭检查、放宽为子集匹配或自动批准本次输出来绕过。
 
 ## 能力边界与复验
 

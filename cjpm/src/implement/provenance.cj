@@ -86,18 +86,33 @@ private func rejectRepositorySourceBaseline(reason: String): Bool {
 public func verifyRepositorySourceBaseline(rootPath: String,
     fixedVersions: HashMap<String, String>,
     indexMap: HashMap<String, HashMap<String, ArtifactIndex>>,
-    sourceDepotMap: HashMap<String, HashMap<String, Depot>>): Bool {
+    sourceDepotMap: HashMap<String, HashMap<String, Depot>>, isScriptDep!: Bool = false): Bool {
+    let scriptSetting = getVariable("CJREPOMESH_SCRIPT_SOURCE_BASELINE")
+    if (let Some(scriptPath) <- scriptSetting) {
+        if (scriptPath.isEmpty()) {
+            return rejectRepositorySourceBaseline("CJREPOMESH_SCRIPT_SOURCE_BASELINE is empty")
+        }
+        if (getVariable("CJREPOMESH_SOURCE_BASELINE").isNone()) {
+            return rejectRepositorySourceBaseline("script override requires a main source baseline")
+        }
+    }
     let setting = getVariable("CJREPOMESH_SOURCE_BASELINE") ?? return true
     if (setting.isEmpty()) {
         return rejectRepositorySourceBaseline("CJREPOMESH_SOURCE_BASELINE is empty")
     }
     try {
-        let path = getPath(rootPath, setting)
         let outputPath = getPath(rootPath, REPOSITORY_PROVENANCE_FILE_NAME)
         let temporaryPath = getPath(rootPath, REPOSITORY_PROVENANCE_FILE_NAME + ".tmp")
-        if (path == outputPath || path == temporaryPath) {
-            return rejectRepositorySourceBaseline("use a separate independently approved file")
+        // Either analysis may write provenance. Protect both approvals even
+        // when the other graph's document is not selected for this analysis.
+        for (approvedSetting in [setting, scriptSetting ?? setting]) {
+            let approvedPath = getPath(rootPath, approvedSetting)
+            if (approvedPath == outputPath || approvedPath == temporaryPath) {
+                return rejectRepositorySourceBaseline("use a separate independently approved file")
+            }
         }
+        let selectedSetting = if (isScriptDep) { scriptSetting ?? setting } else { setting }
+        let path = getPath(rootPath, selectedSetting)
         let bytes = ArrayList<UInt8>()
         try (file = File(path, Read)) {
             let buffer = Array<UInt8>(8192, repeat: 0)

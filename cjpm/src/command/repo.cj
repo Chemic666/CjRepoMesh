@@ -15,6 +15,7 @@ Usage:
   cjpm repo explain <package> --recorded
   cjpm repo doctor [package]
   cjpm repo supports source-baseline-v1
+  cjpm repo supports script-source-baseline-v1
 
 Examples:
   cjpm repo explain meshdep
@@ -44,8 +45,9 @@ class RepoCommand <: Handle {
 
     public override func handleCommand(): Bool {
         if (!this.arguments.isEmpty() && this.arguments[0] == "supports") {
-            if (this.arguments.size == 2 && this.arguments[1] == "source-baseline-v1") {
-                println("source-baseline-v1")
+            if (this.arguments.size == 2 && (this.arguments[1] == "source-baseline-v1" ||
+                this.arguments[1] == "script-source-baseline-v1")) {
+                println(this.arguments[1])
                 return true
             }
             eprintln("Error: unsupported repository capability or invalid supports arguments")

@@ -66,4 +66,6 @@ python examples/team/prepare.py --role consumer --registry https://repo.example.
 
 新版消费脚本在该变量已设置时（包括空值）先执行 `repo supports source-baseline-v1`，只接受退出0且stdout为精确标记；不支持、异常响应或调用失败在构建前退出2。完整包启动器的校验信息走stderr，兼容此检查。未设置基线变量时不增加查询，原流程保持。8da5已有基线功能但缺少能力查询，也会被新版受保护任务保守拒绝，需使用[当前客户端](../../docs/candidate-acceptance.md)。能力响应不能认证程序来源，仍须使用可信分发及完整包校验；直接调用旧版 `cjpm build` 不会由示例代做检查。
 
+若自己的项目存在与主图不同的 `script-dependencies`，可同时设置 `CJREPOMESH_SCRIPT_SOURCE_BASELINE=/protected/script-source-baseline.json`，分别精确批准脚本图和主图。消费入口要求主批准已配置，并额外检查 `script-source-baseline-v1` 能力，旧客户端在build前拒绝。默认示例无脚本依赖，不需要新增变量；准备器也不会生成这两份批准。所有脚本分析共用脚本文件，已缓存/已重定位脚本不因此强制重分析；这不提供脚本沙箱或整命令原子拒绝。
+
 默认同机地址不是跨主机方案。任务在容器网络内时可以使用该网络中的服务名地址；跨机器接入和HTTPS需另行设置及验证。本例不证明公有云CI、全新主机、容量或升级恢复已验收。

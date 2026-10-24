@@ -39,6 +39,7 @@ public class DepAnalysisEngine {
     // sign of engine
     public var isTest: Bool = false
     public var isDebug: Bool = false
+    public var isScriptDep: Bool = false
     public var rootModulePath: String = ""
     public let target: String = getCompileTarget()
 
@@ -89,7 +90,7 @@ public class DepAnalysisEngine {
     public func analyseRepoDeps(): Bool {
         if (this.repoDepList.isEmpty()) {
             return verifyRepositorySourceBaseline(this.rootModulePath, this.currentState.fixedVersionMap,
-                this.indexMap, this.sourceDepotMap)
+                this.indexMap, this.sourceDepotMap, isScriptDep: this.isScriptDep)
         }
 
         this.repositoryRouter = RepositoryRouter.new() ?? return false
@@ -450,7 +451,7 @@ public class DepAnalysisEngine {
         }
 
         if (!verifyRepositorySourceBaseline(this.rootModulePath, this.currentState.fixedVersionMap,
-            this.indexMap, this.sourceDepotMap)) {
+            this.indexMap, this.sourceDepotMap, isScriptDep: this.isScriptDep)) {
             return false
         }
 
