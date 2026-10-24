@@ -25,6 +25,7 @@ SHA256 = r'[a-f0-9]{64}'
 CAPABILITY = 'cold-backup-v1'
 RESTORE_CHECK_CAPABILITY = 'offline-inputs-v1'
 LABEL = 'io.cjrepomesh.maintenance'
+MAX_CONFIGURATION_BYTES = 1024 * 1024
 
 
 class MaintenanceError(ValueError):
@@ -60,8 +61,18 @@ def write_private(path: Path, data: bytes) -> None:
         stream.write(data)
 
 
+def read_configuration_bytes(path: Path) -> bytes:
+    if not regular_file(path) or path.stat().st_size > MAX_CONFIGURATION_BYTES:
+        raise MaintenanceError('runtime configuration must be a regular file of at most 1 MiB')
+    with path.open('rb') as stream:
+        data = stream.read(MAX_CONFIGURATION_BYTES + 1)
+    if len(data) > MAX_CONFIGURATION_BYTES:
+        raise MaintenanceError('runtime configuration exceeds 1 MiB')
+    return data
+
+
 def read_configuration(data: bytes) -> dict[str, str]:
-    if len(data) > 1024 * 1024:
+    if len(data) > MAX_CONFIGURATION_BYTES:
         raise MaintenanceError('runtime configuration exceeds 1 MiB')
     values = {}
     try:
@@ -184,7 +195,7 @@ def verify_backup(root: Path) -> dict:
                     type(entry.get('bytes')) is not int or entry['bytes'] < 0 or
                     entry['bytes'] != path.stat().st_size or entry.get('sha256') != digest(path)):
                 raise MaintenanceError('backup file integrity check failed')
-        configuration = read_configuration((root/'.env').read_bytes())
+        configuration = read_configuration(read_configuration_bytes(root/'.env'))
         source = value.get('source')
         project = configuration['COMPOSE_PROJECT_NAME']
         if (not isinstance(source, dict) or source.get('project') != project or
@@ -259,9 +270,7 @@ def deployment(root: Path) -> tuple[dict, bytes, dict, bytes | None]:
     manifest = verify_bundle(root, check_docker=True)
     if manifest.get('maintenance') != CAPABILITY or manifest.get('caConfiguration') != 'pem-directory-v1':
         raise MaintenanceError('this bundle does not support stopped maintenance; use a verified current bundle')
-    if not regular_file(root/'.env') or (root/'.env').stat().st_size > 1024 * 1024:
-        raise MaintenanceError('runtime configuration must be a regular file of at most 1 MiB')
-    data = (root/'.env').read_bytes()
+    data = read_configuration_bytes(root/'.env')
     values = read_configuration(data)
     if not ordinary_directory(root/'trust'):
         raise MaintenanceError('deployment trust must be an ordinary directory')
@@ -310,7 +319,7 @@ def backup(root: Path, output: Path) -> dict:
                readonly=True, stdout=stream)
     storage = archive_manifest(output/'data.tar')
     require_stopped(volume)
-    if (root/'.env').read_bytes() != configuration or (ca is not None and (root/'trust/ca.pem').read_bytes() != ca):
+    if read_configuration_bytes(root/'.env') != configuration or (ca is not None and (root/'trust/ca.pem').read_bytes() != ca):
         raise MaintenanceError('deployment configuration changed during backup; retain the failed output')
     names = {'.env', 'data.tar'} | ({'trust/ca.pem'} if ca is not None else set())
     value = dict(formatVersion=1, kind='cjrepomesh-cold-backup',
@@ -367,7 +376,7 @@ def restore(root: Path, source: Path, port: int | None = None) -> dict:
     manifest, value = restore_inputs(root, source, port)
     verify_bundle(root, check_docker=True)
     project = 'cjrepomesh-' + secrets.token_hex(8)
-    configuration = restored_configuration((source/'.env').read_bytes(), project, port)
+    configuration = restored_configuration(read_configuration_bytes(source/'.env'), project, port)
     operation = secrets.token_hex(16)
     # Reserve new configuration first. Failures intentionally retain these files
     # and the new volume; retries use another unconfigured bundle directory.

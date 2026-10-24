@@ -116,6 +116,27 @@ class PortableMaintenanceTests(unittest.TestCase):
         with patch.object(self.module, 'docker', side_effect=AssertionError('Docker must not run')):
             self.assertEqual(self.module.verify_backup(self.root), expected)
 
+    def test_oversized_backup_configuration_does_not_use_an_unbounded_read(self):
+        manifest = self.snapshot()
+        path = self.root/'.env'
+        data = CONFIG + b'#' + b'x' * (1024 * 1024)
+        path.write_bytes(data)
+        manifest['files']['.env'] = dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        (self.root/'backup.json').write_text(json.dumps(manifest), encoding='utf-8')
+        before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in self.root.iterdir()}
+        read_bytes = Path.read_bytes
+        def guarded_read(candidate):
+            if candidate == path:
+                raise AssertionError('unbounded configuration read reached')
+            return read_bytes(candidate)
+        with patch.object(Path, 'read_bytes', guarded_read), \
+             patch.object(self.module, 'docker', side_effect=AssertionError('Docker must not run')):
+            with self.assertRaises(self.module.MaintenanceError) as caught:
+                self.module.verify_backup(self.root)
+        self.assertIn('1 MiB', str(caught.exception))
+        self.assertNotIn('synthetic-read-value', str(caught.exception))
+        self.assertEqual(before, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in self.root.iterdir()})
+
     def test_corrupt_or_missing_backup_preserves_inputs(self):
         self.snapshot()
         before = (self.root/'.env').read_bytes()
@@ -127,6 +148,83 @@ class PortableMaintenanceTests(unittest.TestCase):
         (self.root/'data.tar').unlink()
         with self.assertRaises(ValueError):
             self.module.verify_backup(self.root)
+
+    def replace_configuration(self, manifest, data):
+        (self.root/'.env').write_bytes(data)
+        manifest['files']['.env'] = dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        (self.root/'backup.json').write_text(json.dumps(manifest), encoding='utf-8')
+
+    def test_backup_configuration_at_one_mib_is_accepted(self):
+        manifest = self.snapshot()
+        data = CONFIG + b'#' + b'x' * (1024 * 1024 - len(CONFIG) - 1)
+        self.replace_configuration(manifest, data)
+        self.assertEqual(self.module.verify_backup(self.root), manifest)
+        self.assertEqual((self.root/'.env').read_bytes(), data)
+
+    def test_configuration_reader_rejects_a_directory(self):
+        with self.assertRaises(self.module.MaintenanceError):
+            self.module.read_configuration_bytes(self.root)
+
+    def test_configuration_reader_rejects_a_symbolic_link(self):
+        source, link = self.root/'configuration', self.root/'linked'
+        source.write_bytes(CONFIG)
+        try:
+            link.symlink_to(source)
+        except OSError as error:
+            self.skipTest('symlink unavailable: ' + type(error).__name__)
+        with self.assertRaises(self.module.MaintenanceError):
+            self.module.read_configuration_bytes(link)
+        self.assertEqual(source.read_bytes(), CONFIG)
+
+    def test_growing_backup_configuration_has_a_bounded_actual_read(self):
+        self.snapshot()
+        path = self.root/'.env'
+        original = path.read_bytes()
+        open_file, calls, sizes = Path.open, [], []
+        test = self
+        class GrowingStream(io.BytesIO):
+            def read(self, size=-1):
+                sizes.append(size)
+                test.assertGreaterEqual(size, 0, 'configuration read must be bounded')
+                test.assertLessEqual(size, 1024 * 1024 + 1)
+                return super().read(size)
+        def growing_open(candidate, *args, **kwargs):
+            if candidate == path:
+                calls.append(True)
+                # Hash the original first; grow after integrity/stat prechecks.
+                if len(calls) == 2:
+                    return GrowingStream(b'x' * (1024 * 1024 + 1))
+            return open_file(candidate, *args, **kwargs)
+        with patch.object(Path, 'open', growing_open), \
+             self.assertRaises(self.module.MaintenanceError) as caught:
+            self.module.verify_backup(self.root)
+        self.assertIn('1 MiB', str(caught.exception))
+        self.assertEqual(sizes, [1024 * 1024 + 1])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_restore_configuration_reread_is_bounded_before_target_writes(self):
+        manifest = self.snapshot()
+        source = self.root
+        target = self.root/'target'
+        path = source/'.env'
+        data = CONFIG + b'#' + b'x' * (1024 * 1024)
+        path.write_bytes(data)
+        read_bytes = Path.read_bytes
+        def guarded_read(candidate):
+            if candidate == path:
+                raise AssertionError('unbounded restore reread reached')
+            return read_bytes(candidate)
+        # Simulate growth after a successful earlier restore preflight.
+        with patch.object(self.module, 'restore_inputs', return_value=(dict(image=IMAGE), manifest)), \
+             patch.object(self.module, 'verify_bundle', return_value=dict(image=IMAGE)), \
+             patch.object(self.module, 'write_private', side_effect=AssertionError('target write reached')), \
+             patch.object(self.module, 'create_restore_volume', side_effect=AssertionError('Docker mutation reached')), \
+             patch.object(Path, 'read_bytes', guarded_read), \
+             self.assertRaises(self.module.MaintenanceError) as caught:
+            self.module.restore(target, source)
+        self.assertIn('1 MiB', str(caught.exception))
+        self.assertFalse(target.exists())
+        self.assertEqual(path.read_bytes(), data)
 
     def test_backup_rejects_ambiguous_version_and_file_set(self):
         manifest = self.snapshot()
