@@ -30,6 +30,20 @@ bash run.sh
 
 ## 准备独立消费任务
 
+需要强制每次CI使用新目录时，可显式加 `--single-use`，仅支持consumer：
+
+```console
+python examples/team/prepare.py --role consumer --registry https://registry.example --single-use --output ../team-ci-once
+```
+
+私有CA仍按下文提供 `--ca-file`/`--ca-sha256`。运行前必须注入非空 `CJREPOMESH_SOURCE_BASELINE`，批准文件继续由外部独立审核；然后按原方式加载SDK、读取令牌和可信客户端，执行生成目录的 `bash run.sh`。默认不加此选项时保持原任务行为。
+
+此模式额外复制 `job.py`，将生成时仓库配置的实际字节SHA-256写入运行入口与workspace.json。CA/能力检查后、build前，守卫要求配置仍匹配、`.home`为普通空目录，cache、target、build、build-script-cache、lockfile、来源输出/临时文件及build.cj.bak均不存在，包括悬空链接。随后原子创建 `.cjrepomesh-job-started`；同一目录的正常并发启动最多一个进入构建。检查前置失败保留已有内容，不创建领取标记；一旦领取，成功、来源拒绝或编译/应用失败均保留标记和现场。
+
+不要删除标记或清缓存后重跑同一任务；用prepare选择另一个新目录。移动任务时复制完整目录并保持配置原字节。workspace.json仍不代表准备成功，最终run.sh只在所有准备步骤完成后生成；守卫复制失败也不会暴露运行入口。新功能属于新源码准备器及新生成任务，旧任务、客户端包和服务端包不会自动获得此模式。
+
+守卫防止正常CI误复用旧状态，不重新验证已解包缓存，也不固定全部源码/工具链或阻止恶意修改任务、环境及并发替换文件；不提供脚本沙箱、分布式租约或断电事务保证。自定义build.cj仍可能在主图拒绝前执行，并在本次命令内部生成缓存；来源准入仍按每次实际分析执行。
+
 ```console
 python examples/team/prepare.py --role consumer --registry http://127.0.0.1:8080 --output ../team-ci-job
 ```

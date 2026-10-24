@@ -23,3 +23,11 @@ public CA and empty additional trust directory before invoking any client,
 then sets only process-level SSL trust. Move the complete task directory;
 do not delete or modify its trust files. No system certificate is installed.
 The source baseline remains independently approved and is not generated here.
+
+For a fresh CI task that must run only once, prepare it with `--single-use`.
+The generated entry requires a nonempty main source baseline, checks its pinned
+repository configuration and empty task state, then atomically claims the task
+before building. The claim survives both success and failure. Preserve the old
+directory and prepare a new one for the next attempt; do not clear caches or
+delete the claim to reuse it. Ordinary prepared tasks retain their existing flow.
+This prevents accidental reuse, not hostile task edits or unpacked-cache tampering.

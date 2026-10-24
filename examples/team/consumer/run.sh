@@ -27,6 +27,7 @@ if [[ "${CJREPOMESH_SCRIPT_SOURCE_BASELINE+x}" ]]; then
         exit 2
     fi
 fi
+# Optional single-use admission is configured by prepare.py.
 "$CJREPOMESH_CJPM" build
 (
     unset CJREPO_READ_TOKEN CJREPO_PUBLISH_TOKEN

@@ -26,9 +26,11 @@ def safe_registry(value: str) -> bool:
 
 
 def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
-            ca_sha256: str | None = None) -> None:
+            ca_sha256: str | None = None, single_use: bool = False) -> None:
     if not safe_registry(registry):
         raise ValueError("registry must be a credential-free HTTP(S) base address")
+    if single_use and role != 'consumer':
+        raise ValueError('single-use mode is only supported for consumer tasks')
     try:
         output.lstat()
     except FileNotFoundError:
@@ -77,6 +79,15 @@ def prepare(role: str, registry: str, output: Path, ca_file: Path | None = None,
         config += 'token-env = "CJREPO_READ_TOKEN"\n'
         config += '[[route]]\nnamespace = "company::*"\nregistry = "internal"\nexclusive = true\n'
     (output / "cangjie-repo.toml").write_text(config, encoding="utf-8")
+    if single_use:
+        shutil.copyfile(Path(__file__).with_name('job.py'), output / 'job.py')
+        digest = hashlib.sha256((output / 'cangjie-repo.toml').read_bytes()).hexdigest()
+        marker = '# Optional single-use admission is configured by prepare.py.'
+        if script_text.count(marker) != 1:
+            raise ValueError('consumer template lacks its single-use insertion point')
+        script_text = script_text.replace(marker,
+            'if ! python3 "$PWD/job.py" --configuration-sha256 ' + digest + '; then\n    exit 2\nfi')
+        metadata['execution'] = dict(mode='single-use-cold-v1', configurationSha256=digest)
     (output / "workspace.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     pending_script = output / '.run.sh.tmp'
     pending_script.write_text(script_text, encoding='utf-8', newline='\n')
@@ -90,9 +101,10 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path, help="new standalone workspace")
     parser.add_argument('--ca-file', type=Path, help='optional approved public PEM CA for an HTTPS task; copied, never installed')
     parser.add_argument('--ca-sha256', help='optional independently approved SHA-256 of ca-file')
+    parser.add_argument('--single-use', action='store_true', help='consumer-only cold task; refuse previous state and permanently claim before build')
     args = parser.parse_args()
     try:
-        prepare(args.role, args.registry, args.output.absolute(), args.ca_file, args.ca_sha256)
+        prepare(args.role, args.registry, args.output.absolute(), args.ca_file, args.ca_sha256, args.single_use)
         print(f"Prepared {args.role} workspace; load your SDK environment and run bash run.sh there.")
         print("Credentials are referenced by environment variable only; none were read or written.")
         return 0
