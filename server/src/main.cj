@@ -261,6 +261,7 @@ main(): Int64 {
     let server = ServerBuilder()
         .addr(address)
         .port(configuredPort())
+        .maxRequestBodySize(maximumArtifactBytes() + MAX_PUBLISH_METADATA_BYTES + 10)
         .distributor(distributor)
         .build()
 

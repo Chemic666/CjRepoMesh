@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "integration-tests"))
 sys.path.insert(0, str(ROOT / "integration-tests/recovery"))
 from lib.harness import TestFailure, http_request as harness_http_request, publish_frame, wait_for_health, wait_for_ports_closed
 from docker_backup import archive_manifest
+import extended
 
 
 def http_request(method, url, *, headers=None, body=None, timeout=30):
@@ -55,16 +56,7 @@ def distribution(values: list[float]) -> dict:
 
 
 def fixture(number: int, version: int) -> dict:
-    name, ver = f"capacity_{number:03d}", f"1.0.{version}"
-    org = "benchcorp" if number % 2 else ""
-    body = hashlib.shake_256(f"CjRepoMesh capacity/{org}/{name}/{ver}".encode()).digest(256 * 1024)
-    checksum = hashlib.sha256(body).hexdigest()
-    index = dict(name=name, version=ver, organization=org, sha256sum=checksum, dependencies=[])
-    metadata = dict(name=name, version=ver, organization=org, index=index)
-    query = "?organization=" + org if org else ""
-    return dict(name=name, version=ver, organization=org, body=body, sha256=checksum, metadata=metadata,
-                publish=f"/pkg/{name}{query}", download=f"/pkg/{name}/{ver}{query}",
-                index=f"/index/{name[:2]}/{name[2:4]}/{name}{query}")
+    return extended.make_fixture(number, version)
 
 
 def select_item(items: list, sequence: int):
@@ -78,15 +70,20 @@ def main() -> int:
     parser.add_argument("--image", required=True, help="existing local Linux amd64 CjRepo server image")
     parser.add_argument("--evidence-dir", required=True, type=Path, help="new directory outside the source checkout")
     parser.add_argument("--read-operations", type=int, default=128, help="read pairs per comparison phase, 32..1024")
+    parser.add_argument("--large-fixtures", action="store_true", help="also check 16MiB artifacts and a near-4MiB index")
+    parser.add_argument("--soak-seconds", type=int, default=0, help="optional paced mixed load, 60..1800 seconds (0 disables)")
     args = parser.parse_args()
     if not 32 <= args.read_operations <= 1024:
         parser.error("read-operations must be between 32 and 1024")
+    if args.soak_seconds != 0 and not 60 <= args.soak_seconds <= 1800:
+        parser.error("soak-seconds must be 0 or between 60 and 1800")
     report = args.evidence_dir.resolve()
     if report == ROOT or ROOT in report.parents:
         parser.error("retain raw capacity evidence outside the source checkout")
     report.mkdir(parents=True, exist_ok=False)
     scope = "cjrepomesh-capacity-" + uuid.uuid4().hex
     label_key = "io.cjrepomesh.capacity-drill"
+    (report / 'scope.json').write_text(json.dumps(dict(labelKey=label_key, scope=scope))+'\n', encoding='utf-8')
     environment = {k: v for k, v in os.environ.items()
                    if not k.upper().startswith(("CJREPO_", "CJREPOMESH_", "COMPOSE_"))}
     environment.update(CJREPO_PUBLISH_TOKEN=secrets.token_hex(32), CJREPO_READ_TOKEN=secrets.token_hex(32))
@@ -96,6 +93,11 @@ def main() -> int:
         port = probe.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
     containers, volumes, phases, stages, cleanup_errors, peaks = [], [], [], [], [], []
+    total_stages = 10 + 2 * int(args.large_fixtures) + int(bool(args.soak_seconds))
+    index_hashes, complete_indexes, resource_samples = {}, {}, []
+    soak = dict(requestedSeconds=args.soak_seconds, intervalSeconds=5, rounds=0, elapsedSeconds=0)
+    large_details = {}
+    items = []
     runtime, error, success = {}, "", False
     started = time.monotonic()
     recorded_at = datetime.now(timezone.utc).isoformat()
@@ -112,7 +114,7 @@ def main() -> int:
 
     def passed(name, **facts):
         stages.append(dict(name=name, facts=facts))
-        print(f"PASS {len(stages)}/10 {name}", flush=True)
+        print(f"PASS {len(stages)}/{total_stages} {name}", flush=True)
 
     def request(path, token, body=None):
         response = http_request("POST" if body is not None else "GET", base + path,
@@ -136,7 +138,12 @@ def main() -> int:
         artifact = request(item["download"], environment["CJREPO_READ_TOKEN"])
         if index.status != 200 or artifact.status != 200:
             raise TestFailure(f"read returned {index.status}/{artifact.status}")
-        validate_index(index.body, item)
+        key = (item['organization'], item['name'])
+        if key in complete_indexes:
+            extended.validate_complete_index(index.body, complete_indexes[key])
+        else:
+            validate_index(index.body, item)
+        index_hashes[f"index/{item['organization'] or 'default'}/{item['name'][:2]}/{item['name'][2:4]}/{item['name']}"] = hashlib.sha256(index.body).hexdigest()
         if hashlib.sha256(artifact.body).hexdigest() != item["sha256"] or artifact.body != item["body"]:
             raise TestFailure("download or index differs from immutable source fixture")
         return [index.status, artifact.status], len(artifact.body), {k:item[k] for k in ("name", "version", "organization")}
@@ -206,13 +213,24 @@ def main() -> int:
         return archive_manifest(target)
 
     def runtime_sample(server):
+        info = inspect(server)
+        if info['State']['OOMKilled'] or not info['State']['Running'] or info['RestartCount']:
+            raise TestFailure('server exited, restarted or was OOM-killed during load')
+        host = info['HostConfig']
+        if (host['Memory'] != 1073741824 or host['NanoCpus'] != 2000000000 or host['PidsLimit'] != 256):
+            raise TestFailure('resource limits changed during load')
         result = subprocess.run(["docker", "exec", server, "cat", "/sys/fs/cgroup/memory.peak"],
                                 env=environment, capture_output=True, text=True, timeout=15)
         peak = int(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip().isdigit() else None
         peaks.append(peak)
         stats = json.loads(docker("stats", "--no-stream", "--format", "{{json .}}", server))
-        return dict(cgroupMemoryPeakBytes=peak,
-                    endSnapshot={key:stats.get(key) for key in ("CPUPerc", "MemUsage", "PIDs", "BlockIO", "NetIO")})
+        current = docker('exec', server, 'cat', '/sys/fs/cgroup/memory.current', '/sys/fs/cgroup/pids.current').decode().split()
+        sample = dict(elapsedSeconds=round(time.monotonic()-started, 2), cgroupMemoryPeakBytes=peak,
+                      cgroupMemoryCurrentBytes=int(current[0]), cgroupPidsCurrent=int(current[1]),
+                      endSnapshot={key:stats.get(key) for key in ("CPUPerc", "MemUsage", "PIDs", "BlockIO", "NetIO")})
+        resource_samples.append(sample)
+        (report / 'resources.json').write_text(json.dumps(resource_samples, indent=2)+'\n', encoding='utf-8')
+        return sample
 
     try:
         image_info = json.loads(docker("image", "inspect", args.image))[0]
@@ -264,6 +282,56 @@ def main() -> int:
         if request(items[0]["download"], "synthetic-invalid-read").status != 401:
             raise TestFailure("invalid read token unexpectedly succeeded")
         passed("mixed-reads-and-rejected-publishes-preserve-authentication")
+        if args.large_fixtures:
+            large = extended.large_fixtures()
+            batch('publish-16MiB-artifacts', 1, len(large), lambda n: publish(large[n]), 'send')
+            items.extend(large)
+            index_items = extended.index_fixtures()
+            batch('grow-near-4MiB-index', 1, 63, lambda n: publish(index_items[n]), 'send')
+            complete_indexes[(index_items[0]['organization'], index_items[0]['name'])] = index_items[:63]
+            items.extend(index_items[:63])
+            batch('read-large-artifacts', 2, 8, lambda n: read(large[n % 4]), 'receive')
+            batch('read-near-limit-index', 2, 4, lambda n: read(index_items[n]), 'receive')
+            index_before = request(index_items[0]['index'], environment['CJREPO_READ_TOKEN']).body
+            if not 3.9 * 1048576 < len(index_before) <= 4 * 1048576:
+                raise TestFailure('large index did not approach the default 4MiB byte limit')
+            large_details = dict(artifactBytes=16*1048576, artifactVersions=4,
+                                 indexBytes=len(index_before), indexVersions=63, rejectedVersion=index_items[-1]['version'])
+            passed('large-artifacts-and-near-limit-index-verified', **large_details)
+            batch('reject-next-large-index-version', 1, 1, lambda n: publish(index_items[-1], expected=413), 'send')
+            if request(index_items[0]['index'], environment['CJREPO_READ_TOKEN']).body != index_before:
+                raise TestFailure('oversized-index rejection changed existing bytes')
+            if request(index_items[-1]['download'], environment['CJREPO_READ_TOKEN']).status != 404:
+                raise TestFailure('oversized-index rejection left a visible artifact')
+            passed('cumulative-index-limit-rejection-preserves-existing-storage')
+        if args.soak_seconds:
+            soak_start = time.monotonic()
+            stream = []
+            last_resource = float('-inf')
+            for number in extended.paced_rounds(args.soak_seconds):
+                item = extended.stream_fixture(number)
+                batch(f'soak-{number:03d}-publish', 1, 1, lambda n: publish(item), 'send')
+                stream.append(item)
+                complete_indexes[(item['organization'], item['name'])] = stream
+                items.append(item)
+                selected = [large[number % 4] if args.large_fixtures else items[number % 256],
+                            index_items[number % 63] if args.large_fixtures else items[(number+1) % 256],
+                            item, items[(number*4) % 256], items[(number*4+1) % 256], items[(number*4+2) % 256]]
+                def mixed(n):
+                    if n == 6:
+                        return publish(items[number % 256], expected=409)
+                    if n == 7:
+                        return publish(item, expected=401, token='synthetic-invalid-publish')
+                    return read(selected[n])
+                batch(f'soak-{number:03d}-mixed', 8, 8, mixed, 'mixed')
+                soak['rounds'] = number+1
+                if time.monotonic() - last_resource >= 30:
+                    runtime_sample(server)
+                    last_resource = time.monotonic()
+            soak['elapsedSeconds'] = round(time.monotonic()-soak_start, 2)
+            if soak['elapsedSeconds'] < args.soak_seconds or not soak['rounds']:
+                raise TestFailure('soak did not run for its requested duration')
+            passed('paced-mixed-soak-completed-without-invalid-operations', **soak)
         batch("verify-all-before-restart", 8, len(items), lambda n: read(items[n]), "receive")
         runtime["beforeRestart"] = runtime_sample(server)
         passed("every-published-version-and-index-verified-after-load")
@@ -271,11 +339,9 @@ def main() -> int:
         save_log(server, "server-before-restart")
         wait_for_ports_closed((port,))
         first = snapshot(image, volume, report / "after-load.tar")
-        if len(first) != 320:
-            raise TestFailure("stored file set differs from 64 indexes and 256 artifacts")
         expected_artifacts = {f"artifacts/{item['organization'] or 'default'}/{item['name']}/{item['version']}/{item['name']}-{item['version']}.cjp":item["sha256"] for item in items}
-        if any(first.get(key) != value for key, value in expected_artifacts.items()):
-            raise TestFailure("persisted artifact digest differs from synthetic source")
+        if first != dict(expected_artifacts, **index_hashes):
+            raise TestFailure("persisted exact file set or artifact/index digest differs from verified source")
         (report / "storage-manifest.json").write_text(json.dumps(first, indent=2) + "\n")
         passed("stopped-storage-file-set-and-all-artifact-hashes-verified", files=len(first))
         docker("start", server)
@@ -292,7 +358,7 @@ def main() -> int:
             raise TestFailure("server was OOM-killed or remains running")
         runtime["availableCgroupPeakBytes"] = max((v for v in peaks if v is not None), default=None)
         passed("restart-preserves-entire-storage-without-observed-oom")
-        success = len(stages) == 10
+        success = len(stages) == total_stages
     except (TestFailure, OSError, ValueError, KeyError, TypeError, tarfile.TarError, subprocess.SubprocessError) as failure:
         error = str(failure) or type(failure).__name__
         print("FAIL capacity workload: " + error, flush=True)
@@ -320,12 +386,16 @@ def main() -> int:
                 except (TestFailure, OSError, ValueError, KeyError, subprocess.SubprocessError) as failure:
                     cleanup_errors.append(str(failure))
         success = success and not cleanup_errors
-        summary = dict(success=success,passed=len(stages),total=10,seconds=round(time.monotonic()-started,2),
+        summary = dict(success=success,passed=len(stages),total=total_stages,seconds=round(time.monotonic()-started,2),
                        recordedAtUtc=recorded_at,scope=scope,runtime=runtime,stages=stages,error=error,
                        cleanup_errors=cleanup_errors,retained_volumes=volumes if not success else [],
                        runnerSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                       extendedSha256=hashlib.sha256(Path(extended.__file__).read_bytes()).hexdigest(),
+                       soak=soak,largeFixtures=large_details,resourceSamples=len(resource_samples),
                        workload=dict(packageSteps=[1,16,64],versionsPerPackage=4,artifactBytes=262144,
-                                     totalArtifactBytes=67108864,readOperationsPerComparison=args.read_operations,
+                                     baseArtifactBytes=67108864,totalArtifactBytes=sum(len(item['body']) for item in items),
+                                     finalVersions=len(items),finalPackages=len({(item['organization'],item['name']) for item in items}),
+                                     readOperationsPerComparison=args.read_operations,
                                      syntheticProtocolBytes=True),
                        phaseSummary=[{k:v for k,v in phase.items() if k != "samples"} for phase in phases],
                        limits=["One bounded local Docker Desktop workload; no saturation search, SLA or user-count estimate.",
@@ -335,7 +405,7 @@ def main() -> int:
                                "Cgroup memory peak is reported only if available; end CPU/memory snapshots are not sampled peaks.",
                                "No Windows Cangjie, downloads, installations, production data or network policy changes."])
         (report / "summary.json").write_text(json.dumps(summary,indent=2)+"\n",encoding="utf-8")
-    print(f"Capacity workload: {len(stages)}/10; success={success}; report: {report}",flush=True)
+    print(f"Capacity workload: {len(stages)}/{total_stages}; success={success}; report: {report}",flush=True)
     return int(not success)
 
 

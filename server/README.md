@@ -38,6 +38,8 @@ storage/
 └── artifacts/<default 或组织名>/<包名>/<版本>/<包名>-<版本>.cjp
 ```
 
+HTTP监听器的请求体上限与既有发布帧上限一致：`CJREPO_MAX_ARTIFACT_BYTES + 1MiB元数据 + 10字节帧头`。应用层继续校验实际制品/元数据长度及发布准入；该配置不是预分配内存或并发内存保证。此前fa00/f640服务未显式设置HTTP层上限，Content-Length大包可能先被stdx默认上限拒绝；仅调整应用环境变量不能修复旧二进制。
+
 当前兼容的 cjpm 请求：
 
 ```text
