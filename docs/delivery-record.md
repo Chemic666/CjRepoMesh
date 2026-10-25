@@ -1,5 +1,13 @@
 # CjRepoMesh 交付记录
 
+## 2026-10-25 Hosted累计索引限制及63ce服务端交付
+
+新增默认4MiB、可配置1–64MiB的每组织/包Hosted发布累计索引字节上限；旧索引流式有界读取、锁内提前检查追加，超限413保留数据，冲突409及索引满额的已登记缺失制品恢复保持。新Linux amd64服务端SHA-256 `63ceef8457681f242a8d4ce46dd20520037826d4bba23c12f3ebae76799decbf`，新镜像`sha256:33485928004ce06cf2a81f2dfc3226ecd479cf639817dc85353a2ca017682cf8`。九文件服务端归档`CjRepoMesh-server-linux-amd64-33485928004c-hosted-index.zip`，42,396,013字节，SHA-256 `b362f79d207b8eae7862307d07e950e8ae055729a589d177ad839c45c7af04b8`，清单SHA-256 `6bd70718fe9b85aaecbb605380ba57b7a7d6edeb3c8427c388aada25a2915145`。现有5dd187b5客户端及21文件团队包不重建。保留十份旧归档（九份已固定及此前未发布的038审查候选）、旧包、旧8fc3二进制/bad0镜像和原失败证据。
+
+原生新17项、原有效载荷24项、Hosted恢复23项及固定5dd/新63ce四组核心（156.23s）通过；新镜像绑定二进制并完成Docker索引专项2/2。完整新双包分别新执行接收团队33/33、冷恢复23/23、多来源预检18/18和指定bad0→3348升级回退22/22，均清理无错误，范围与时长见[本轮验证](verification-report.md#2026-10-25-hosted累计索引限制与新服务端交付)。维护Python字节未变，旧88项保持独立历史；不移算旧镜像/包结果。
+
+202编译/测试输入及57打包输入分别冻结，README后续说明更新单独绑定，旧产物、SDK/工具/夹具及失败/批准保持。源码外两个hosted-index证据目录保留全量日志与新归档；公开Git仅提交相关Cj实现、HTTP专项、包内说明及既有记录。按持续授权普通双端main提交推送、独立同树noreply镜像，实际状态以回读为准；不推origin、不强推、不建PR/Release。容量、跨物理主机、生产轮换、Windows仓颉和完整Maple仍未验证。
+
 ## 2026-10-25 快照装入只读预检交付
 
 新增seed --check-only纯JSON本地预检，复用普通导入的本地输入规则，普通部署/导入仍默认并显式校验Docker；能力声明验证保持旧包兼容。现有打包器将此功能纳入新九文件归档`CjRepoMesh-server-linux-amd64-bad02ad70507-seed-preflight-final.zip`，38,397,588字节，SHA-256 `ce6367f926b8c73157bcebbc417215d4c2cd7f38d19cb1f59a191b3a7e2f9eff`，清单SHA-256 `e34a2bbb85ba9265bec889ac2771850c1e6af395af9833cddd0335751761f270`。声明`snapshotSeedPreflight=offline-inputs-v1`，保留原维护/恢复预检/多来源能力；未知声明及缺少快照/维护/CA配套能力拒绝，旧包无新声明仍保留原功能。固定镜像bad02ad7、服务端8fc30842及客户端5dd187b5不重建，旧包、八份旧固定归档及审查候选保留。

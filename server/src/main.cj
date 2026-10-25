@@ -218,6 +218,7 @@ main(): Int64 {
         let _ = outboundConnectTimeoutSeconds()
         let _ = maximumArtifactBytes()
         let _ = maximumIndexBytes()
+        let _ = maximumHostedIndexBytes()
     } catch (e: Exception) {
         eprintln("Error: ${e.message}")
         return 2

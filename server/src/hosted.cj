@@ -119,13 +119,14 @@ class PublishHandler <: HttpRequestHandler {
             let indexPath = indexDir.join(name)
 
             let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
+            let hostedIndexLimit = maximumHostedIndexBytes()
             var duplicate = false
             var recovered = false
             synchronized(packageStorageLock(storage, storageOrganization, name)) {
                 // Recheck while holding the lock so concurrent publishes cannot
                 // interleave records or race another retry repairing crash state.
                 let previousIndex = if (exists(indexPath)) {
-                    String.fromUtf8(File.readFrom(indexPath))
+                    readHostedIndex(indexPath, hostedIndexLimit)
                 } else {
                     ""
                 }
@@ -148,17 +149,21 @@ class PublishHandler <: HttpRequestHandler {
                     if (toHexString(storedDigest.finish()) != expectedChecksum) {
                         duplicate = true
                     } else {
+                        let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
                         ensureParent(indexPath)
-                        writeFileAtomically(indexPath, appendHostedIndex(previousIndex, indexLine))
+                        writeFileAtomically(indexPath, nextIndex)
                         recovered = true
                     }
                 } else {
+                    // Refuse an over-capacity append before creating parents or
+                    // writing a new artifact that would otherwise need rollback.
+                    let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
                     ensureParent(artifactPath)
                     ensureParent(indexPath)
 
                     writeFileAtomically(artifactPath, payload.artifact)
                     try {
-                        writeFileAtomically(indexPath, appendHostedIndex(previousIndex, indexLine))
+                        writeFileAtomically(indexPath, nextIndex)
                     } catch (e: Exception) {
                         removeIfExists(artifactPath)
                         throw e
@@ -177,6 +182,8 @@ class PublishHandler <: HttpRequestHandler {
                 .status(200)
                 .header("Content-Type", "application/json; charset=utf-8")
                 .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
+        } catch (e: HostedIndexTooLargeException) {
+            respondError(context, 413, e.message)
         } catch (e: PayloadTooLargeException) {
             respondError(context, 413, e.message)
         } catch (e: Exception) {
@@ -185,8 +192,25 @@ class PublishHandler <: HttpRequestHandler {
     }
 }
 
-private func appendHostedIndex(previous: String, line: String): Array<UInt8> {
+private func readHostedIndex(path: Path, limit: Int64): String {
+    let bytes = ArrayList<UInt8>()
+    try (file = File(path, Read)) {
+        while (true) {
+            let remaining = limit - bytes.size
+            let chunkSize = if (remaining < 64 * 1024) { remaining + 1 } else { 64 * 1024 }
+            let buffer = Array<UInt8>(chunkSize, repeat: 0)
+            let count = file.read(buffer)
+            if (count == 0) { break }
+            ensureHostedIndexFits(bytes.size, count, limit)
+            bytes.add(all: buffer[..count])
+        }
+    }
+    return String.fromUtf8(bytes.toArray())
+}
+
+private func appendHostedIndex(previous: String, line: String, limit: Int64): Array<UInt8> {
     let separator = if (previous.isEmpty() || previous.endsWith("\n")) { "" } else { "\n" }
+    ensureHostedIndexFits(previous.toArray().size, separator.size + line.toArray().size + 1, limit)
     return "${previous}${separator}${line}\n".toArray()
 }
 
