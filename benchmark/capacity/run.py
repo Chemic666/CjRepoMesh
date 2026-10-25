@@ -252,8 +252,10 @@ def main() -> int:
             passed(f"growth-{package_count}-packages-four-versions-integrity-checked",
                    artifacts=len(items), artifactBytes=len(items)*256*1024)
             current = package_count
-        batch("immutable-duplicate-rejection", 16, 32, lambda n: publish(items[n], expected=409), "send")
-        batch("immutable-conflict-rejection", 16, 32,
+        # Keep immutable-write checks within the default eight publish slots.
+        # Admission overload is a separate429 scenario, not a duplicate409.
+        batch("immutable-duplicate-rejection", 8, 32, lambda n: publish(items[n], expected=409), "send")
+        batch("immutable-conflict-rejection", 8, 32,
               lambda n: publish(items[n], expected=409, conflict=True), "send")
         passed("concurrent-duplicate-and-conflicting-publications-rejected")
         batch("mixed-read-and-invalid-publish", 8, args.read_operations,
