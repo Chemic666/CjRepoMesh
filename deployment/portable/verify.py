@@ -18,6 +18,17 @@ MAINTENANCE_FILES = LEGACY_FILES | {"maintenance.py"}
 FILES = MAINTENANCE_FILES | {"snapshot.py"}
 
 
+MAX_MANIFEST_BYTES = 1024 * 1024
+
+
+def read_manifest(path: Path):
+    with path.open('rb') as stream:
+        data = stream.read(MAX_MANIFEST_BYTES + 1)
+    if len(data) > MAX_MANIFEST_BYTES:
+        raise ValueError('manifest exceeds byte limit')
+    return json.loads(data.decode('utf-8'))
+
+
 def digest(path: Path) -> str:
     result = hashlib.sha256()
     with path.open("rb") as stream:
@@ -41,7 +52,7 @@ def docker(*arguments: str, timeout: int = 120) -> str:
 def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
     if not regular_file(root / "manifest.json"):
         raise ValueError("manifest must be a regular file")
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(root / "manifest.json")
     if not isinstance(manifest, dict):
         raise ValueError("bundle manifest must be an object")
     if type(manifest.get("formatVersion")) is not int or manifest["formatVersion"] != 1:

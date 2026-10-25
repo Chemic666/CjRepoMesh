@@ -18,6 +18,17 @@ TEAM_FILES |= {'team/' + role + '/' + name for role in ('publisher', 'consumer')
 TEAM_FILES |= {'team/consumer/src/main.cj', 'team/publisher/src/teamhello.cj'}
 
 
+MAX_MANIFEST_BYTES = 1024 * 1024
+
+
+def read_manifest(path: Path):
+    with path.open('rb') as stream:
+        data = stream.read(MAX_MANIFEST_BYTES + 1)
+    if len(data) > MAX_MANIFEST_BYTES:
+        raise ValueError('manifest exceeds byte limit')
+    return json.loads(data.decode('utf-8'))
+
+
 def digest(path: Path) -> str:
     result = hashlib.sha256()
     with path.open('rb') as stream:
@@ -43,7 +54,7 @@ def require_elf(path: Path) -> None:
 def verify_bundle(root: Path) -> dict:
     if not regular(root / 'lib', directory=True): raise ValueError('lib must be a regular directory')
     if not regular(root / 'manifest.json'): raise ValueError('manifest must be a regular file')
-    manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+    manifest = read_manifest(root / 'manifest.json')
     if not isinstance(manifest, dict): raise ValueError('manifest must be an object')
     if type(manifest.get('formatVersion')) is not int or manifest['formatVersion'] != 1:
         raise ValueError('unsupported client manifest version')
