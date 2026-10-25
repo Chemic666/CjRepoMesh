@@ -11,8 +11,12 @@ from pathlib import Path, PurePosixPath
 import re
 import secrets
 import subprocess
+import sys
 import tarfile
 from urllib.parse import urlsplit
+
+# Read-only CLI operations must not create import caches in the delivery directory.
+sys.dont_write_bytecode = True
 
 from maintenance import (MaintenanceError, archive_manifest, create_restore_volume, deployment,
                          helper, image_identity, ordinary_directory, private_file, require_absent,
@@ -21,6 +25,7 @@ from verify import digest, regular_file, verify_bundle
 
 CAPABILITY = 'approved-set-v1'
 SET_CAPABILITY = 'approved-origins-v2'
+SEED_CHECK_CAPABILITY = 'offline-inputs-v1'
 SHA256 = r'[a-f0-9]{64}'
 SEGMENT = r'[A-Za-z0-9][A-Za-z0-9._+-]*'
 
@@ -335,7 +340,7 @@ def verify_set(root: Path, baseline: Path) -> dict:
     return value
 
 
-def seed(root: Path, source: Path, baseline: Path) -> dict:
+def seed_inputs(root: Path, source: Path, baseline: Path, *, check_docker: bool) -> tuple:
     # Invalid input is rejected before any Docker invocation or target mutation.
     value = verify_snapshot(source, baseline)
     require_absent(root/'snapshot-import.json')
@@ -346,9 +351,26 @@ def seed(root: Path, source: Path, baseline: Path) -> dict:
         raise SnapshotError('target bundle does not support approved dependency snapshots')
     if manifest['image'] != value['image']:
         raise SnapshotError('snapshot seed requires the exact exported image and server identity')
-    _, configuration, values, _ = deployment(root)
+    _, configuration, values, _ = deployment(root, check_docker=check_docker)
     if values.get('CJREPO_UPSTREAM') or values.get('CJREPO_UPSTREAM_TOKEN'):
         raise SnapshotError('snapshot seed requires a new Hosted configuration without an upstream')
+    return manifest, value, configuration, values
+
+
+def check_seed(root: Path, source: Path, baseline: Path) -> dict:
+    """Inspect local inputs only; never contact Docker or modify a target."""
+    manifest, value, _, _ = seed_inputs(root, source, baseline, check_docker=False)
+    if manifest.get('snapshotSeedPreflight') != SEED_CHECK_CAPABILITY:
+        raise SnapshotError('target bundle does not declare offline snapshot seed preflight')
+    return dict(formatVersion=1, kind='cjrepomesh-snapshot-seed-input-check', inputChecksPassed=True,
+        imageId=manifest['image']['id'], serverSha256=manifest['image']['serverSha256'],
+        storageFiles=len(value['storage']['files']),
+        storageBytes=sum(item['bytes'] for item in value['storage']['files'].values()),
+        dockerChecked=False, targetModified=False, serviceStarted=False)
+
+
+def seed(root: Path, source: Path, baseline: Path) -> dict:
+    manifest, value, configuration, values = seed_inputs(root, source, baseline, check_docker=True)
     project, operation = values['COMPOSE_PROJECT_NAME'], secrets.token_hex(16)
     volume = create_restore_volume(manifest['image'], project, operation)
     require_stopped(volume)
@@ -387,6 +409,8 @@ def main() -> int:
     verify_group.add_argument('--snapshot-set', type=Path, required=True)
     for name in ('verify', 'seed'):
         commands.add_parser(name).add_argument('--snapshot', type=Path, required=True)
+    commands.choices['seed'].add_argument('--check-only', action='store_true',
+        help='validate local inputs without Docker or target writes; does not establish runtime readiness')
     for command in (export, export_group, verify_group, *[commands.choices[name] for name in ('verify', 'seed')]):
         command.add_argument('--baseline', type=Path, required=True, help='external independently approved file')
     args = parser.parse_args()
@@ -407,6 +431,10 @@ def main() -> int:
             verify_snapshot(args.snapshot.absolute(), args.baseline.absolute())
             print('PASS: snapshot matches the external approval and selected artifact hashes')
         else:
+            if args.check_only:
+                result = check_seed(Path(__file__).absolute().parent, args.snapshot.absolute(), args.baseline.absolute())
+                print(json.dumps(result, indent=2))
+                return 0
             result = seed(Path(__file__).absolute().parent, args.snapshot.absolute(), args.baseline.absolute())
             print('PASS: snapshot seeded to new project volume ' + result['project'] + '; service remains stopped')
         print('Integrity does not authenticate publishers or certify a build; verify a protected cold build before use.')

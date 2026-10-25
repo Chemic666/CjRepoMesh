@@ -54,6 +54,12 @@ def verify_bundle(root: Path, *, check_docker: bool = False) -> dict:
         raise ValueError('unsupported bundle restore preflight capability')
     if manifest.get('restorePreflight') is not None and manifest.get('maintenance') != 'cold-backup-v1':
         raise ValueError('restore preflight requires the maintenance capability')
+    if manifest.get('snapshotSeedPreflight') not in (None, 'offline-inputs-v1'):
+        raise ValueError('unsupported snapshot seed preflight capability')
+    if manifest.get('snapshotSeedPreflight') is not None and (
+            manifest.get('dependencySnapshot') not in ('approved-set-v1', 'approved-origins-v2') or
+            manifest.get('maintenance') != 'cold-backup-v1' or manifest.get('caConfiguration') != 'pem-directory-v1'):
+        raise ValueError('snapshot seed preflight requires snapshot, maintenance and CA configuration capabilities')
     if manifest.get('dependencySnapshot') not in (None, 'approved-set-v1', 'approved-origins-v2'):
         raise ValueError('unsupported bundle dependency snapshot capability')
     if manifest.get('dependencySnapshot') in ('approved-set-v1', 'approved-origins-v2'):

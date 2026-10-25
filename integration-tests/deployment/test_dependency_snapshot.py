@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import runpy
 import shutil
@@ -14,7 +15,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SOURCE = Path(__file__).resolve().parents[2] / 'deployment/portable'
 IMAGE = dict(id='sha256:' + 'a'*64, tag='cjrepomesh-portable:sha256-' + 'a'*64,
@@ -283,6 +284,121 @@ class DependencySnapshotTests(unittest.TestCase):
         self.assertEqual(value, json.loads((target/'snapshot-import.json').read_text()))
         self.assertFalse(value['serviceStarted'])
         self.assertEqual([], list(target.glob('snapshot-check-*.tar')))
+
+    def configured_seed_bundle(self):
+        target = self.root/'target'; target.mkdir()
+        names = {'image.tar', 'compose.yaml', 'configure.py', 'verify.py', 'maintenance.py',
+                 'snapshot.py', 'README.md', 'LICENSE'}
+        for name in names:
+            source = SOURCE/name
+            if source.is_file():
+                shutil.copyfile(source, target/name)
+            else:
+                (target/name).write_bytes(b'synthetic-offline-bundle')
+        manifest = dict(formatVersion=1, image=IMAGE, caConfiguration='pem-directory-v1',
+            maintenance='cold-backup-v1', dependencySnapshot='approved-origins-v2',
+            snapshotSeedPreflight='offline-inputs-v1', files={name: dict(bytes=(target/name).stat().st_size,
+                sha256=hashlib.sha256((target/name).read_bytes()).hexdigest()) for name in names})
+        (target/'manifest.json').write_text(json.dumps(manifest))
+        (target/'.env').write_bytes(CONFIG); (target/'trust').mkdir()
+        return target, manifest
+
+    def check_seed(self, target):
+        self.assertTrue(callable(getattr(self.module, 'check_seed', None)),
+                        'offline snapshot seed preflight is not implemented')
+        with patch.object(subprocess, 'run', side_effect=AssertionError('offline preflight contacted Docker')), patch.object(
+                self.module, 'write_private', side_effect=AssertionError('offline preflight wrote target')), patch.object(
+                self.module, 'create_restore_volume', side_effect=AssertionError('offline preflight created volume')):
+            return self.module.check_seed(target, self.output, self.approval)
+
+    def test_seed_preflight_checks_inputs_without_docker_or_target_write(self):
+        self.export(); target, _ = self.configured_seed_bundle()
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        paths = sorted(path.relative_to(self.root).as_posix() for path in self.root.rglob('*'))
+        value = self.check_seed(target)
+        self.assertEqual('cjrepomesh-snapshot-seed-input-check', value['kind'])
+        self.assertTrue(value['inputChecksPassed'])
+        self.assertEqual(IMAGE['id'], value['imageId'])
+        self.assertEqual(4, value['storageFiles'])
+        self.assertTrue(all(value[key] is False for key in ('dockerChecked', 'targetModified', 'serviceStarted')))
+        self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+        self.assertEqual(paths, sorted(path.relative_to(self.root).as_posix() for path in self.root.rglob('*')))
+        for secret in ('private-read-not-for-snapshot', 'private-write-not-for-snapshot', REGISTRY, PROJECT):
+            self.assertNotIn(secret, json.dumps(value))
+
+    def test_seed_preflight_refuses_invalid_or_oversized_configuration_without_mutation(self):
+        self.export(); target, _ = self.configured_seed_bundle()
+        for data in (CONFIG + b'#' + b'x'*(1024*1024), CONFIG + b'CJREPO_READ_TOKEN=duplicate\n',
+                     CONFIG + b'CJREPO_UPSTREAM=https://private.example\n', b'\xff'):
+            with self.subTest(size=len(data)):
+                (target/'.env').write_bytes(data)
+                with self.assertRaises(ValueError): self.check_seed(target)
+                self.assertEqual(data, (target/'.env').read_bytes())
+                self.assertFalse((target/'snapshot-import.json').exists())
+
+    def test_seed_preflight_refuses_existing_import_and_invalid_trust(self):
+        self.export(); target, _ = self.configured_seed_bundle()
+        marker = target/'snapshot-import.json'; marker.write_bytes(b'keep-owned-import')
+        with self.assertRaises(ValueError): self.check_seed(target)
+        self.assertEqual(b'keep-owned-import', marker.read_bytes())
+        marker.unlink(); (target/'trust/unapproved').write_bytes(b'keep-unexpected-file')
+        with self.assertRaises(ValueError): self.check_seed(target)
+        self.assertEqual(b'keep-unexpected-file', (target/'trust/unapproved').read_bytes())
+
+    def test_seed_preflight_refuses_bad_capability_and_wrong_image(self):
+        self.export(); target, manifest = self.configured_seed_bundle()
+        for changed in ({'snapshotSeedPreflight': None}, {'snapshotSeedPreflight': 'unknown'},
+                        {'image': dict(IMAGE, id='sha256:'+'c'*64, tag='cjrepomesh-portable:sha256-'+'c'*64)}):
+            value = dict(manifest, **changed); (target/'manifest.json').write_text(json.dumps(value))
+            with self.assertRaises(ValueError): self.check_seed(target)
+            self.assertEqual(value, json.loads((target/'manifest.json').read_text()))
+            self.assertEqual(CONFIG, (target/'.env').read_bytes())
+
+    def test_seed_preflight_refuses_corruption_and_external_approval_drift(self):
+        self.export(); target, _ = self.configured_seed_bundle()
+        data = (self.output/'data.tar').read_bytes()
+        (self.output/'data.tar').write_bytes(b'corrupt')
+        with self.assertRaises(ValueError): self.check_seed(target)
+        self.assertEqual(b'corrupt', (self.output/'data.tar').read_bytes())
+        (self.output/'data.tar').write_bytes(data)
+        approved = self.approval.read_bytes()+b'\n'; self.approval.write_bytes(approved)
+        with self.assertRaises(ValueError): self.check_seed(target)
+        self.assertEqual(approved, self.approval.read_bytes())
+        self.assertEqual(CONFIG, (target/'.env').read_bytes())
+
+    def test_seed_preflight_manifest_requires_snapshot_and_maintenance(self):
+        target, manifest = self.configured_seed_bundle()
+        self.assertEqual(manifest, self.module.verify_bundle(target))
+        for changed in ({'snapshotSeedPreflight': 'unknown'}, {'dependencySnapshot': None}, {'maintenance': None}):
+            value = dict(manifest, **changed); (target/'manifest.json').write_text(json.dumps(value))
+            with self.assertRaises(ValueError): self.module.verify_bundle(target)
+
+    def test_deployment_keeps_docker_validation_default_and_supports_explicit_offline_mode(self):
+        target, manifest = self.configured_seed_bundle()
+        verify = Mock(return_value=manifest)
+        with patch.dict(self.module.deployment.__globals__, verify_bundle=verify):
+            self.module.deployment(target)
+            verify.assert_called_once_with(target, check_docker=True)
+            verify.reset_mock()
+            self.module.deployment(target, check_docker=False)
+            verify.assert_called_once_with(target, check_docker=False)
+
+    def test_seed_preflight_cli_emits_only_json_without_docker_or_secret_output(self):
+        self.export(); target, _ = self.configured_seed_bundle()
+        env = dict(PATH='', HOME=str(self.root), USERPROFILE=str(self.root))
+        if os.name == 'nt': env['SystemRoot'] = os.environ['SystemRoot']
+        entries = sorted(path.relative_to(target).as_posix() for path in target.rglob('*'))
+        command = [sys.executable, target/'snapshot.py', 'seed', '--snapshot', self.output,
+                   '--baseline', self.approval, '--check-only']
+        result = subprocess.run(list(map(str, command)), env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(0, result.returncode, result.stdout+result.stderr)
+        value = json.loads(result.stdout)
+        self.assertTrue(value['inputChecksPassed']); self.assertFalse(value['dockerChecked'])
+        for secret in ('private-read-not-for-snapshot', 'private-write-not-for-snapshot', str(target), REGISTRY):
+            self.assertNotIn(secret, result.stdout+result.stderr)
+        self.assertEqual(CONFIG, (target/'.env').read_bytes())
+        self.assertFalse((target/'snapshot-import.json').exists())
+        self.assertEqual(entries, sorted(path.relative_to(target).as_posix() for path in target.rglob('*')))
 
     def test_cli_diagnostic_does_not_echo_sensitive_input(self):
         nonce = 'private-diagnostic-marker'; self.approval.write_text(nonce)

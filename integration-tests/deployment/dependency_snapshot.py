@@ -66,6 +66,7 @@ def main():
     parser.add_argument('--package-dir', type=Path, action='append', required=True,
         help='four existing real package dirs: meshdep 1/2, company::baselineparent and company::teamhello')
     parser.add_argument('--multi-origin', action='store_true', help='exercise full-approval origin snapshots and cross-origin consumption')
+    parser.add_argument('--seed-preflight', action='store_true', help='also check offline seed inputs with Docker unavailable')
     parser.add_argument('--alternate-package-dir', type=Path, help='another real meshdep1 CJP with different SHA; required in multi-origin mode')
     parser.add_argument('--legacy-bundle', type=Path, help='genuine unconfigured approved-set-v1 bundle; required in multi-origin mode')
     args = parser.parse_args()
@@ -74,6 +75,8 @@ def main():
     report.mkdir(parents=True, exist_ok=False)
     server = runpy.run_path(str(source/'deployment/portable/verify.py'))['verify_bundle'](bundle)
     client = runpy.run_path(str(source/'deployment/client/verify.py'))['verify_bundle'](args.client_bundle)
+    if args.seed_preflight and server.get('snapshotSeedPreflight') != 'offline-inputs-v1':
+        parser.error('seed preflight mode requires a bundle declaring offline snapshot seed checks')
     if (server.get('dependencySnapshot') not in ('approved-set-v1', 'approved-origins-v2') or (bundle/'.env').exists() or
             not (args.native/'bin/python3').is_file() or not (args.client_sdk/'envsetup.sh').is_file()):
         parser.error('verified unconfigured snapshot bundle and existing native tools/SDK required')
@@ -107,7 +110,7 @@ def main():
     image = server['image']['id']
     started = time.monotonic()
     stages, projects, jobs, networks, hidden, cleanup = [], [], [], [], [], []
-    total = 16 if args.multi_origin else 12
+    total = (16 if args.multi_origin else 12) + (2 if args.seed_preflight else 0)
     isolations = {}
     failure = ''
     proof = 'cjrepomesh-snapshot-'+uuid.uuid4().hex
@@ -120,6 +123,23 @@ def main():
     def run(label, arguments, *, directory=report, success=True, log=True, timeout=120, created=None):
         return run_recorded(label, arguments, directory=directory, report=report, environment=environment,
                             hidden=hidden, success=success, log=log, timeout=timeout, created=created)
+
+    def offline_seed_check(label, target, snap, approved_file, *, success=True):
+        before = fingerprint(target), sorted(path.relative_to(target).as_posix() for path in target.rglob('*'))
+        snapshots, approved_bytes = fingerprint(snap), approved_file.read_bytes()
+        offline = dict(environment, PATH='', DOCKER_HOST='offline-preflight-no-docker')
+        offline.pop('PYTHONDONTWRITEBYTECODE', None)
+        output = run_recorded(label, snapshot_command(target, 'seed', '--snapshot', snap,
+            '--baseline', approved_file, '--check-only'), directory=target, report=report,
+            environment=offline, hidden=hidden, success=success)
+        assert before == (fingerprint(target), sorted(path.relative_to(target).as_posix() for path in target.rglob('*')))
+        assert snapshots == fingerprint(snap) and approved_bytes == approved_file.read_bytes()
+        if success:
+            checked = json.loads(output)
+            assert checked['kind'] == 'cjrepomesh-snapshot-seed-input-check' and checked['inputChecksPassed']
+            assert not any(checked[key] for key in ('dockerChecked', 'targetModified', 'serviceStarted'))
+            assert checked['imageId'] == server['image']['id'] and checked['serverSha256'] == server['image']['serverSha256']
+            assert checked['storageFiles'] > 0 and checked['storageBytes'] > 0
 
     def passed(name, **facts):
         stages.append(dict(name=name, **facts)); print('PASS '+name, flush=True)
@@ -285,6 +305,12 @@ def main():
         assert run('volumes-after-refusals', ['docker', 'volume', 'ls', '--quiet'], log=False) == volumes
         assert (target/'.env').read_bytes() == target_env
         passed('corruption-and-external-approval-drift-refused-without-volume-or-configuration-mutation')
+        if args.seed_preflight:
+            offline_seed_check('offline-seed-check', target, component, approval)
+            for label, snap, approved_file in (('damaged', damaged, approval), ('drift', component, drift)):
+                offline_seed_check('offline-'+label+'-refused', target, snap, approved_file, success=False)
+            assert run('volumes-after-offline-checks', ['docker', 'volume', 'ls', '--quiet'], log=False) == volumes
+            passed('offline-input-check-validates-and-refuses-corruption-without-docker-or-target-writes')
         run('seed', snapshot_command(target, 'seed', '--snapshot', component, '--baseline', approval), directory=target)
         seeded = json.loads((target/'snapshot-import.json').read_text())
         assert seeded['serviceStarted'] is False and seeded['storage'] == value['storage']
@@ -294,6 +320,8 @@ def main():
         if args.multi_origin:
             public_target, public_target_values = configure('seeded-public')
             public_target_env = (public_target/'.env').read_bytes()
+            if args.seed_preflight:
+                offline_seed_check('offline-public-seed-check', public_target, public_component, approval)
             run('seed-public', snapshot_command(public_target, 'seed', '--snapshot', public_component,
                 '--baseline', approval), directory=public_target)
             public_seeded = json.loads((public_target/'snapshot-import.json').read_text())
@@ -301,6 +329,11 @@ def main():
             assert (public_target/'.env').read_bytes() == public_target_env and not container(public_target, public_target_values)
             targets.append((public_target, public_target_values, public_value, public_seeded, public_target_env))
         passed('new-labelled-volume-seeded-verified-and-left-stopped-with-new-receiver-credentials')
+        if args.seed_preflight:
+            for root, _, _, _, _ in targets:
+                snap = component if root == target else public_component
+                offline_seed_check('offline-imported-refused-'+root.name, root, snap, approval, success=False)
+            passed('offline-input-check-refuses-imported-targets-without-docker-or-target-writes')
         run('repeat-seed-refused', snapshot_command(target, 'seed', '--snapshot', component, '--baseline', approval), success=False)
         assert json.loads((target/'snapshot-import.json').read_text()) == seeded
         assert (target/'.env').read_bytes() == target_env
@@ -442,7 +475,8 @@ print("PASS private reads and unselected package/version unavailable")
             except Exception: cleanup.append('owned internal network cleanup failed')
     summary = dict(success=not failure and not cleanup and len(stages) == total, passed=len(stages), total=total,
         seconds=round(time.monotonic()-started, 2), stages=stages, error=failure, cleanupErrors=cleanup,
-        image=server['image'], clientSha256=client['files']['cjpm']['sha256'], multiOrigin=args.multi_origin)
+        image=server['image'], clientSha256=client['files']['cjpm']['sha256'], multiOrigin=args.multi_origin,
+        seedPreflight=args.seed_preflight)
     (report/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(dict(success=summary['success'], passed=len(stages), total=total, cleanupErrors=cleanup)), flush=True)
     return 0 if summary['success'] else 1

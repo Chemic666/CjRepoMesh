@@ -156,13 +156,18 @@ python snapshot.py verify --snapshot ../private-dependency-snapshot --baseline .
 
 ## 将依赖快照装入新的私有仓
 
-在另一个可信完整包目录，先按首次启动说明加载并核对固定镜像，再生成这个接收者自己的读写凭据。此处需要先configure，与完整备份restore保留旧配置的流程不同。保持Hosted默认配置，不设置上游，也不先启动Compose或创建数据卷：
+在另一个可信完整包目录，先生成这个接收者自己的读写凭据并执行离线预检；正式seed前再加载并核对固定镜像。此处需要先configure，与完整备份restore保留旧配置的流程不同。保持Hosted默认配置，不设置上游，也不先启动Compose或创建数据卷：
 
 ```console
 python configure.py --port 8081
+python snapshot.py seed --snapshot ../private-dependency-snapshot --baseline ../approved/source.json --check-only
+docker load --input image.tar
+python verify.py --docker
 python snapshot.py seed --snapshot ../private-dependency-snapshot --baseline ../approved/source.json
 docker compose -f compose.yaml --env-file .env up -d --no-build --pull never
 ```
+
+声明`snapshotSeedPreflight=offline-inputs-v1`的新包可先用`seed --check-only`检查独立批准、快照与镜像绑定、Hosted目标配置和CA目录；它输出单个JSON，不连接Docker、不创建卷/写入目标、不输出凭据或配置值，结果明确`dockerChecked=false`、`targetModified=false`、`serviceStarted=false`。这不证明镜像已加载、目标卷不存在、没有运行写入者、磁盘/端口可用或未来运行态；实际seed仍重新校验。旧包未声明此能力时使用原seed流程，不手工添加字段冒充支持。
 
 seed要求与快照完全相同的镜像/服务端，只创建本配置对应的新标签卷，拒绝已有卷/导入记录及Proxy配置；不改接收者凭据、CA或批准文件。输入损坏/失配在创建卷前拒绝；解包前再次校验，导入后再只读导出比较完整文件集合及摘要，成功写 `snapshot-import.json` 并保持服务停服。重复seed拒绝，不覆盖数据。失败时保留新卷、校验归档和已有配置，不把半完成目录当成功部署；用新目录、新配置重试，按归属检查失败资源。辅助容器诊断沿用维护工具的保留规则。
 

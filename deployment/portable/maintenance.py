@@ -266,8 +266,8 @@ def helper(image: str, volume: str, *command: str, readonly: bool,
     return output
 
 
-def deployment(root: Path) -> tuple[dict, bytes, dict, bytes | None]:
-    manifest = verify_bundle(root, check_docker=True)
+def deployment(root: Path, *, check_docker: bool = True) -> tuple[dict, bytes, dict, bytes | None]:
+    manifest = verify_bundle(root, check_docker=check_docker)
     if manifest.get('maintenance') != CAPABILITY or manifest.get('caConfiguration') != 'pem-directory-v1':
         raise MaintenanceError('this bundle does not support stopped maintenance; use a verified current bundle')
     data = read_configuration_bytes(root/'.env')

@@ -2,7 +2,25 @@
 
 本页首节是当前交付组合的统一入口；其后保留不同产物的历史验收，避免拼成一次全量通过。详细日志和失败历史见[验证记录](verification-report.md)，发布提交见[交付记录](delivery-record.md)。
 
-## 当前组合：2026-10-25快照导入有界工具包
+## 当前组合：2026-10-25快照只读预检工具包
+
+新增`snapshot.py seed --snapshot <分片> --baseline <独立批准> --check-only`。复用实际seed的本地输入检查和既有严格部署配置/CA检查；成功只输出单个JSON，包含输入检查通过、镜像/二进制身份和存储数量，明确`dockerChecked=false`、`targetModified=false`、`serviceStarted=false`，无令牌、配置值、路径、项目或来源URL。普通deployment默认仍查Docker，正常seed显式执行Docker校验及停写/新卷规则；预检后实际导入仍重新验证。
+
+现有打包器将此功能纳入新九文件归档`CjRepoMesh-server-linux-amd64-bad02ad70507-seed-preflight-final.zip`，38,397,588字节，SHA-256 `ce6367f926b8c73157bcebbc417215d4c2cd7f38d19cb1f59a191b3a7e2f9eff`，清单SHA-256 `e34a2bbb85ba9265bec889ac2771850c1e6af395af9833cddd0335751761f270`。声明`snapshotSeedPreflight=offline-inputs-v1`，保留原维护/恢复预检/多来源能力；未知声明及缺少快照/维护/CA配套能力拒绝，旧包无新声明仍保留原功能。固定镜像bad02ad7、服务端8fc30842及客户端5dd187b5不重建，旧包、八份旧固定归档及审查候选保留。
+
+| 当前固定输入 | 身份 |
+| --- | --- |
+| Linux amd64客户端 | `5dd187b55780c8dd8d7a8f0be4dc3bda9431fc10eb8a139d61b0defd7016d020` |
+| 21文件客户端清单/归档 | 清单`cce612d544f419164a55b2ccdd87dae95ca43278666b10fc2b290baacaa61199`；`CjRepoMesh-client-linux-amd64-5dd187b55780-team-kit.tar.gz`；归档SHA-256 `10549f6b345aff7ee311992af5fa604f885056e972f578a7709a013be7174501` |
+| 服务端及镜像 | `8fc30842e87cff0dee34a76898b9ebc339780e7d5d95ea1d78ff7f8b4acfb3df`；`sha256:bad02ad70507b087245b18ba0c798dd1aa56efcf5d3647c5cb8af52ed11089f6` |
+
+最终归档逐成员CRC/SHA-256与提取目录一致。包内相关维护/恢复/快照/打包回归Linux **88/88**，Windows **84通过、4项链接权限跳过/88**；其中8个新增用例覆盖零Docker/零写入、严格配置与CA目录、身份/能力、批准漂移/损坏、CLI纯JSON及默认Docker校验。Linux打包器边界用例另加载冻结构建期package.py辅助文件，它不是九文件交付成员。另以真实既有v2快照及原独立批准，在新Linux目标执行包内seed只读预检，通过且目标/快照/批准保持，Docker捕获哨兵零调用；旧合成备份的离线校验和恢复预检亦通过，不称实际冷恢复重跑。
+
+当前新九文件包与既有21文件5dd完整客户端在可选`--seed-preflight`多来源演练实际 **18/18，122.69s，cleanupErrors=[]**。两个来源的预检均在空PATH、无可调用Docker且未设置PYTHONDONTWRITEBYTECODE的子进程运行；损坏/漂移及两个已有导入标记的目标拒绝，文件/目录项、快照、批准和前置卷集合保持。随后正常装入、原来源离线、内部网络隔离及真实传递依赖冷构建、SHA/URL漂移拒绝和持久化仍通过。消费者由既有演练器生成；不是包内prepare-team.py，也不是源16项与2项的历史拼合。
+
+只读预检不检查镜像是否已加载、目标卷是否已存在、运行写入者、磁盘/端口可用性、未来状态或构建成功；不能据此跳过正常seed。它不认证发布者，不提供恶意并发文件系统隔离。旧3557包16项、8f800161包33项接收/23项实际冷恢复及更早升级、并发等结果仍绑定旧包，不移算。新包未重跑接收团队、实际冷恢复/升级、容量/跨物理主机、Windows仓颉或完整Maple。 客户端二进制与团队包未变，其来源/分图/TLS/核心和单仓兼容验证仍在各历史范围中，不记作本批重跑。使用入口见[包内说明](../deployment/portable/README.md#将依赖快照装入新的私有仓)，完整记录见[本轮验证](verification-report.md#2026-10-25-快照装入只读预检与新工具包)。
+
+## 历史：2026-10-25快照导入有界工具包（3557）
 
 快照seed在导入后核对目标`.env`时改用既有1MiB+1字节有界读取，补齐上一阶段四处maintenance.py调用之外的收尾入口。此检查发生在数据已写入新卷之后；失败保留新卷和检查归档、不给成功标记，不提供自动回滚或并发文件系统事务。
 

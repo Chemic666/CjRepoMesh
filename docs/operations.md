@@ -132,7 +132,7 @@ Docker 命名卷另已完成停服 tar 导出、新卷恢复及真实客户端�
 
 宿主不能执行仓颉程序时，恢复演练也可用 `--client-bundle` 搭配已有Linux SDK及任务工具，在容器内运行完整客户端包。制作包的任务断网，恢复后的两个消费任务通过恢复容器内部网络读取，不改变宿主回环监听或防火墙。具体参数和工具依赖见[恢复入口说明](../integration-tests/recovery/README.md#docker-volume-cold-backup)；这个入口只操作新建测试卷，不能直接用于现有业务卷。
 
-当前九文件包`CjRepoMesh-server-linux-amd64-bad02ad70507-bounded-snapshot.zip`（清单`3557f7a47f2e3624281c033c11f1aec0e9db477cb4081541b9f983c1e847b7e7`）同时纳入maintenance.py四处及snapshot seed收尾的配置有界读取。单次至多读取1MiB+1字节，精确1MiB可接受，超限或读取期间增长拒绝。恢复在目标配置/卷写入前重读检查；快照seed的收尾核对发生在已导入新卷后，失败保留新卷及snapshot-check归档且无snapshot-import.json成功标记，应保留现场、另选新目标，不当作未写入或自动回滚。新包多来源16项及包内快照回归两平台29项见[当前验收](verification-report.md#2026-10-25-快照导入有界检查及多来源交付)；上一8f800161包接收33/冷恢复23及f192升级等记录仍绑定旧包。哈希/归档仍可扫描大文件，不提供总内存/磁盘/时限或恶意并发事务保证。使用前按[当前候选入口](candidate-acceptance.md)核对归档和清单摘要。
+当前九文件包`CjRepoMesh-server-linux-amd64-bad02ad70507-seed-preflight-final.zip`（清单`e34a2bbb85ba9265bec889ac2771850c1e6af395af9833cddd0335751761f270`）新增`snapshotSeedPreflight=offline-inputs-v1`。生成接收者自己的Hosted配置后，可先执行`python snapshot.py seed --snapshot <分片> --baseline <独立批准> --check-only`，无需Docker即可核对批准/快照/镜像绑定、严格配置及CA目录；输出纯JSON，明确不查Docker、不写目标、不启动服务。它不证明卷不存在、没有写入者、镜像已加载、磁盘/端口或未来运行态可用；随后必须加载核对镜像、正常seed并完成真实私有读取和受批准冷构建。正常seed的Docker/停写检查及1MiB+1字节配置有界读取保持；失败导入仍保留新卷/检查归档，不自动回滚。当前新包18项多来源及两平台88项范围见[本轮验证](verification-report.md#2026-10-25-快照装入只读预检与新工具包)；旧包实际恢复/接收/升级成绩不移算。按[包内教程](../deployment/portable/README.md#将依赖快照装入新的私有仓)操作，完整身份见[候选入口](candidate-acceptance.md)。
 
 ## 试用规模与资源观察
 

@@ -1,5 +1,13 @@
 # CjRepoMesh 交付记录
 
+## 2026-10-25 快照装入只读预检交付
+
+新增seed --check-only纯JSON本地预检，复用普通导入的本地输入规则，普通部署/导入仍默认并显式校验Docker；能力声明验证保持旧包兼容。现有打包器将此功能纳入新九文件归档`CjRepoMesh-server-linux-amd64-bad02ad70507-seed-preflight-final.zip`，38,397,588字节，SHA-256 `ce6367f926b8c73157bcebbc417215d4c2cd7f38d19cb1f59a191b3a7e2f9eff`，清单SHA-256 `e34a2bbb85ba9265bec889ac2771850c1e6af395af9833cddd0335751761f270`。声明`snapshotSeedPreflight=offline-inputs-v1`，保留原维护/恢复预检/多来源能力；未知声明及缺少快照/维护/CA配套能力拒绝，旧包无新声明仍保留原功能。固定镜像bad02ad7、服务端8fc30842及客户端5dd187b5不重建，旧包、八份旧固定归档及审查候选保留。
+
+最终提取包相关四组回归Linux88/88、Windows84通过4链接权限跳过；真实既有v2快照/独立批准的Linux只读预检及旧备份离线预检通过，Docker捕获哨兵零调用。新双包启用预检的完整多来源18/18（122.69s），清理无错误；两来源空PATH预检后真实装入/离线冷构建和拒绝验证同轮完成，不将旧16/33/23/升级等结果移算。
+
+实际命令和57输入冻结摘要在源码外`test-runs/snapshot-preflight-final-20261025/`；完整边界见[验证记录](verification-report.md#2026-10-25-快照装入只读预检与新工具包)和[包内教程](../deployment/portable/README.md#将依赖快照装入新的私有仓)。只提交相关工具/回归和现有文档，旧产物与批准保留，原始日志/SDK/镜像/归档/秘密不入公开Git。按持续授权普通双端main发布、独立noreply同树历史，最终状态以回读为准；不推origin、不强推、不建PR/Release。
+
 ## 2026-10-25 快照导入收尾检查及新工具包
 
 复用维护工具有界reader修复snapshot seed导入后.env无界重读；两项红测先失败，新增三项边界/增长/现场回归。新九文件服务端归档`CjRepoMesh-server-linux-amd64-bad02ad70507-bounded-snapshot.zip`，38,396,850字节，SHA-256 `0312631bd7766fc92ecdda182967af76116b530fa0fa234e5f8d5137dafe5dda`；清单SHA-256 `3557f7a47f2e3624281c033c11f1aec0e9db477cb4081541b9f983c1e847b7e7`。由现有打包器导出固定bad02ad7镜像，8fc30842服务端及5dd187b5客户端不重建；相较上一8f800161维护包，仅snapshot.py和manifest.json改变，其余七文件保持。旧21文件客户端、各代服务端包及七份旧归档保留。
