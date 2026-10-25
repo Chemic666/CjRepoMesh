@@ -222,6 +222,68 @@ class DependencySnapshotTests(unittest.TestCase):
                 self.module.seed(target, self.output, self.approval)
             create.assert_not_called()
 
+    def seed_with_configuration(self, configuration, late_change=None):
+        self.export()
+        target = self.root/'target'; target.mkdir()
+        (target/'.env').write_bytes(configuration)
+        manifest = dict(image=IMAGE, dependencySnapshot='approved-set-v1')
+        def helper(*args, **kwargs):
+            if kwargs.get('stdout') is not None:
+                kwargs['stdout'].write((self.output/'data.tar').read_bytes())
+                if late_change is not None:
+                    late_change(target/'.env')
+            return ''
+        with patch.object(self.module, 'verify_bundle', return_value=manifest), patch.object(
+                self.module, 'deployment', return_value=(manifest, configuration, dict(COMPOSE_PROJECT_NAME=PROJECT), None)), patch.object(
+                self.module, 'create_restore_volume', return_value=PROJECT+'_data'), patch.object(
+                self.module, 'require_stopped'), patch.object(self.module, 'helper', side_effect=helper):
+            return self.module.seed(target, self.output, self.approval)
+
+    def test_seed_final_configuration_refuses_oversize_without_unbounded_read(self):
+        approval = self.approval.read_bytes()
+        original = Path.read_bytes
+        def guarded(path):
+            if path == self.root/'target/.env':
+                raise AssertionError('unbounded snapshot configuration read reached')
+            return original(path)
+        oversized = CONFIG + b'\n#' + b'x'*(1024*1024)
+        with patch.object(Path, 'read_bytes', guarded):
+            with self.assertRaisesRegex(self.module.MaintenanceError, '1 MiB'):
+                self.seed_with_configuration(CONFIG, lambda path: path.write_bytes(oversized))
+        self.assertFalse((self.root/'target/snapshot-import.json').exists())
+        self.assertEqual(oversized, (self.root/'target/.env').read_bytes())
+        self.assertEqual(1, len(list((self.root/'target').glob('snapshot-check-*.tar'))))
+        self.assertEqual(approval, self.approval.read_bytes())
+        self.module.verify_snapshot(self.output, self.approval)
+
+    def test_seed_final_configuration_bounds_actual_bytes_after_stat(self):
+        original = Path.open
+        requested = []
+        class GrowingConfiguration(io.BytesIO):
+            def read(stream, size=-1):
+                requested.append(size)
+                self.assertEqual(1024*1024+1, size, 'snapshot configuration read must be bounded')
+                return super().read(size)
+        def opened(path, *args, **kwargs):
+            if path == self.root/'target/.env' and (args[0] if args else kwargs.get('mode')) == 'rb':
+                return GrowingConfiguration(CONFIG + b'\n#' + b'x'*(1024*1024))
+            return original(path, *args, **kwargs)
+        with patch.object(Path, 'open', opened):
+            with self.assertRaisesRegex(self.module.MaintenanceError, '1 MiB'):
+                self.seed_with_configuration(CONFIG)
+        self.assertEqual([1024*1024+1], requested)
+        self.assertFalse((self.root/'target/snapshot-import.json').exists())
+        self.assertEqual(CONFIG, (self.root/'target/.env').read_bytes())
+
+    def test_seed_final_configuration_accepts_exact_limit(self):
+        configuration = CONFIG + b'#' + b'x'*(1024*1024-len(CONFIG)-1)
+        value = self.seed_with_configuration(configuration)
+        target = self.root/'target'
+        self.assertEqual(configuration, (target/'.env').read_bytes())
+        self.assertEqual(value, json.loads((target/'snapshot-import.json').read_text()))
+        self.assertFalse(value['serviceStarted'])
+        self.assertEqual([], list(target.glob('snapshot-check-*.tar')))
+
     def test_cli_diagnostic_does_not_echo_sensitive_input(self):
         nonce = 'private-diagnostic-marker'; self.approval.write_text(nonce)
         result = subprocess.run([sys.executable, SOURCE/'snapshot.py', 'export', '--backup', self.backup,

@@ -132,7 +132,7 @@ Docker 命名卷另已完成停服 tar 导出、新卷恢复及真实客户端�
 
 宿主不能执行仓颉程序时，恢复演练也可用 `--client-bundle` 搭配已有Linux SDK及任务工具，在容器内运行完整客户端包。制作包的任务断网，恢复后的两个消费任务通过恢复容器内部网络读取，不改变宿主回环监听或防火墙。具体参数和工具依赖见[恢复入口说明](../integration-tests/recovery/README.md#docker-volume-cold-backup)；这个入口只操作新建测试卷，不能直接用于现有业务卷。
 
-新的九文件维护包`CjRepoMesh-server-linux-amd64-bad02ad70507-bounded-maintenance.zip`已纳入配置有界读取修复（清单`8f80016123b4c2628795e9f63db1158b880bc1257e2030e87db0e3f7589d36ec`）。部署/备份`.env`的配置载入单次至多读取1MiB+1字节，精确1MiB可接受，超限或读取期间增长拒绝；恢复在写入目标配置、创建卷前重读检查。新包与固定5dd客户端已单列接收团队33项和冷恢复23项实测，旧f192包和原归档保留；此前升级/多来源等成绩仍绑定旧组合。此修复不是总内存/磁盘/时限或并发篡改事务保证，哈希和归档仍可扫描大文件。使用前按[当前候选入口](candidate-acceptance.md)核对归档与清单摘要，范围见[新包验证](verification-report.md#2026-10-25-有界维护服务端固定包)。
+当前九文件包`CjRepoMesh-server-linux-amd64-bad02ad70507-bounded-snapshot.zip`（清单`3557f7a47f2e3624281c033c11f1aec0e9db477cb4081541b9f983c1e847b7e7`）同时纳入maintenance.py四处及snapshot seed收尾的配置有界读取。单次至多读取1MiB+1字节，精确1MiB可接受，超限或读取期间增长拒绝。恢复在目标配置/卷写入前重读检查；快照seed的收尾核对发生在已导入新卷后，失败保留新卷及snapshot-check归档且无snapshot-import.json成功标记，应保留现场、另选新目标，不当作未写入或自动回滚。新包多来源16项及包内快照回归两平台29项见[当前验收](verification-report.md#2026-10-25-快照导入有界检查及多来源交付)；上一8f800161包接收33/冷恢复23及f192升级等记录仍绑定旧包。哈希/归档仍可扫描大文件，不提供总内存/磁盘/时限或恶意并发事务保证。使用前按[当前候选入口](candidate-acceptance.md)核对归档和清单摘要。
 
 ## 试用规模与资源观察
 

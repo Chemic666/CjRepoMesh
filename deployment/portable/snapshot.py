@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from maintenance import (MaintenanceError, archive_manifest, create_restore_volume, deployment,
                          helper, image_identity, ordinary_directory, private_file, require_absent,
-                         require_stopped, verify_backup, write_private)
+                         read_configuration_bytes, require_stopped, verify_backup, write_private)
 from verify import digest, regular_file, verify_bundle
 
 CAPABILITY = 'approved-set-v1'
@@ -363,7 +363,7 @@ def seed(root: Path, source: Path, baseline: Path) -> dict:
     with private_file(check) as stream:
         helper(manifest['image']['id'], volume, '/bin/tar', '-C', '/var/lib/cjrepo', '-cf', '-', '.',
                readonly=True, stdout=stream)
-    if archive_manifest(check) != value['storage'] or (root/'.env').read_bytes() != configuration:
+    if archive_manifest(check) != value['storage'] or read_configuration_bytes(root/'.env') != configuration:
         raise SnapshotError('seeded storage or configuration differs; retain failed target for inspection')
     require_stopped(volume)
     result = dict(formatVersion=1, project=project, volume=volume, image=manifest['image'],
