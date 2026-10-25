@@ -249,6 +249,62 @@ class TeamDeliveryTests(unittest.TestCase):
         self.assertEqual(approved['packages'][0]['sha256'], hashlib.sha256(archive.read_bytes()).hexdigest())
         self.assertEqual(approved['packages'][0]['registry'], 'http://cjrepo:8080')
 
+    def test_large_fixture_is_deterministic_text_and_preserves_existing_files(self):
+        import base64
+        writer = self.functions.get('create_large_team_fixture')
+        self.assertIsNotNone(writer, 'receiver lacks a real large-package fixture')
+        first = self.work / 'first'; first.mkdir()
+        second = self.work / 'second'; second.mkdir()
+        identity = writer(first, 1)
+        self.assertEqual(identity, writer(second, 1))
+        body = (first / 'large-payload.txt').read_bytes()
+        self.assertEqual(len(base64.b64decode(body, validate=True)), 1048576)
+        self.assertNotIn(b'\0', body)
+        self.assertEqual(identity['sourceSha256'], hashlib.sha256(body).hexdigest())
+        self.assertEqual(identity['sourceBytes'], len(body))
+        with self.assertRaises(FileExistsError):
+            writer(first, 1)
+        self.assertEqual((first / 'large-payload.txt').read_bytes(), body)
+
+    def test_large_fixture_rejects_invalid_size_before_writing(self):
+        writer = self.functions.get('create_large_team_fixture')
+        self.assertIsNotNone(writer, 'receiver lacks large-package bounds')
+        for size in (-1, 0, 33):
+            with self.subTest(size=size), self.assertRaises(ValueError):
+                writer(self.work, size)
+        self.assertFalse((self.work / 'large-payload.txt').exists())
+
+    def test_large_cli_requires_packaged_team_before_side_effects(self):
+        result = self.invoke('--team-large-payload-mib', '16')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('large payload requires team-packaged', result.stderr)
+        self.assertFalse((self.work / 'evidence').exists())
+
+    def test_large_cli_rejects_out_of_range_before_side_effects(self):
+        for size in ('-1', '33'):
+            result = self.invoke('--team-large-payload-mib', size)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('between 0 and 32', result.stderr)
+            self.assertFalse((self.work / 'evidence').exists())
+
+    def test_large_cold_cache_rejects_missing_corrupt_or_duplicate_content(self):
+        verify = self.functions.get('verify_large_team_cache')
+        self.assertIsNotNone(verify, 'large CJP cold-cache verification is missing')
+        job = self.work / 'cold-job'; job.mkdir()
+        identity = dict(sourceBytes=4, sourceSha256=hashlib.sha256(b'text').hexdigest())
+        with self.assertRaises(ValueError):
+            verify(job, identity)
+        target = job / 'cache/repository/registries/internal/identity/source/company/teamhello-1.0.0/large-payload.txt'
+        target.parent.mkdir(parents=True); target.write_bytes(b'text')
+        verify(job, identity)
+        target.write_bytes(b'fake')
+        with self.assertRaises(ValueError):
+            verify(job, identity)
+        target.write_bytes(b'text')
+        other = job / 'cache/another/large-payload.txt'; other.parent.mkdir(); other.write_bytes(b'text')
+        with self.assertRaises(ValueError):
+            verify(job, identity)
+
 
 if __name__ == '__main__':
     unittest.main()

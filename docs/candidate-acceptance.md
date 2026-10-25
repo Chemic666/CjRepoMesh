@@ -4,6 +4,8 @@
 
 ## 当前组合：2026-10-25 HTTP发布帧与有界持续负载
 
+同组合后续真实大CJP **34/34（193.00s）**，实际归档16,945,551字节、两个独立受保护冷消费者真实编译运行及解包内容核对通过。客户端与服务端包及摘要均保持；不是大代码库或更长时间容量验收。[完整后续记录](verification-report.md#2026-10-25-同组合真实大cjp与独立冷消费)。
+
 服务端`177c18ae9f6cc4c37cc0dd579e50cc59b0d2625ae36a430694b1a3e8214caf80`，镜像`sha256:213243d2796a9d531cd65b48195c44ce8b46158017ccf86038c7f1752c88ce2f`。九文件归档`CjRepoMesh-server-linux-amd64-213243d2796a-http-body.zip`，46,398,234字节，SHA-256 `3491c7cf822f320b40f7419b2ac0941d1f7906619cfd92e6e71c698ee514265b`，清单SHA-256 `19aaaa3f595cd507588db86c143d4ca194d2f574ab3b09f561b12e4ae6cfff5b`。
 
 客户端继续固定`5dd187b55780c8dd8d7a8f0be4dc3bda9431fc10eb8a139d61b0defd7016d020`、21文件manifest-limit包，清单`41802d80d600c8fbcef00165b2df31aec90b2c7e1e57460d0070efafcc91de77`，归档`CjRepoMesh-client-linux-amd64-5dd187b55780-manifest-limit.tar.gz`、6,761,817字节、SHA-256 `a48fc6d813f45133795c9862680ae32ce534abb7afbff91cb3ba4760a7ffbf6a`；未重建客户端。

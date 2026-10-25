@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -87,6 +88,27 @@ def team_source_approval(publisher: Path, registry: str) -> dict:
         repository='internal', registry=registry, sha256=archive_sha)])
 
 
+def create_large_team_fixture(publisher: Path, raw_mib: int) -> dict:
+    """Add deterministic ASCII data: cjpm intentionally excludes NUL-containing files."""
+    if not 1 <= raw_mib <= 32:
+        raise ValueError('large payload must be between 1 and 32 MiB')
+    raw = hashlib.shake_256(b'CjRepoMesh owned real large CJP fixture v1').digest(raw_mib * 1048576)
+    body = base64.b64encode(raw)
+    with (publisher / 'large-payload.txt').open('xb') as stream:
+        stream.write(body)
+    return dict(rawBytes=len(raw), sourceBytes=len(body), sourceSha256=hashlib.sha256(body).hexdigest())
+
+
+def verify_large_team_cache(job: Path, identity: dict) -> None:
+    matches = list((job / 'cache').rglob('large-payload.txt'))
+    if (len(matches) != 1 or matches[0].relative_to(job / 'cache').parts[-4:] !=
+            ('source', 'company', 'teamhello-1.0.0', 'large-payload.txt')):
+        raise ValueError('large CJP source cache is missing or ambiguous')
+    body = matches[0].read_bytes()
+    if len(body) != identity['sourceBytes'] or hashlib.sha256(body).hexdigest() != identity['sourceSha256']:
+        raise ValueError('large CJP extracted content differs from publisher fixture')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", required=True, type=Path)
@@ -103,7 +125,13 @@ def main() -> int:
                         help='require exact independent source admission and no application credential inheritance')
     parser.add_argument('--team-packaged', action='store_true',
                         help='require protected mode and verified kit; prepare single-use consumers from the package and check four refusals')
+    parser.add_argument('--team-large-payload-mib', type=int, default=0,
+                        help='optional deterministic raw content encoded as text in a real CJP, 1..32 MiB; 0 disables')
     args = parser.parse_args()
+    if not 0 <= args.team_large_payload_mib <= 32:
+        parser.error('team large payload must be between 0 and 32 MiB')
+    if args.team_large_payload_mib and not args.team_packaged:
+        parser.error('large payload requires team-packaged')
     if args.team_packaged and not args.team_protected:
         parser.error('team-packaged requires team-protected')
     if args.team_protected and not (args.team_client_bundle and args.team_sdk):
@@ -127,6 +155,7 @@ def main() -> int:
     total = ((21 if args.team_client_bundle else 20) if args.team_sdk else 12) + (4 if args.check_running else 0) + (2 if args.check_credential_drift else 0)
     total += 2 if args.team_protected else 0
     total += 4 if args.team_packaged else 0
+    total += int(bool(args.team_large_payload_mib))
     bundle, fixture, report = args.bundle.resolve(), args.package_dir.resolve(), args.evidence_dir.resolve()
     report.mkdir(parents=True, exist_ok=False)
     installation = report / "installation"
@@ -144,6 +173,7 @@ def main() -> int:
     manifest = json.loads((installation / "manifest.json").read_text())
     image_tag = manifest["image"]["tag"]
     stages, error, cleanup_errors = [], "", []
+    large_payload = {}
     prepared_tasks = 0
     started = time.monotonic()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -425,6 +455,8 @@ def main() -> int:
             publisher = workspace("publisher", "publisher")
             consumer = workspace("consumer", "consumer")
             passed("team-role-workspaces-created-without-secrets")
+            if args.team_large_payload_mib:
+                large_payload = create_large_team_fixture(publisher, args.team_large_payload_mib)
             job_run("team-publish", publisher, "publisher", credentials["CJREPO_PUBLISH_TOKEN"])
             index = json.loads((publisher / "target/meta-data.json").read_text())["index"]
             expected_sha = index["sha256sum"]
@@ -432,6 +464,18 @@ def main() -> int:
             with tarfile.open(publisher / "target/teamhello-1.0.0.cjp") as archive:
                 assert not any(Path(item.name).name in {"run.sh", "workspace.json", "cangjie-repo.toml", ".env"}
                                for item in archive.getmembers())
+                if large_payload:
+                    content = archive.extractfile('teamhello-1.0.0/large-payload.txt').read()
+                    assert len(content) == large_payload['sourceBytes']
+                    assert hashlib.sha256(content).hexdigest() == large_payload['sourceSha256']
+                    large_payload['archiveBytes'] = (publisher / 'target/teamhello-1.0.0.cjp').stat().st_size
+                    large_payload['archiveSha256'] = expected_sha
+                    assert large_payload['archiveBytes'] > large_payload['rawBytes']
+                    large_payload['coldConsumersVerified'] = 0
+            if large_payload:
+                status, downloaded = request('/pkg/teamhello/1.0.0?organization=company', credentials['CJREPO_READ_TOKEN'])
+                assert status == 200 and len(downloaded) == large_payload['archiveBytes']
+                assert hashlib.sha256(downloaded).hexdigest() == expected_sha
             passed("developer-container-publishes-real-private-package", archive_sha256=expected_sha)
             if args.team_protected:
                 approved = team_source_approval(publisher, registry)
@@ -454,6 +498,9 @@ def main() -> int:
                 if args.team_protected:
                     assert json.loads((job / 'cjpm-provenance.json').read_text()) == approved
                     assert 'Application repository credentials absent' in result.stdout
+                if large_payload:
+                    verify_large_team_cache(job, large_payload)
+                    large_payload['coldConsumersVerified'] += 1
 
             result = job_run("team-consume", consumer, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(consumer, result)
@@ -463,6 +510,9 @@ def main() -> int:
             result = job_run("team-independent", repeated, "consumer", credentials["CJREPO_READ_TOKEN"])
             check_consumer(repeated, result)
             passed("independent-cold-ci-reproduces-source-and-checksum")
+            if large_payload:
+                assert large_payload['coldConsumersVerified'] == 2
+                passed('real-large-cjp-download-and-two-independent-cold-caches-verified', **large_payload)
             refuse_repeat('completed-independent-ci', repeated)
             if args.team_protected:
                 drift = json.loads(json.dumps(approved))
@@ -551,6 +601,7 @@ def main() -> int:
                        team_protected=args.team_protected,
                        team_preparation='packaged-single-use' if args.team_packaged else 'source',
                        team_prepared_tasks=prepared_tasks,
+                       large_payload=large_payload,
                        limits=["Local receiver-directory simulation on the existing Docker engine, not a fresh host.",
                                ("Real Linux publisher and independent read-only consumer builds; no Windows Cangjie execution."
                                 if args.team_sdk else "Real prebuilt CJP publish/read; no consumer build or Windows Cangjie execution."),
