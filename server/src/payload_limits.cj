@@ -35,6 +35,10 @@ func maximumHostedIndexBytes(): Int64 {
     return configuredPayloadLimit("CJREPO_MAX_HOSTED_INDEX_BYTES", 4 * 1024 * 1024, 64 * 1024 * 1024)
 }
 
+func maximumConcurrentPublishes(): Int64 {
+    return configuredPayloadLimit("CJREPO_MAX_CONCURRENT_PUBLISHES", 8, 64)
+}
+
 class HostedIndexTooLargeException <: Exception {
     public init() {
         super("hosted index exceeds configured byte limit")

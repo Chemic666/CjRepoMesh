@@ -219,6 +219,7 @@ main(): Int64 {
         let _ = maximumArtifactBytes()
         let _ = maximumIndexBytes()
         let _ = maximumHostedIndexBytes()
+        let _ = maximumConcurrentPublishes()
     } catch (e: Exception) {
         eprintln("Error: ${e.message}")
         return 2

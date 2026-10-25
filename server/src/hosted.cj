@@ -14,6 +14,22 @@ import stdx.encoding.hex.*
 import stdx.encoding.json.*
 
 private let FRAME_VERSION: UInt8 = 1
+private let PUBLISH_ADMISSION_LOCK = Mutex()
+private var activePublishes: Int64 = 0
+
+private func tryEnterPublish(limit: Int64): Bool {
+    synchronized(PUBLISH_ADMISSION_LOCK) {
+        if (activePublishes >= limit) { return false }
+        activePublishes += 1
+        return true
+    }
+}
+
+private func leavePublish(): Unit {
+    synchronized(PUBLISH_ADMISSION_LOCK) {
+        activePublishes -= 1
+    }
+}
 
 // cjpm sends organization in a query parameter, while the HTTP distributor
 // receives only the path. Accept exactly that one parameter to prevent aliases.
@@ -63,7 +79,17 @@ class PublishHandler <: HttpRequestHandler {
             return
         }
 
+        var admitted = false
         try {
+            admitted = tryEnterPublish(maximumConcurrentPublishes())
+            if (!admitted) {
+                context.responseBuilder.status(429)
+                    .header("Content-Type", "application/json; charset=utf-8")
+                    .header("Retry-After", "1")
+                    .header("Connection", "close")
+                    .body("{\"errors\":[{\"message\":\"publish capacity reached; retry later\"}]}")
+                return
+            }
             let storageOrganization = requestedRegistryOrganization(context)
             let frameBuffer = ArrayList<UInt8>()
             let maximumFrameBytes = maximumArtifactBytes() + MAX_PUBLISH_METADATA_BYTES + 10
@@ -188,6 +214,8 @@ class PublishHandler <: HttpRequestHandler {
             respondError(context, 413, e.message)
         } catch (e: Exception) {
             respondError(context, 400, e.message)
+        } finally {
+            if (admitted) { leavePublish() }
         }
     }
 }
