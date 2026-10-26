@@ -12,6 +12,8 @@
 
 大小边界回归：`python3 integration-tests/compatibility/server_payload_limits.py --server <已有Linux服务端> --package-dir <同上真实CJP目录> --evidence-dir <新私有目录>`。24项覆盖非法配置、制品和元数据临界值、独立元数据声明/实际超限、分块总帧、鉴权优先、Proxy索引/分块制品超限及同实例恢复、Mirror/Sync索引/制品超限失败和无写入。合成上游制品有匹配摘要，不能仅靠摘要不符误判大小限制；日志落盘前脱敏、隐私断言使用原始内存值。仅操作自有进程/存储，不做耗尽内存、全量压力或Windows仓颉测试。
 
+Hosted分段帧回归：`python3 integration-tests/compatibility/hosted_frame_reader.py --server <已有Linux服务端> --evidence-dir <新私有目录>`。19项覆盖固定/分块短读、精确1MiB元数据、错误版本/长度、截断、声明及实际总包络超限、合法帧后的超限尾部、有效头后断连与单槽释放；拒绝无落盘，恢复发布、下载、完整索引及重复409均核对。每案独立自有服务/存储，需先加载匹配SDK运行库，不执行Windows仓颉；这是协议回归，不是128MiB内存或并发容量测试。
+
 ## Windows 全量入口
 
 在已经安装仓颉 SDK、stdx 和 Windows 构建工具的环境中，从项目根目录运行：

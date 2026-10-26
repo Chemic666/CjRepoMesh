@@ -65,6 +65,39 @@ def select_item(items: list, sequence: int):
     return items[(sequence % packages) * 4 + (sequence // packages) % 4]
 
 
+def measure_batch(label, workers, count, action, direction, *, phases, report, measurements):
+    phase_start = measurements.start()
+    def sample(number):
+        begin = measurements.start()
+        try:
+            statuses, size, identity = action(number)
+            result = dict(sequence=number, valid=True, httpStatuses=statuses,
+                          artifactBytes=size, package=identity)
+        except (TestFailure, OSError, ValueError, KeyError, TypeError) as failure:
+            result = dict(sequence=number, valid=False, error=str(failure))
+        timing = measurements.finish(begin)
+        result.update(begin, endedAtUtc=timing['endedAtUtc'], endOffsetSeconds=timing['endOffsetSeconds'],
+                      elapsedMs=timing['elapsedSeconds'] * 1000)
+        return result
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        samples = [f.result() for f in as_completed([pool.submit(sample, n) for n in range(count)])]
+    timing = measurements.finish(phase_start)
+    elapsed = timing['elapsedSeconds']
+    failures = sum(not item['valid'] for item in samples)
+    phase = dict(name=label, concurrency=workers, operations=count, validOperations=count-failures,
+                 failedOperations=failures, **phase_start, **timing, operationsPerSecond=count/elapsed,
+                 artifactDirection=direction, artifactMiBPerSecond=sum(s.get('artifactBytes', 0) for s in samples)/1048576/elapsed,
+                 httpRequests=sum(len(s.get('httpStatuses', [])) for s in samples),
+                 packagesVisited=len({(s['package']['organization'],s['package']['name']) for s in samples if s['valid']}),
+                 latency=distribution([s['elapsedMs'] for s in samples]),
+                 samples=sorted(samples, key=lambda sample: sample['sequence']))
+    phases.append(phase)
+    (report / 'samples.json').write_text(json.dumps(phases, indent=2) + '\n', encoding='utf-8')
+    print(f"MEASURE {label}: {count-failures}/{count}; {count/elapsed:.2f} ops/s; p95 {phase['latency']['p95Ms']:.2f}ms", flush=True)
+    if failures:
+        raise TestFailure(f'{label}: {failures} invalid operations; see samples.json')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="existing local Linux amd64 CjRepo server image")
@@ -99,7 +132,8 @@ def main() -> int:
     large_details = {}
     items = []
     runtime, error, success = {}, "", False
-    started = time.monotonic()
+    measurements = extended.MeasurementClock()
+    started = measurements.origin
     recorded_at = datetime.now(timezone.utc).isoformat()
 
     def docker(*arguments, stdout=subprocess.PIPE, timeout=60):
@@ -149,32 +183,8 @@ def main() -> int:
         return [index.status, artifact.status], len(artifact.body), {k:item[k] for k in ("name", "version", "organization")}
 
     def batch(label, workers, count, action, direction):
-        wall_start = time.perf_counter()
-        def sample(number):
-            begin = time.perf_counter()
-            try:
-                statuses, size, identity = action(number)
-                return dict(sequence=number, elapsedMs=(time.perf_counter() - begin) * 1000,
-                            valid=True, httpStatuses=statuses, artifactBytes=size, package=identity)
-            except (TestFailure, OSError, ValueError, KeyError, TypeError) as failure:
-                return dict(sequence=number, elapsedMs=(time.perf_counter() - begin) * 1000,
-                            valid=False, error=str(failure))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            samples = [f.result() for f in as_completed([pool.submit(sample, n) for n in range(count)])]
-        elapsed = time.perf_counter() - wall_start
-        failures = sum(not item["valid"] for item in samples)
-        phase = dict(name=label, concurrency=workers, operations=count, validOperations=count-failures,
-                     failedOperations=failures, elapsedSeconds=elapsed, operationsPerSecond=count/elapsed,
-                     artifactDirection=direction, artifactMiBPerSecond=sum(s.get("artifactBytes", 0) for s in samples)/1048576/elapsed,
-                     httpRequests=sum(len(s.get("httpStatuses", [])) for s in samples),
-                     packagesVisited=len({(s["package"]["organization"],s["package"]["name"]) for s in samples if s["valid"]}),
-                     latency=distribution([s["elapsedMs"] for s in samples]),
-                     samples=sorted(samples, key=lambda sample: sample["sequence"]))
-        phases.append(phase)
-        (report / "samples.json").write_text(json.dumps(phases, indent=2) + "\n", encoding="utf-8")
-        print(f"MEASURE {label}: {count-failures}/{count}; {count/elapsed:.2f} ops/s; p95 {phase['latency']['p95Ms']:.2f}ms", flush=True)
-        if failures:
-            raise TestFailure(f"{label}: {failures} invalid operations; see samples.json")
+        measure_batch(label, workers, count, action, direction,
+                      phases=phases, report=report, measurements=measurements)
 
     def save_log(identifier, name):
         result = subprocess.run(["docker", "logs", identifier], env=environment, capture_output=True, timeout=30)
@@ -307,27 +317,31 @@ def main() -> int:
         if args.soak_seconds:
             soak_start = time.monotonic()
             stream = []
+            soak_rounds = []
             last_resource = float('-inf')
             for number in extended.paced_rounds(args.soak_seconds):
-                item = extended.stream_fixture(number)
-                batch(f'soak-{number:03d}-publish', 1, 1, lambda n: publish(item), 'send')
-                stream.append(item)
-                complete_indexes[(item['organization'], item['name'])] = stream
-                items.append(item)
-                selected = [large[number % 4] if args.large_fixtures else items[number % 256],
-                            index_items[number % 63] if args.large_fixtures else items[(number+1) % 256],
-                            item, items[(number*4) % 256], items[(number*4+1) % 256], items[(number*4+2) % 256]]
-                def mixed(n):
-                    if n == 6:
-                        return publish(items[number % 256], expected=409)
-                    if n == 7:
-                        return publish(item, expected=401, token='synthetic-invalid-publish')
-                    return read(selected[n])
-                batch(f'soak-{number:03d}-mixed', 8, 8, mixed, 'mixed')
-                soak['rounds'] = number+1
-                if time.monotonic() - last_resource >= 30:
-                    runtime_sample(server)
-                    last_resource = time.monotonic()
+                with extended.record_soak_round(report, soak_rounds, number, measurements) as record:
+                    item = extended.stream_fixture(number)
+                    record['phaseNames'].append(f'soak-{number:03d}-publish')
+                    batch(f'soak-{number:03d}-publish', 1, 1, lambda n: publish(item), 'send')
+                    stream.append(item)
+                    complete_indexes[(item['organization'], item['name'])] = stream
+                    items.append(item)
+                    selected = [large[number % 4] if args.large_fixtures else items[number % 256],
+                                index_items[number % 63] if args.large_fixtures else items[(number+1) % 256],
+                                item, items[(number*4) % 256], items[(number*4+1) % 256], items[(number*4+2) % 256]]
+                    def mixed(n):
+                        if n == 6:
+                            return publish(items[number % 256], expected=409)
+                        if n == 7:
+                            return publish(item, expected=401, token='synthetic-invalid-publish')
+                        return read(selected[n])
+                    record['phaseNames'].append(f'soak-{number:03d}-mixed')
+                    batch(f'soak-{number:03d}-mixed', 8, 8, mixed, 'mixed')
+                    soak['rounds'] = number+1
+                    if time.monotonic() - last_resource >= 30:
+                        runtime_sample(server)
+                        last_resource = time.monotonic()
             soak['elapsedSeconds'] = round(time.monotonic()-soak_start, 2)
             if soak['elapsedSeconds'] < args.soak_seconds or not soak['rounds']:
                 raise TestFailure('soak did not run for its requested duration')
@@ -386,7 +400,8 @@ def main() -> int:
                 except (TestFailure, OSError, ValueError, KeyError, subprocess.SubprocessError) as failure:
                     cleanup_errors.append(str(failure))
         success = success and not cleanup_errors
-        summary = dict(success=success,passed=len(stages),total=total_stages,seconds=round(time.monotonic()-started,2),
+        summary = dict(measurementFormatVersion=2,
+                       success=success,passed=len(stages),total=total_stages,seconds=round(time.monotonic()-started,2),
                        recordedAtUtc=recorded_at,scope=scope,runtime=runtime,stages=stages,error=error,
                        cleanup_errors=cleanup_errors,retained_volumes=volumes if not success else [],
                        runnerSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

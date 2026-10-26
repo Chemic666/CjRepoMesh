@@ -91,19 +91,7 @@ class PublishHandler <: HttpRequestHandler {
                 return
             }
             let storageOrganization = requestedRegistryOrganization(context)
-            let frameBuffer = ArrayList<UInt8>()
-            let maximumFrameBytes = maximumArtifactBytes() + MAX_PUBLISH_METADATA_BYTES + 10
-            while (true) {
-                let chunk = Array<UInt8>(64 * 1024, repeat: 0)
-                let readSize = context.request.body.read(chunk)
-                if (readSize == 0) {
-                    break
-                }
-                ensurePayloadFits(frameBuffer.size, readSize, maximumFrameBytes)
-                frameBuffer.add(all: chunk[..readSize])
-            }
-            let frame = frameBuffer.toArray()
-            let payload = parsePublishFrame(frame)
+            let payload = parsePublishFrame(context.request.body)
             let metadataJson = String.fromUtf8(payload.metadata)
             let metadata = JsonValue.fromStr(metadataJson).asObject()
             let name = requiredString(metadata, "name")
@@ -280,26 +268,71 @@ private class PublishPayload {
     }
 }
 
-private func parsePublishFrame(frame: Array<UInt8>): PublishPayload {
-    if (frame.size < 10 || frame[0] != FRAME_VERSION) {
-        throw Exception("invalid metadata frame")
+private class PublishFrameReader {
+    private let input: InputStream
+    private let maximumBytes: Int64
+    private var consumed: Int64 = 0
+
+    public init(input: InputStream) {
+        this.input = input
+        this.maximumBytes = maximumArtifactBytes() + MAX_PUBLISH_METADATA_BYTES + 10
     }
-    let metadataLength = decodeLittleEndianSize(frame, 1)
-    ensurePayloadFits(0, metadataLength, MAX_PUBLISH_METADATA_BYTES)
-    let artifactHeader = 5 + metadataLength
-    if (metadataLength <= 0 || artifactHeader + 5 > frame.size || frame[artifactHeader] != FRAME_VERSION) {
-        throw Exception("invalid metadata length or artifact frame")
+
+    private func readInto(buffer: Array<UInt8>): Int64 {
+        let count = input.read(buffer)
+        ensurePayloadFits(consumed, count, maximumBytes)
+        consumed += count
+        return count
     }
-    let artifactLength = decodeLittleEndianSize(frame, artifactHeader + 1)
-    ensurePayloadFits(0, artifactLength, maximumArtifactBytes())
-    let artifactStart = artifactHeader + 5
-    if (artifactLength <= 0 || artifactStart + artifactLength != frame.size) {
-        throw Exception("invalid artifact length")
+
+    public func readPart(length: Int64): Array<UInt8> {
+        let bytes = Array<UInt8>(length, repeat: 0)
+        var offset: Int64 = 0
+        while (offset < length) {
+            let count = readInto(bytes[offset..])
+            if (count == 0) { throw Exception("truncated metadata or artifact frame") }
+            offset += count
+        }
+        return bytes
     }
-    return PublishPayload(
-        frame[5..artifactHeader],
-        frame[artifactStart..artifactStart + artifactLength]
-    )
+
+    public func requireEnd(): Unit {
+        if (readInto(Array<UInt8>(1, repeat: 0)) != 0) {
+            throw Exception("invalid artifact length")
+        }
+    }
+
+    public func discardRemainder(): Unit {
+        // Preserve the actual-total-byte 413 precedence for malformed chunked
+        // bodies, without buffering that rejected content in memory.
+        let chunk = Array<UInt8>(64 * 1024, repeat: 0)
+        while (readInto(chunk) != 0) {}
+    }
+}
+
+private func parsePublishFrame(input: InputStream): PublishPayload {
+    let reader = PublishFrameReader(input)
+    try {
+        let metadataHeader = reader.readPart(5)
+        if (metadataHeader[0] != FRAME_VERSION) { throw Exception("invalid metadata frame") }
+        let metadataLength = decodeLittleEndianSize(metadataHeader, 1)
+        ensurePayloadFits(0, metadataLength, MAX_PUBLISH_METADATA_BYTES)
+        if (metadataLength <= 0) { throw Exception("invalid metadata length or artifact frame") }
+        let metadata = reader.readPart(metadataLength)
+        let artifactHeader = reader.readPart(5)
+        if (artifactHeader[0] != FRAME_VERSION) { throw Exception("invalid artifact frame") }
+        let artifactLength = decodeLittleEndianSize(artifactHeader, 1)
+        ensurePayloadFits(0, artifactLength, maximumArtifactBytes())
+        if (artifactLength <= 0) { throw Exception("invalid artifact length") }
+        let artifact = reader.readPart(artifactLength)
+        reader.requireEnd()
+        return PublishPayload(metadata, artifact)
+    } catch (e: PayloadTooLargeException) {
+        throw e
+    } catch (e: Exception) {
+        reader.discardRemainder()
+        throw e
+    }
 }
 
 private func decodeLittleEndianSize(bytes: Array<UInt8>, offset: Int64): Int64 {

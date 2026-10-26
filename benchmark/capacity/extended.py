@@ -1,9 +1,51 @@
 """Fixed large fixtures and paced rounds for the optional bounded capacity soak."""
+from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 import time
 
 from lib.harness import TestFailure
+
+
+class MeasurementClock:
+    """UTC labels and durations from one monotonic origin for the entire run."""
+    def __init__(self, *, clock=time.monotonic, utc_now=None):
+        self.clock = clock
+        self.utc_now = utc_now or (lambda: datetime.now(timezone.utc))
+        self.origin = clock()
+
+    def start(self):
+        return dict(startedAtUtc=self.utc_now().isoformat(),
+                    startOffsetSeconds=self.clock() - self.origin)
+
+    def finish(self, started):
+        end = self.clock() - self.origin
+        return dict(endedAtUtc=self.utc_now().isoformat(), endOffsetSeconds=end,
+                    elapsedSeconds=end - started['startOffsetSeconds'])
+
+
+@contextmanager
+def record_soak_round(report, rounds, sequence, measurements):
+    """Persist completed or interrupted rounds without consuming workload errors."""
+    record = dict(sequence=sequence, phaseNames=[], valid=False, **measurements.start())
+    workload_failure = None
+    try:
+        yield record
+        record['valid'] = True
+    except BaseException as failure:
+        workload_failure = failure
+        record['error'] = str(failure) or type(failure).__name__
+        raise
+    finally:
+        try:
+            record.update(measurements.finish(record))
+            rounds.append(record)
+            (report / 'soak-rounds.json').write_text(json.dumps(rounds, indent=2) + '\n', encoding='utf-8')
+        except Exception as evidence_failure:
+            if workload_failure is not None:
+                raise workload_failure from evidence_failure
+            raise
 
 
 def make_fixture(number, version, *, size=262144, description=None):

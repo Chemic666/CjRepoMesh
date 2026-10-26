@@ -2,7 +2,17 @@
 
 本页首节是当前交付组合的统一入口；其后保留不同产物的历史验收，避免拼成一次全量通过。详细日志和失败历史见[验证记录](verification-report.md)，发布提交见[交付记录](delivery-record.md)。
 
-## 当前组合：2026-10-25 HTTP发布帧与有界持续负载
+## 当前组合：2026-10-26 Hosted分段读取
+
+服务端`5749a1adbf0e968cbcf8048f8a1f197902dad2aa3ead8f6c2d6ffb2790d61886`，镜像`sha256:aa4a79c43941812dfb61b9c2009af2e31111030cd97967adc21ffbfd1a44be8c`。九文件归档`CjRepoMesh-server-linux-amd64-aa4a79c43941-frame-reader.zip`，50,399,951字节，SHA-256 `2e3afc3425bb15e7425edfb4de912e8a0d6e0d1b02c9662f0c20dbf22543200d`，清单SHA-256 `d38cf651dd0070c47d668e5bcc505aca28e44a700eeb0f664fc66c8cc2e1c95e`。
+
+客户端仍为`5dd187b55780c8dd8d7a8f0be4dc3bda9431fc10eb8a139d61b0defd7016d020`，21文件manifest-limit包，清单`41802d80d600c8fbcef00165b2df31aec90b2c7e1e57460d0070efafcc91de77`；归档`CjRepoMesh-client-linux-amd64-5dd187b55780-manifest-limit.tar.gz`、6,761,817字节、SHA-256 `a48fc6d813f45133795c9862680ae32ce534abb7afbff91cb3ba4760a7ffbf6a`，未重建。
+
+修复旧2132/177c单请求128MiB运行时内存不足；新组合16/64/128MiB串行发布、下载及精确存储核对通过。仍完整保存制品于内存，默认8槽不保证8路大包同时可用。帧19/19，HTTP5/5、载荷24/24、索引17/17、准入12/12、恢复23/23、Linux核心4/4；新包接收34/34、冷恢复23/23、快照18/18、指定2132→aa4a升级回退22/22分别通过。
+
+计时v2相关Python14/14；实际60秒格式验收13/13，11轮、334版本，重启前后401文件一致。新组合没有继承旧2132的30分钟成绩，也不承诺容量上限或8路128MiB并发。完整证据、失败记录与未验收边界见[本轮验证](verification-report.md#2026-10-26-hosted分段读取与计时证据v2)及[容量报告](capacity-report.md)。两份128MiB失败卷、早先16MiB失败卷保留停写；原产物保持。
+
+## 历史：2026-10-25 HTTP发布帧与有界持续负载
 
 同组合后续 **1800秒、329轮混合阶段，完整13/13**，最终652版本、719文件在重启前后核对一致。固定双包与二进制保持；与此前600秒及真实大CJP功能验收分别记录，不代表连续满载、小时/天级稳定或容量上限。[本轮详细计量](capacity-report.md)。
 
