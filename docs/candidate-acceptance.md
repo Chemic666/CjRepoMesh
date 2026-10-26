@@ -4,6 +4,8 @@
 
 ## 当前组合：2026-10-26 Hosted分段读取
 
+本组合后续完成 **1800秒、327轮混合阶段，完整13/13**；最终650版本、717文件重启前后摘要一致。过程中复现并修复Windows计时粒度导致的除零，相关16/16通过；基准计时源变更，双包/服务保持。详细失败、计时审计和资源采样空隙见[最新容量记录](capacity-report.md#2026-10-26-windows计时精度修复与aa4a三十分钟样本)，不代表持续满载或小时/天级稳定性。
+
 服务端`5749a1adbf0e968cbcf8048f8a1f197902dad2aa3ead8f6c2d6ffb2790d61886`，镜像`sha256:aa4a79c43941812dfb61b9c2009af2e31111030cd97967adc21ffbfd1a44be8c`。九文件归档`CjRepoMesh-server-linux-amd64-aa4a79c43941-frame-reader.zip`，50,399,951字节，SHA-256 `2e3afc3425bb15e7425edfb4de912e8a0d6e0d1b02c9662f0c20dbf22543200d`，清单SHA-256 `d38cf651dd0070c47d668e5bcc505aca28e44a700eeb0f664fc66c8cc2e1c95e`。
 
 客户端仍为`5dd187b55780c8dd8d7a8f0be4dc3bda9431fc10eb8a139d61b0defd7016d020`，21文件manifest-limit包，清单`41802d80d600c8fbcef00165b2df31aec90b2c7e1e57460d0070efafcc91de77`；归档`CjRepoMesh-client-linux-amd64-5dd187b55780-manifest-limit.tar.gz`、6,761,817字节、SHA-256 `a48fc6d813f45133795c9862680ae32ce534abb7afbff91cb3ba4760a7ffbf6a`，未重建。

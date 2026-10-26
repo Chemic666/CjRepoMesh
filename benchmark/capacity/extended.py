@@ -10,17 +10,22 @@ from lib.harness import TestFailure
 
 class MeasurementClock:
     """UTC labels and durations from one monotonic origin for the entire run."""
-    def __init__(self, *, clock=time.monotonic, utc_now=None):
-        self.clock = clock
+    def __init__(self, *, clock=None, utc_now=None):
+        # perf_counter is monotonic and avoids Windows 3.12 GetTickCount64's
+        # coarse ticks, which can make an entire fast batch appear to take zero.
+        self.clock = time.perf_counter if clock is None else clock
         self.utc_now = utc_now or (lambda: datetime.now(timezone.utc))
-        self.origin = clock()
+        self.origin = self.clock()
+
+    def elapsed(self):
+        return self.clock() - self.origin
 
     def start(self):
         return dict(startedAtUtc=self.utc_now().isoformat(),
-                    startOffsetSeconds=self.clock() - self.origin)
+                    startOffsetSeconds=self.elapsed())
 
     def finish(self, started):
-        end = self.clock() - self.origin
+        end = self.elapsed()
         return dict(endedAtUtc=self.utc_now().isoformat(), endOffsetSeconds=end,
                     elapsedSeconds=end - started['startOffsetSeconds'])
 

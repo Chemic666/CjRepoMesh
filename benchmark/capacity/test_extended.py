@@ -12,6 +12,41 @@ import extended
 
 
 class ExtendedTests(unittest.TestCase):
+    def test_default_measurement_clock_retains_submillisecond_intervals(self):
+        # Windows 3.12 monotonic ticks can stay fixed during a complete request.
+        with patch.object(extended.time, 'monotonic', return_value=10), patch.object(
+                extended.time, 'perf_counter', side_effect=[100, 100.0002, 100.00025]):
+            measurements = extended.MeasurementClock()
+            begin = measurements.start()
+            end = measurements.finish(begin)
+        self.assertAlmostEqual(begin['startOffsetSeconds'], .0002)
+        self.assertAlmostEqual(end['elapsedSeconds'], .00005)
+
+    def test_unmeasurable_phase_retains_evidence_and_rejects_rates(self):
+        for delta in (0, -1):
+            with self.subTest(delta=delta), tempfile.TemporaryDirectory() as directory:
+                now = [100.0]
+                measurements = extended.MeasurementClock(clock=lambda: now[0])
+                phases, rounds = [], []
+                report = Path(directory)
+                def action(number):
+                    now[0] += delta
+                    return [200], 1024, dict(name='synthetic', version='1.0.0', organization='')
+                with self.assertRaisesRegex(run.TestFailure, 'non-positive measurement interval'):
+                    with extended.record_soak_round(report, rounds, 0, measurements):
+                        run.measure_batch('too-short', 1, 1, action, 'send', phases=phases,
+                                          report=report, measurements=measurements)
+                phase = json.loads((report / 'samples.json').read_text())[0]
+                self.assertEqual(phase['elapsedSeconds'], delta)
+                self.assertIsNone(phase['operationsPerSecond'])
+                self.assertIsNone(phase['artifactMiBPerSecond'])
+                self.assertTrue(phase['samples'][0]['valid'])
+                self.assertEqual(phase['samples'][0]['httpStatuses'], [200])
+                self.assertEqual(phase['samples'][0]['elapsedMs'], delta * 1000)
+                saved = json.loads((report / 'soak-rounds.json').read_text())[0]
+                self.assertFalse(saved['valid'])
+                self.assertIn('non-positive measurement interval', saved['error'])
+
     def test_phase_and_sample_timestamps_share_the_run_origin(self):
         # Losing either boundary or using a per-phase origin breaks correlation.
         self.assertTrue(hasattr(extended, 'MeasurementClock'), 'measurement clock is missing')

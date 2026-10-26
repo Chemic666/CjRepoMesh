@@ -85,15 +85,19 @@ def measure_batch(label, workers, count, action, direction, *, phases, report, m
     elapsed = timing['elapsedSeconds']
     failures = sum(not item['valid'] for item in samples)
     phase = dict(name=label, concurrency=workers, operations=count, validOperations=count-failures,
-                 failedOperations=failures, **phase_start, **timing, operationsPerSecond=count/elapsed,
-                 artifactDirection=direction, artifactMiBPerSecond=sum(s.get('artifactBytes', 0) for s in samples)/1048576/elapsed,
+                 failedOperations=failures, **phase_start, **timing,
+                 operationsPerSecond=count/elapsed if elapsed > 0 else None,
+                 artifactDirection=direction,
+                 artifactMiBPerSecond=sum(s.get('artifactBytes', 0) for s in samples)/1048576/elapsed if elapsed > 0 else None,
                  httpRequests=sum(len(s.get('httpStatuses', [])) for s in samples),
                  packagesVisited=len({(s['package']['organization'],s['package']['name']) for s in samples if s['valid']}),
                  latency=distribution([s['elapsedMs'] for s in samples]),
                  samples=sorted(samples, key=lambda sample: sample['sequence']))
     phases.append(phase)
     (report / 'samples.json').write_text(json.dumps(phases, indent=2) + '\n', encoding='utf-8')
-    print(f"MEASURE {label}: {count-failures}/{count}; {count/elapsed:.2f} ops/s; p95 {phase['latency']['p95Ms']:.2f}ms", flush=True)
+    if elapsed <= 0:
+        raise TestFailure(f'{label}: non-positive measurement interval; see samples.json')
+    print(f"MEASURE {label}: {count-failures}/{count}; {phase['operationsPerSecond']:.2f} ops/s; p95 {phase['latency']['p95Ms']:.2f}ms", flush=True)
     if failures:
         raise TestFailure(f'{label}: {failures} invalid operations; see samples.json')
 
@@ -133,7 +137,6 @@ def main() -> int:
     items = []
     runtime, error, success = {}, "", False
     measurements = extended.MeasurementClock()
-    started = measurements.origin
     recorded_at = datetime.now(timezone.utc).isoformat()
 
     def docker(*arguments, stdout=subprocess.PIPE, timeout=60):
@@ -235,7 +238,7 @@ def main() -> int:
         peaks.append(peak)
         stats = json.loads(docker("stats", "--no-stream", "--format", "{{json .}}", server))
         current = docker('exec', server, 'cat', '/sys/fs/cgroup/memory.current', '/sys/fs/cgroup/pids.current').decode().split()
-        sample = dict(elapsedSeconds=round(time.monotonic()-started, 2), cgroupMemoryPeakBytes=peak,
+        sample = dict(elapsedSeconds=round(measurements.elapsed(), 2), cgroupMemoryPeakBytes=peak,
                       cgroupMemoryCurrentBytes=int(current[0]), cgroupPidsCurrent=int(current[1]),
                       endSnapshot={key:stats.get(key) for key in ("CPUPerc", "MemUsage", "PIDs", "BlockIO", "NetIO")})
         resource_samples.append(sample)
@@ -401,7 +404,7 @@ def main() -> int:
                     cleanup_errors.append(str(failure))
         success = success and not cleanup_errors
         summary = dict(measurementFormatVersion=2,
-                       success=success,passed=len(stages),total=total_stages,seconds=round(time.monotonic()-started,2),
+                       success=success,passed=len(stages),total=total_stages,seconds=round(measurements.elapsed(),2),
                        recordedAtUtc=recorded_at,scope=scope,runtime=runtime,stages=stages,error=error,
                        cleanup_errors=cleanup_errors,retained_volumes=volumes if not success else [],
                        runnerSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

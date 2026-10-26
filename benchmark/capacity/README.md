@@ -47,6 +47,8 @@ python -B benchmark\capacity\run.py --image <已有本地镜像> --evidence-dir 
 
 新增字段版本为`summary.json`的`measurementFormatVersion=2`，原字段保留。每个phase及sample增加`startedAtUtc`、`endedAtUtc`，以及相对主运行同一单调时钟起点的`startOffsetSeconds`、`endOffsetSeconds`；阶段`elapsedSeconds`和样本`elapsedMs`仍只由单调时钟差值计算。UTC用于关联外部资源记录，系统校时倒退时UTC结束标签可能早于开始标签，不能用UTC相减推导延迟或期限。
 
+测量使用高精度单调`perf_counter`，phase/sample/轮次、资源相对时间和整体时长共用同一起点，避免Windows Python3.12中`monotonic`的粗粒度刻度把快速操作记为零。持续期限和轮间节拍仍由各自配对的`monotonic`差值控制。如果阶段测量间隔为零或负值，先保存实际样本和阶段，两个速率字段置`null`，随后明确失败；不夹入虚构的最小时长或输出无穷速率。有效HTTP操作数与测量失败分别解释。
+
 启用持续负载后，`soak-rounds.json`逐轮保存从0开始的`sequence`、实际进入的`phaseNames`、同样的UTC/单调时钟边界、`elapsedSeconds`和`valid`；失败轮额外保存`error`，在finally写出后继续传播异常。轮次包含夹具准备、发布、混合请求及该轮资源采样，不含轮间等待；`soak.rounds`仍表示完成混合请求的轮数。正常异常可留证据，强杀不保证finally执行；没有开始任何轮次时不产生该文件。
 
 若结束计时或证据写出本身失败，已有负载异常仍作为主异常传播，留证错误保留在异常链中；正常轮次遇到留证失败也会使运行失败，不能按成功交付。
