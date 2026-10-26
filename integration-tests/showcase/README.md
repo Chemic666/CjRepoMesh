@@ -4,6 +4,8 @@
 
 ## 运行
 
+2026-10-26最终候选复演使用客户端`5dd187b5…`和服务端`8b34570e…`，Linux实跑 **7/7、41.41秒**，完整身份见[候选清单](../../docs/candidate-acceptance.md)。本机继续暂停Windows仓颉程序执行，下面Windows命令仅为平台入口说明，不属于本轮复演。Docker接收、真人操作和官方Maple分别验收。
+
 先加载已安装的匹配 SDK/stdx 环境，准备已构建的增强版 cjpm 与 Server。在项目根目录执行；默认连续占用五个本机端口 `39750`～`39754`，已占用时拒绝启动，可用 `--port` 更换起始端口。
 
 Windows CMD（环境加载方法见项目操作说明）：
@@ -15,8 +17,13 @@ python integration-tests\showcase\run.py --cjpm cjpm\target\release\bin\cjpm.exe
 Linux：
 
 ```bash
-python3 integration-tests/showcase/run.py --cjpm /path/to/enhanced/cjpm --server server/target/release/bin/main
+# CLIENT_KIT：已校验的完整客户端包目录；DEMO_SERVER：匹配摘要的现有Linux服务端ELF。
+# DEMO_REPORT：不存在的新报告目录。先设置这三个绝对路径并加载SDK/stdx环境。
+python3 -B "$CLIENT_KIT/verify.py"
+python3 -B integration-tests/showcase/run.py --cjpm "$CLIENT_KIT/cjpm" --server "$DEMO_SERVER" --output-dir "$DEMO_REPORT"
 ```
+
+服务端ZIP中的`image.tar`是容器镜像归档，不能作为`--server`输入；容器接收按[离线服务端说明](../../deployment/portable/README.md)执行。此入口不会下载、解包或构建工具链，也不要求另找设备。
 
 可用 `--server` 指定其他现有服务端；`--output-dir` 指定**不存在的新目录**。默认报告写入被 Git 忽略的 `integration-tests/.tmp/enterprise-report-*`。成功只清理本次自建服务数据与项目，报告保留；失败同时保留夹具。仅停止本次启动的服务，不处理占用端口的其他进程。
 
