@@ -16,6 +16,7 @@ import stdx.encoding.json.*
 private let FRAME_VERSION: UInt8 = 1
 private let PUBLISH_ADMISSION_LOCK = Mutex()
 private var activePublishes: Int64 = 0
+private var inflightArtifactBytes: Int64 = 0
 
 private func tryEnterPublish(limit: Int64): Bool {
     synchronized(PUBLISH_ADMISSION_LOCK) {
@@ -29,6 +30,44 @@ private func leavePublish(): Unit {
     synchronized(PUBLISH_ADMISSION_LOCK) {
         activePublishes -= 1
     }
+}
+
+private class PublishBufferCapacityException <: Exception {
+    public init() { super("publish capacity reached; retry later") }
+}
+
+// A lease stores only its owned count, never a payload or array reference.
+private class PublishArtifactLease {
+    private var ownedBytes: Int64 = 0
+
+    public func reserve(length: Int64): Unit {
+        let limit = maximumInflightArtifactBytes()
+        ensurePayloadFits(0, length, limit)
+        synchronized(PUBLISH_ADMISSION_LOCK) {
+            if (length > limit - inflightArtifactBytes) {
+                throw PublishBufferCapacityException()
+            }
+            inflightArtifactBytes += length
+            ownedBytes = length
+        }
+    }
+
+    public func release(): Unit {
+        synchronized(PUBLISH_ADMISSION_LOCK) {
+            if (ownedBytes > 0) {
+                inflightArtifactBytes -= ownedBytes
+                ownedBytes = 0
+            }
+        }
+    }
+}
+
+private func respondPublishCapacity(context: HttpContext): Unit {
+    context.responseBuilder.status(429)
+        .header("Content-Type", "application/json; charset=utf-8")
+        .header("Retry-After", "1")
+        .header("Connection", "close")
+        .body("{\"errors\":[{\"message\":\"publish capacity reached; retry later\"}]}")
 }
 
 // cjpm sends organization in a query parameter, while the HTTP distributor
@@ -80,122 +119,16 @@ class PublishHandler <: HttpRequestHandler {
         }
 
         var admitted = false
+        let artifactLease = PublishArtifactLease()
         try {
             admitted = tryEnterPublish(maximumConcurrentPublishes())
             if (!admitted) {
-                context.responseBuilder.status(429)
-                    .header("Content-Type", "application/json; charset=utf-8")
-                    .header("Retry-After", "1")
-                    .header("Connection", "close")
-                    .body("{\"errors\":[{\"message\":\"publish capacity reached; retry later\"}]}")
+                respondPublishCapacity(context)
                 return
             }
-            let storageOrganization = requestedRegistryOrganization(context)
-            let payload = parsePublishFrame(context.request.body)
-            let metadataJson = String.fromUtf8(payload.metadata)
-            let metadata = JsonValue.fromStr(metadataJson).asObject()
-            let name = requiredString(metadata, "name")
-            let version = requiredString(metadata, "version")
-            let packageOrganization = requiredString(metadata, "organization")
-            if (name != routeName) {
-                throw Exception("request package name does not match metadata")
-            }
-            if (!isSafePackageSegment(name) || !isSafePackageSegment(version) || name.size < 3) {
-                throw Exception("invalid package name or version")
-            }
-
-            let indexValue = metadata.get("index") ?? throw Exception("metadata is missing index")
-            let indexObject = indexValue.asObject()
-            if (requiredString(indexObject, "name") != name ||
-                requiredString(indexObject, "version") != version ||
-                requiredString(indexObject, "organization") != metadataOrganization(storageOrganization) ||
-                packageOrganization != metadataOrganization(storageOrganization)) {
-                throw Exception("metadata index identity does not match package identity")
-            }
-
-            let expectedChecksum = requiredString(indexObject, "sha256sum")
-            let sha256 = SHA256()
-            sha256.write(payload.artifact)
-            let actualChecksum = toHexString(sha256.finish())
-            if (actualChecksum != expectedChecksum) {
-                throw Exception("artifact SHA-256 does not match metadata")
-            }
-
-            let artifactDir = Path(storage)
-                .join("artifacts")
-                .join(storageOrganization)
-                .join(name)
-                .join(version)
-            let artifactPath = artifactDir.join("${name}-${version}.cjp")
-            let firstLevel = name[..2]
-            let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
-            let indexDir = Path(storage).join("index").join(storageOrganization).join(firstLevel).join(secondLevel)
-            let indexPath = indexDir.join(name)
-
-            let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
-            let hostedIndexLimit = maximumHostedIndexBytes()
-            var duplicate = false
-            var recovered = false
-            synchronized(packageStorageLock(storage, storageOrganization, name)) {
-                // Recheck while holding the lock so concurrent publishes cannot
-                // interleave records or race another retry repairing crash state.
-                let previousIndex = if (exists(indexPath)) {
-                    readHostedIndex(indexPath, hostedIndexLimit)
-                } else {
-                    ""
-                }
-                let indexedChecksum = storedHostedChecksum(previousIndex, storageOrganization, name, version)
-                if (let Some(storedChecksum) <- indexedChecksum) {
-                    if (storedChecksum != expectedChecksum || exists(artifactPath)) {
-                        duplicate = true
-                    } else {
-                        // Restore only the missing artifact; published metadata
-                        // remains byte-for-byte unchanged, including dependencies.
-                        ensureParent(artifactPath)
-                        writeFileAtomically(artifactPath, payload.artifact)
-                        recovered = true
-                    }
-                } else if (exists(artifactPath)) {
-                    // An abrupt exit can leave verified bytes without an index.
-                    // Never replace those bytes merely because metadata is absent.
-                    let storedDigest = SHA256()
-                    storedDigest.write(File.readFrom(artifactPath))
-                    if (toHexString(storedDigest.finish()) != expectedChecksum) {
-                        duplicate = true
-                    } else {
-                        let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
-                        ensureParent(indexPath)
-                        writeFileAtomically(indexPath, nextIndex)
-                        recovered = true
-                    }
-                } else {
-                    // Refuse an over-capacity append before creating parents or
-                    // writing a new artifact that would otherwise need rollback.
-                    let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
-                    ensureParent(artifactPath)
-                    ensureParent(indexPath)
-
-                    writeFileAtomically(artifactPath, payload.artifact)
-                    try {
-                        writeFileAtomically(indexPath, nextIndex)
-                    } catch (e: Exception) {
-                        removeIfExists(artifactPath)
-                        throw e
-                    }
-                }
-            }
-            if (duplicate) {
-                respondError(context, 409, "artifact with the same name and version already exists")
-                return
-            }
-            if (recovered) {
-                println("[hosted] organization=${storageOrganization} package=${name} version=${version} result=RECOVERED")
-            }
-
-            context.responseBuilder
-                .status(200)
-                .header("Content-Type", "application/json; charset=utf-8")
-                .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
+            publish(context, artifactLease)
+        } catch (e: PublishBufferCapacityException) {
+            respondPublishCapacity(context)
         } catch (e: HostedIndexTooLargeException) {
             respondError(context, 413, e.message)
         } catch (e: PayloadTooLargeException) {
@@ -203,8 +136,120 @@ class PublishHandler <: HttpRequestHandler {
         } catch (e: Exception) {
             respondError(context, 400, e.message)
         } finally {
+            // The inner publish call has returned/unwound: its payload is no
+            // longer rooted in this handler before another lease can be granted.
+            artifactLease.release()
             if (admitted) { leavePublish() }
         }
+    }
+
+    private func publish(context: HttpContext, artifactLease: PublishArtifactLease): Unit {
+        let storageOrganization = requestedRegistryOrganization(context)
+        let payload = parsePublishFrame(context.request.body, artifactLease)
+        let metadataJson = String.fromUtf8(payload.metadata)
+        let metadata = JsonValue.fromStr(metadataJson).asObject()
+        let name = requiredString(metadata, "name")
+        let version = requiredString(metadata, "version")
+        let packageOrganization = requiredString(metadata, "organization")
+        if (name != routeName) {
+            throw Exception("request package name does not match metadata")
+        }
+        if (!isSafePackageSegment(name) || !isSafePackageSegment(version) || name.size < 3) {
+            throw Exception("invalid package name or version")
+        }
+
+        let indexValue = metadata.get("index") ?? throw Exception("metadata is missing index")
+        let indexObject = indexValue.asObject()
+        if (requiredString(indexObject, "name") != name ||
+            requiredString(indexObject, "version") != version ||
+            requiredString(indexObject, "organization") != metadataOrganization(storageOrganization) ||
+            packageOrganization != metadataOrganization(storageOrganization)) {
+            throw Exception("metadata index identity does not match package identity")
+        }
+
+        let expectedChecksum = requiredString(indexObject, "sha256sum")
+        let sha256 = SHA256()
+        sha256.write(payload.artifact)
+        let actualChecksum = toHexString(sha256.finish())
+        if (actualChecksum != expectedChecksum) {
+            throw Exception("artifact SHA-256 does not match metadata")
+        }
+
+        let artifactDir = Path(storage)
+            .join("artifacts")
+            .join(storageOrganization)
+            .join(name)
+            .join(version)
+        let artifactPath = artifactDir.join("${name}-${version}.cjp")
+        let firstLevel = name[..2]
+        let secondLevel = if (name.size > 3) { name[2..4] } else { name[2..3] }
+        let indexDir = Path(storage).join("index").join(storageOrganization).join(firstLevel).join(secondLevel)
+        let indexPath = indexDir.join(name)
+
+        let indexLine = indexValue.toJsonString().replace("\r", "").replace("\n", "")
+        let hostedIndexLimit = maximumHostedIndexBytes()
+        var duplicate = false
+        var recovered = false
+        synchronized(packageStorageLock(storage, storageOrganization, name)) {
+            // Recheck while holding the lock so concurrent publishes cannot
+            // interleave records or race another retry repairing crash state.
+            let previousIndex = if (exists(indexPath)) {
+                readHostedIndex(indexPath, hostedIndexLimit)
+            } else {
+                ""
+            }
+            let indexedChecksum = storedHostedChecksum(previousIndex, storageOrganization, name, version)
+            if (let Some(storedChecksum) <- indexedChecksum) {
+                if (storedChecksum != expectedChecksum || exists(artifactPath)) {
+                    duplicate = true
+                } else {
+                    // Restore only the missing artifact; published metadata
+                    // remains byte-for-byte unchanged, including dependencies.
+                    ensureParent(artifactPath)
+                    writeFileAtomically(artifactPath, payload.artifact)
+                    recovered = true
+                }
+            } else if (exists(artifactPath)) {
+                // An abrupt exit can leave verified bytes without an index.
+                // Never replace those bytes merely because metadata is absent.
+                let storedDigest = SHA256()
+                storedDigest.write(File.readFrom(artifactPath))
+                if (toHexString(storedDigest.finish()) != expectedChecksum) {
+                    duplicate = true
+                } else {
+                    let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
+                    ensureParent(indexPath)
+                    writeFileAtomically(indexPath, nextIndex)
+                    recovered = true
+                }
+            } else {
+                // Refuse an over-capacity append before creating parents or
+                // writing a new artifact that would otherwise need rollback.
+                let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
+                ensureParent(artifactPath)
+                ensureParent(indexPath)
+
+                writeFileAtomically(artifactPath, payload.artifact)
+                try {
+                    writeFileAtomically(indexPath, nextIndex)
+                } catch (e: Exception) {
+                    removeIfExists(artifactPath)
+                    throw e
+                }
+            }
+        }
+        if (duplicate) {
+            respondError(context, 409, "artifact with the same name and version already exists")
+            return
+        }
+        if (recovered) {
+            println("[hosted] organization=${storageOrganization} package=${name} version=${version} result=RECOVERED")
+        }
+
+        context.responseBuilder
+            .status(200)
+            .header("Content-Type", "application/json; charset=utf-8")
+            .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
     }
 }
 
@@ -310,7 +355,7 @@ private class PublishFrameReader {
     }
 }
 
-private func parsePublishFrame(input: InputStream): PublishPayload {
+private func parsePublishFrame(input: InputStream, artifactLease: PublishArtifactLease): PublishPayload {
     let reader = PublishFrameReader(input)
     try {
         let metadataHeader = reader.readPart(5)
@@ -324,9 +369,12 @@ private func parsePublishFrame(input: InputStream): PublishPayload {
         let artifactLength = decodeLittleEndianSize(artifactHeader, 1)
         ensurePayloadFits(0, artifactLength, maximumArtifactBytes())
         if (artifactLength <= 0) { throw Exception("invalid artifact length") }
+        artifactLease.reserve(artifactLength)
         let artifact = reader.readPart(artifactLength)
         reader.requireEnd()
         return PublishPayload(metadata, artifact)
+    } catch (e: PublishBufferCapacityException) {
+        throw e
     } catch (e: PayloadTooLargeException) {
         throw e
     } catch (e: Exception) {

@@ -14,6 +14,8 @@
 
 Hosted分段帧回归：`python3 integration-tests/compatibility/hosted_frame_reader.py --server <已有Linux服务端> --evidence-dir <新私有目录>`。19项覆盖固定/分块短读、精确1MiB元数据、错误版本/长度、截断、声明及实际总包络超限、合法帧后的超限尾部、有效头后断连与单槽释放；拒绝无落盘，恢复发布、下载、完整索引及重复409均核对。每案独立自有服务/存储，需先加载匹配SDK运行库，不执行Windows仓颉；这是协议回归，不是128MiB内存或并发容量测试。
 
+Hosted制品缓冲预算回归：`python3 integration-tests/compatibility/publish_buffer_budget.py --server <已有Linux服务端> --evidence-dir <新私有目录>`。18项用32/64字节合成制品验证非法/最大配置、精确/超限、跨组织累计预留、拒绝不释放他人、双预留并存与逐个释放，以及成功/重复/断连/截断/尾部/哈希/索引/IO错误后的释放。部分请求先发送有效元数据及制品头再暂停，避免把处理器名额误当字节预留；失败保持证据、仅停止本次进程。不执行Windows仓颉；小字节专项不代替大包、GC、RSS或HTTP提前响应验收。
+
 ## Windows 全量入口
 
 在已经安装仓颉 SDK、stdx 和 Windows 构建工具的环境中，从项目根目录运行：

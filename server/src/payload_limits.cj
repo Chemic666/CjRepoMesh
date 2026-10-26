@@ -39,6 +39,12 @@ func maximumConcurrentPublishes(): Int64 {
     return configuredPayloadLimit("CJREPO_MAX_CONCURRENT_PUBLISHES", 8, 64)
 }
 
+// Sum of declared artifact array sizes held by admitted Hosted publishers.
+// This does not account for metadata, reads, runtime overhead or total RSS.
+func maximumInflightArtifactBytes(): Int64 {
+    return configuredPayloadLimit("CJREPO_MAX_INFLIGHT_ARTIFACT_BYTES", 128 * 1024 * 1024, 1024 * 1024 * 1024)
+}
+
 class HostedIndexTooLargeException <: Exception {
     public init() {
         super("hosted index exceeds configured byte limit")

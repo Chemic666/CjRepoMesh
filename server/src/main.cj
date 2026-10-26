@@ -220,6 +220,7 @@ main(): Int64 {
         let _ = maximumIndexBytes()
         let _ = maximumHostedIndexBytes()
         let _ = maximumConcurrentPublishes()
+        let _ = maximumInflightArtifactBytes()
     } catch (e: Exception) {
         eprintln("Error: ${e.message}")
         return 2
