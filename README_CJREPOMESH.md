@@ -12,7 +12,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前状态（2026-10-26，功能冻结）**：采用固定21文件客户端包`5dd187b5…`、9文件服务端包`8b34570e…` / 镜像`722ffc3c…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)首节。该组合已有独立的接收34/34、冷恢复23/23、多来源快照18/18及指定版本升级/回退22/22证据；本次又以固定Linux二进制跑通[七阶段连贯演练](integration-tests/showcase/README.md)，**7/7、41.41秒**。各流程分别记录，不拼成一次全量验收。当前进入演示熟悉和交付收口，只修真实交付阻断；[演示入口](docs/demo-runbook.md)、[收口检查表](docs/submission-checklist.md)、[验证记录](docs/verification-report.md)及[双端交付记录](docs/delivery-record.md)已按此候选组织。
+**当前状态（2026-10-27）**：采用固定21文件客户端包`1a46b572…`、9文件服务端包`7f8b34ab…` / 镜像`ea56ff57…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)首节。扩大官方用例验收发现并修复了旧SDK源码集编译参数兼容问题；服务端新增孤立制品有界校验。当前同组合Linux核心 **4/4**、[连贯演练](integration-tests/showcase/README.md) **7/7**，另分别完成接收34/34、冷恢复23/23、多来源快照18/18及指定版本升级/回退22/22。各流程独立，不拼成一次全量验收；官方Maple安全集合1179项实际1165 PASS、14 FAIL，另180项未准入；完整官方套件仍未通过。逐例口径、失败对照和持续负载见[验证记录](docs/verification-report.md)。决赛通知及7页参考模板对应的6～8分钟讲解顺序见[演示入口](docs/demo-runbook.md)，剩余事项见[收口检查表](docs/submission-checklist.md)。
 
 当前Windows原生全量、完整官方Maple、最终客户端在全新/跨主机环境的完整验收、来源排他性与生产信任/凭据轮换仍未完成；旧产物的跨机成绩不移算。服务端有独立的有界Hosted容量样本，不代表当前工具包团队负载或长期生产容量。签名、已解包缓存再验真、脚本沙箱、流式落盘和完整资源配额仍未实现；使用条件和规模应以实际项目验证，不按本机短测推算团队人数或SLA。
 

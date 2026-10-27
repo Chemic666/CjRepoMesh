@@ -613,7 +613,11 @@ func getTypeCommand(compileTask: CompileTask, ignoreTestFlags!: Bool = false): A
     }
 
     for ((chirpath, commonCjo) in compileTask.prevStageArtifacts) {
-        res.add("--common-part-chir=${chirpath}")
+        if (state.supportsCommonPartChir) {
+            res.add("--common-part-chir=${chirpath}")
+        } else {
+            res.add(chirpath)
+        }
         res.add("--common-part-cjo=${commonCjo}")
     }
 

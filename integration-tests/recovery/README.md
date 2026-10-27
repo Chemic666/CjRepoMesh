@@ -1,5 +1,13 @@
 # Hosted and Sync interruption recovery regressions
 
+The orphan digest boundary runner additionally covers six sizes around 64KiB chunks, partial final chunks, same-length/short/long/empty conflicts, a directory read error followed by retry, concurrent repair, and a sparse 256MiB orphan with a one-byte upload. It verifies immutable orphan bytes/mtime and exact committed records. Use an already built Linux server in the current environment:
+
+```bash
+python3 -B integration-tests/recovery/orphan_digest.py --server /path/to/cjrepo --evidence-dir /path/to/new-report
+```
+
+Its 13 checks use owned loopback port 39820 by default and isolated storage; failed evidence is retained. They do not prove a mid-stream I/O fault, real CJP consumption or large-file capacity. The separate current-image 128MiB synthetic recovery/download/restart check is recorded in the verification report. Fixed-buffer orphan hashing does not make uploads streaming or bound total process RSS.
+
 Load the existing Cangjie runtime and build the server, then run from the repository root:
 
 ```cmd

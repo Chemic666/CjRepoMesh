@@ -607,6 +607,8 @@ public enum OutputType <: Serializable<OutputType> & ToString {
 public class CjpmState {
     private var __cjcInfo: ?CjcInfo = None
     private var __cjcPath: ?String = None
+    private var __supportsCommonPartChir: ?Bool = None
+    private let __cjcCapabilityMutex = Mutex()
     private var __isExperimental: ?Bool = None
 
     init() {}
@@ -631,6 +633,30 @@ public class CjpmState {
                     __cjcPath = info
                     info
                 case Some(info) => info
+            }
+        }
+    }
+
+    // Probe lazily: ordinary builds never need the multiplatform CHIR option.
+    // Some compiler versions return zero even when an option is invalid, so
+    // distinguish their diagnostic from a successfully rendered help page.
+    public prop supportsCommonPartChir: Bool {
+        get() {
+            synchronized(__cjcCapabilityMutex) {
+                if (let Some(supported) <- __supportsCommonPartChir) {
+                    return supported
+                }
+                let (success, output, errlog) = execWithOutput(cjcPath,
+                    ArrayList<String>(["--common-part-chir=__cjpm_capability_probe__", "--help"]))
+                let supported = if ((output + errlog).contains("invalid option: '--common-part-chir'")) {
+                    false
+                } else if (success && output.trimAscii().startsWith("Usage:") && errlog.trimAscii().isEmpty()) {
+                    true
+                } else {
+                    throw CliFailError([errlog, "Error: failed to probe cjc --common-part-chir support"])
+                }
+                __supportsCommonPartChir = supported
+                supported
             }
         }
     }

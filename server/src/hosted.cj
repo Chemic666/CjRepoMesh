@@ -212,9 +212,7 @@ class PublishHandler <: HttpRequestHandler {
             } else if (exists(artifactPath)) {
                 // An abrupt exit can leave verified bytes without an index.
                 // Never replace those bytes merely because metadata is absent.
-                let storedDigest = SHA256()
-                storedDigest.write(File.readFrom(artifactPath))
-                if (toHexString(storedDigest.finish()) != expectedChecksum) {
+                if (!storedArtifactMatches(artifactPath, payload.artifact.size, expectedChecksum)) {
                     duplicate = true
                 } else {
                     let nextIndex = appendHostedIndex(previousIndex, indexLine, hostedIndexLimit)
@@ -251,6 +249,24 @@ class PublishHandler <: HttpRequestHandler {
             .header("Content-Type", "application/json; charset=utf-8")
             .body("{\"status\":\"published\",\"name\":\"${name}\",\"version\":\"${version}\"}")
     }
+}
+
+private func storedArtifactMatches(path: Path, expectedLength: Int64, expectedChecksum: String): Bool {
+    let digest = SHA256()
+    // The upload already owns its artifact array. Never allocate a second
+    // file-sized array while verifying a crash orphan under the package lock.
+    let buffer = Array<UInt8>(64 * 1024, repeat: 0)
+    var consumed: Int64 = 0
+    try (file = File(path, Read)) {
+        while (true) {
+            let count = file.read(buffer)
+            if (count == 0) { break }
+            if (count > expectedLength - consumed) { return false }
+            digest.write(buffer[..count])
+            consumed += count
+        }
+    }
+    return consumed == expectedLength && toHexString(digest.finish()) == expectedChecksum
 }
 
 private func readHostedIndex(path: Path, limit: Int64): String {
