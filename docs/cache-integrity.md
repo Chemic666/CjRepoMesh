@@ -10,6 +10,12 @@ Older extracted caches have no receipt and are deliberately not trusted automati
 
 Repository installation uses a unique temporary build copy. Generated targets, lockfiles and provenance stay in that copy; the original extracted source and its receipt remain unchanged. Only the work directory created by that installation is cleaned up.
 
+## Official legacy-cache compatibility
+
+The current-client official compatibility replay retains two failing original assertions: `install/coverage/repository_cached` and `update/coverage/central_dependency_cached_update`. They preseed bare extracted source, without the complete index/archive/receipt verification required by the new admission policy. The install fixture also lacks a trusted index and is rejected before receipt verification; the update fixture reaches receipt verification and is rejected there. The original assertions expect successful reuse, so these remain FAIL rather than being reclassified as successful security tests.
+
+This is a documented backward-compatibility limitation. Preserve the previous directory, configure a new cache path and fetch from the intended trusted repository. Do not manufacture a receipt or remove the validation to pass a legacy assertion. Exact candidate counts and evidence are in the [verification report](verification-report.md#2026-10-27-当前客户端官方兼容性复验).
+
 ## Scope
 
 This detects source-cache inconsistency after an archive-verified extraction. It does not authenticate a publisher, sign a package, or resist an actor who can modify both the source and its receipt under the same account. It does not cover generated compiler artifacts, permissions, hard-link identity, concurrent same-account mutation after verification, or multiple CLI processes sharing extraction destinations. Use separately owned job caches for concurrent jobs.

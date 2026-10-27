@@ -157,7 +157,7 @@ storage/
 - 发布和代理缓存填充使用固定 256 个锁分片，按仓库、组织和包名定位；同包串行，不同包通常并行，哈希碰撞时仍会串行，且锁对象数量有界；
 - 递归创建共享父目录另用一个进程内短时锁，Hosted、Proxy、Mirror/Sync 统一调用；锁内不下载或写制品，不支持多进程共用存储目录；
 - Mirror/Sync 已支持显式批量清单与单进程定时轮询，失败项下轮重试；尚无持久化游标、字节级断点续传和多实例协调；
-- Windows 一键部署、WSL 2 / Ubuntu 22.04 Linux 原生构建与四组共享核心回归、Docker Compose 真实发布和容器重建持久化均已验证；
+- Windows部署脚本保留历史验证，当前固定候选的Windows原生全量仍未验收；Linux原生核心及Docker交付的实际范围分别见[当前候选清单](candidate-acceptance.md)，不把历史结果移算给新产物；
 - 尚未运行依赖额外官方测试资产的完整 Maple HLT/LLT，因此不能宣称通过全部官方回归；
 - `cjpm-provenance.json` 是 CjRepoMesh 的审计文件，不冒充官方 lockfile 格式。
 - 在线explain只预览单包候选，明确忽略lockfile和传递约束；recorded读取保存的解析记录，不证明编译成功、来源真实性或当前配置一致性。可选的[CI来源基线](repository-source-baseline.md)在最终仓库图选定后、制品下载前比较独立批准集合，不改变求解器。另有[解包源码缓存一致性校验](cache-integrity.md)，不提供发布者签名、编译产物再验真或脚本沙箱。

@@ -12,7 +12,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前补强候选（2026-10-27）**：21文件客户端`9d35739f…`、9文件服务端`52ce146c…` / 镜像`f3214f57…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)首节。新增[解包源码缓存一致性检查](docs/cache-integrity.md)、隔离仓库安装、可选存储字节配额及[离线轮换准备](deployment/portable/README.md#停服轮换的离线准备)。源码缓存19项、安装3项、配额18项和实际包参与的合成轮换12项分别通过；Linux四组核心分两批通过，七阶段7/7。同一新归档的接收34/34、冷恢复23/23、多来源快照18/18及指定升级/回退22/22分别通过，失败与中断记录保留。新客户端另有12项新准入官方用例通过；旧1a46的1165 PASS/14 FAIL保留原身份，不移算成新客户端全套成绩，见[验证记录](docs/verification-report.md)。决赛材料和本人演练见[演示入口](docs/demo-runbook.md)及[收口检查表](docs/submission-checklist.md)。
+**当前补强候选（2026-10-27）**：21文件客户端`9d35739f…`、9文件服务端`52ce146c…` / 镜像`f3214f57…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)首节。新增[解包源码缓存一致性检查](docs/cache-integrity.md)、隔离仓库安装、可选存储字节配额及[离线轮换准备](deployment/portable/README.md#停服轮换的离线准备)。源码缓存19项、安装3项、配额18项和实际包参与的合成轮换12项分别通过；Linux四组核心分两批通过，七阶段7/7。同一新归档的接收34/34、冷恢复23/23、多来源快照18/18及指定升级/回退22/22分别通过，失败与中断记录保留。新客户端本批315项官方用例299 PASS/16 FAIL，连同此前不重叠12项，当前累计327项311 PASS/16 FAIL；包含14条历史失败路径和2项旧缓存准入不兼容。旧成绩不移算，完整Maple未通过，见[验证记录](docs/verification-report.md)。决赛材料和本人演练见[演示入口](docs/demo-runbook.md)及[收口检查表](docs/submission-checklist.md)。
 
 Windows原生全量、完整官方Maple、全新/跨物理主机完整验收与真实生产信任/凭据轮换仍未完成；旧产物的跨机成绩不移算。本地receipt不防同权限同步篡改，不校验生成的编译产物；存储逻辑字节配额不等于OS磁盘限额。发布者签名、构建沙箱、流式落盘、完整操作总期限、在线备份一致性及多实例故障切换仍缺。历史Hosted容量样本不代表新包长期或饱和容量，不按短测推算生产人数或SLA。
 
