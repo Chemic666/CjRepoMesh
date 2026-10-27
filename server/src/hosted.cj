@@ -131,6 +131,8 @@ class PublishHandler <: HttpRequestHandler {
             respondPublishCapacity(context)
         } catch (e: HostedIndexTooLargeException) {
             respondError(context, 413, e.message)
+        } catch (e: StorageQuotaExceededException) {
+            respondError(context, 507, e.message)
         } catch (e: PayloadTooLargeException) {
             respondError(context, 413, e.message)
         } catch (e: Exception) {
@@ -231,7 +233,7 @@ class PublishHandler <: HttpRequestHandler {
                 try {
                     writeFileAtomically(indexPath, nextIndex)
                 } catch (e: Exception) {
-                    removeIfExists(artifactPath)
+                    removeStorageFile(artifactPath)
                     throw e
                 }
             }

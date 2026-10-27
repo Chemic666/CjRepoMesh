@@ -58,8 +58,16 @@ func runMirror(arguments: Array<String>): Bool {
         ensureParent(artifactPath)
         // Publish the verified artifact before advertising its version in the
         // local index. Other upstream versions must never appear here.
+        let artifactExisted = exists(artifactPath)
         writeFileAtomically(artifactPath, artifact)
-        writeFileAtomically(indexPath, localIndex)
+        try {
+            writeFileAtomically(indexPath, localIndex)
+        } catch (e: Exception) {
+            // A failed index commit must not consume quota with a new orphan.
+            // Preserve artifacts already owned before this operation.
+            if (!artifactExisted) { removeStorageFile(artifactPath) }
+            throw e
+        }
         println("[mirror] package=${packageSpec} version=${version} result=SYNCED checksum=${expectedChecksum}")
         return true
     } catch (e: Exception) {

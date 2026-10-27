@@ -258,6 +258,17 @@ public class Depot {
 
     // download package from central repository
     public func download(name: String, org: String, version: String): (Bool, String) {
+        let source = Path(this.localRepo).join("source").
+            join(if (org.isEmpty()) { "default" } else { org }).join("${name}-${version}")
+        try {
+            if (!repositoryCacheParentsValid(this.localRepo, org) ||
+                repositoryCacheEntryExists(source) || repositoryCacheEntryExists(repositoryCacheReceipt(source)) ||
+                repositoryCacheEntryExists(source.parent.join("temp-${name}-${version}"))) {
+                return (false, repositoryCacheIntegrityError())
+            }
+        } catch (_: Exception) {
+            return (false, repositoryCacheIntegrityError())
+        }
         var downloadUrl = baseUrl + "/pkg/${name}/${version}"
         var orgStr = ""
         if (!org.isEmpty()) {
@@ -312,10 +323,12 @@ public class Depot {
         client.close()
 
         // check sha256sum
+        var archiveSha = ""
         try {
             let sha256Instance = SHA256()
             sha256Instance.write(buffer.toArray())
             let sha256sum = toHexString(sha256Instance.finish())
+            archiveSha = sha256sum
             let indexPath = this.getIndex(name, org)
             if (indexPath.isEmpty()) {
                 return (false, "index error while downloading ${name}-${version} ${orgStr}")
@@ -357,7 +370,33 @@ public class Depot {
         }
 
         // save, uncompress and delete cjp file
-        return uncompressCjp(org, name, version, buffer.toArray(), this.localRepo)
+        let (extracted, output) = uncompressCjp(org, name, version, buffer.toArray(), this.localRepo)
+        if (!extracted) { return (false, output) }
+        if (!writeRepositoryCacheReceipt(source, archiveSha)) {
+            return (false, repositoryCacheIntegrityError())
+        }
+        return (true, output)
+    }
+
+    // All callers share cache admission; no index refresh or network is needed
+    // for a previously downloaded, unchanged source and local index pair.
+    public func verifyCachedSource(name: String, org: String, version: String): Bool {
+        try {
+            if (!repositoryCacheParentsValid(this.localRepo, org)) { return false }
+            let indexPath = this.getIndex(name, org)
+            if (indexPath.isEmpty()) { return false }
+            for (line in String.fromUtf8(File.readFrom(indexPath)).lines()) {
+                let index = ArtifactIndex.deserialize(DataModel.fromJson(JsonValue.fromStr(line)))
+                if (index.version == version) {
+                    let source = Path(this.localRepo).join("source").
+                        join(if (org.isEmpty()) { "default" } else { org }).join("${name}-${version}")
+                    return verifyRepositoryCache(source, index.sha256sum)
+                }
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return false
     }
 
     // update local index for one module with output

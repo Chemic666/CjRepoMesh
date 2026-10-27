@@ -60,19 +60,40 @@ def preflight(manifest: dict, upstream: Path, framework: Path, client: Path) -> 
         if not row.get("reason") or snapshot_tree(case.parent) != row.get("files"):
             raise ValueError(f"Unreviewed fixture changed: {row['path']}")
         expected_dependencies = {}
+        destination_names = {case.parent.name: case.parent}
         for line in case.read_text(encoding="utf-8").splitlines():
             if "DEPENDENCE:" not in line:
                 continue
-            match = re.fullmatch(r"// DEPENDENCE: ([^\s,;]+)\s*", line)
+            # Admit only plain whitespace-separated paths. Other upstream
+            # shlex syntax still requires a separate review.
+            match = re.fullmatch(r'''// DEPENDENCE: ([^\s,;"'\\#]+(?:[ \t]+[^\s,;"'\\#]+)*)[ \t]*''', line)
             if not match:
                 raise ValueError("Unsupported dependency directive requires review")
-            dependency = (case.parent / match[1].replace("%n", case.stem)).resolve()
-            if not dependency.is_relative_to(upstream.resolve()) or not dependency.is_dir():
-                raise ValueError("Missing or escaping dependency directory")
-            if dependency != case.parent:
-                expected_dependencies[dependency.relative_to(upstream.resolve()).as_posix()] = snapshot_tree(dependency)
+            for token in match[1].split():
+                dependency = (case.parent / token.replace("%n", case.stem)).resolve()
+                if not dependency.is_relative_to(upstream.resolve()) or not dependency.is_dir():
+                    raise ValueError("Missing or escaping dependency directory")
+                # Maple copies each directory under its basename and silently
+                # ignores copy collisions; never admit that ambiguous layout.
+                if destination_names.setdefault(dependency.name, dependency) != dependency:
+                    raise ValueError("Ambiguous dependency destination directory")
+                if dependency != case.parent:
+                    expected_dependencies[dependency.relative_to(upstream.resolve()).as_posix()] = snapshot_tree(dependency)
         if expected_dependencies != row.get("dependencies", {}):
             raise ValueError(f"Unreviewed dependency changed: {row['path']}")
+        normalizations = row.get("normalizeLineEndings", [])
+        if (not isinstance(normalizations, list) or
+                not all(isinstance(item, str) for item in normalizations) or
+                len(normalizations) != len(set(normalizations))):
+            raise ValueError("Require unique explicit shell normalization paths")
+        copied_roots = [case.parent, *(upstream / relative for relative in expected_dependencies)]
+        for relative in normalizations:
+            helper = relative_file(upstream, relative, "")
+            if not any(helper.is_relative_to(root) for root in copied_roots):
+                raise ValueError("Shell normalization is outside frozen copied dependencies")
+            raw = helper.read_bytes()
+            if not raw.startswith((b"#!/bin/sh\n", b"#!/bin/sh\r\n")) or b"\0" in raw:
+                raise ValueError("Explicit normalization requires an extensionless /bin/sh helper")
         if case in selected:
             raise ValueError("Duplicate case in explicit allowlist")
         selected.append(case)
@@ -92,11 +113,8 @@ def result_status(returncode: int, output: str) -> str:
     return "FAIL"
 
 
-def execute_one(case: Path, row: dict, client: Path, framework: Path, config: Path,
-                stage: Path, results: Path, ordinal: int, timeout: int) -> dict:
-    wait_for_port_release()
-    owned = stage / f"case-{ordinal:04d}"
-    owned.mkdir()
+def stage_inputs(case: Path, row: dict, owned: Path) -> tuple[Path, list[str]]:
+    """Copy already preflighted inputs and normalize only reviewed owned text."""
     upstream = case
     for _ in PurePosixPath(row["path"]).parts:
         upstream = upstream.parent
@@ -107,12 +125,23 @@ def execute_one(case: Path, row: dict, client: Path, framework: Path, config: Pa
     for relative in row.get("dependencies", {}):
         shutil.copytree(upstream / relative, inputs / relative, dirs_exist_ok=True)
     normalizations = []
+    explicit_shells = set(row.get("normalizeLineEndings", []))
     for path in inputs.rglob("*"):
-        if path.is_file() and path.suffix in {".sh", ".toml", ".cj", ".py"}:
+        if path.is_file() and (path.suffix in {".sh", ".toml", ".cj", ".py"} or
+                               path.relative_to(inputs).as_posix() in explicit_shells):
             raw = path.read_bytes()
             if b"\r\n" in raw:
                 path.write_bytes(raw.replace(b"\r\n", b"\n"))
                 normalizations.append(path.relative_to(inputs).as_posix())
+    return fixture, normalizations
+
+
+def execute_one(case: Path, row: dict, client: Path, framework: Path, config: Path,
+                stage: Path, results: Path, ordinal: int, timeout: int) -> dict:
+    wait_for_port_release()
+    owned = stage / f"case-{ordinal:04d}"
+    owned.mkdir()
+    fixture, normalizations = stage_inputs(case, row, owned)
     home = owned / "home"
     home.mkdir()
     env = dict(os.environ)

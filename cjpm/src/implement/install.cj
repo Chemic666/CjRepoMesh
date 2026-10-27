@@ -80,7 +80,18 @@ public func doInstall(installConfig: InstallConfig): Bool {
                 return false
             }
         case InstallType.Repo => for (artifact in installConfig.artifacts) {
-            if (!setRepoRoot(installConfig, artifact) || !installProject(installConfig) || !cleanProject(installConfig)) {
+            if (!setRepoRoot(installConfig, artifact)) { return false }
+            // Capture the directory returned by Directory.createTemp before
+            // build can adjust global paths. Only this invocation owns it.
+            let work = Path(installConfig.globalConfig.rootPath).parent
+            var installed = false
+            var cleaned = false
+            try {
+                installed = installProject(installConfig) && cleanProject(installConfig)
+            } finally {
+                cleaned = deleteDirectory(work.toString())
+            }
+            if (!installed || !cleaned) {
                 return false
             }
         }

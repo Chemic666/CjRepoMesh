@@ -109,6 +109,53 @@ def verify_large_team_cache(job: Path, identity: dict) -> None:
         raise ValueError('large CJP extracted content differs from publisher fixture')
 
 
+def redacted_job_output(stdout, stderr, secret_values):
+    def text(value):
+        return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else value or ''
+    output = text(stdout) + text(stderr)
+    for value in secret_values:
+        output = output.replace(value, '[REDACTED]')
+    return output
+
+
+def run_with_evidence(label, arguments, *, cwd, environment, secret_values, log_path, timeout):
+    try:
+        result = subprocess.run([str(value) for value in arguments], cwd=cwd,
+            env=environment, text=True, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as failure:
+        if log_path is not None:
+            log_path.write_text(redacted_job_output(failure.stdout, failure.stderr, secret_values), encoding='utf-8')
+        # Do not echo the command: paths and literal arguments may contain secrets.
+        raise AssertionError(f'{label}: command timed out after {timeout}s; inspect retained log') from None
+    if log_path is not None:
+        log_path.write_text(redacted_job_output(result.stdout, result.stderr, secret_values), encoding='utf-8')
+    return result
+
+
+def container_failure_snapshot(item):
+    state = item.get('State') or {}
+    return dict(id=item.get('Id'), image=item.get('Image'),
+                state={key: state.get(key) for key in
+                       ('Status', 'Running', 'OOMKilled', 'ExitCode', 'StartedAt', 'FinishedAt', 'Error')})
+
+
+def retain_container_failure(item, report, secret_values, run, diagnostic_errors):
+    identifier = item['Id']
+    try:
+        state = redacted_job_output(json.dumps(container_failure_snapshot(item), indent=2), '', secret_values)
+        (report/('failure-state-'+identifier+'.json')).write_text(state, encoding='utf-8')
+    except (OSError, ValueError, TypeError):
+        diagnostic_errors.append('state: owned container diagnostics unavailable')
+    for diagnostic, command in (
+        ('logs', ('docker', 'logs', '--timestamps', identifier)),
+        ('stats', ('docker', 'stats', '--no-stream', '--format', '{{json .}}', identifier)),
+        ('top', ('docker', 'top', identifier))):
+        try:
+            run('failure-'+diagnostic+'-'+identifier, command, timeout=15)
+        except (OSError, ValueError, AssertionError, subprocess.SubprocessError):
+            diagnostic_errors.append(diagnostic+': owned container diagnostics unavailable')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", required=True, type=Path)
@@ -172,21 +219,15 @@ def main() -> int:
     project, projects, secret_values = "", [], []
     manifest = json.loads((installation / "manifest.json").read_text())
     image_tag = manifest["image"]["tag"]
-    stages, error, cleanup_errors = [], "", []
+    stages, error, cleanup_errors, diagnostic_errors = [], "", [], []
     large_payload = {}
     prepared_tasks = 0
     started = time.monotonic()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def run(label, arguments, *, cwd=installation, success=True, log=True, variables=None, timeout=120):
-        result = subprocess.run([str(value) for value in arguments], cwd=cwd,
-                                env=variables or environment, text=True, capture_output=True, timeout=timeout)
-        output = result.stdout + result.stderr
-        safe = output
-        for value in secret_values:
-            safe = safe.replace(value, "[REDACTED]")
-        if log:
-            (report / (label + ".log")).write_text(safe, encoding="utf-8")
+        result = run_with_evidence(label, arguments, cwd=cwd, environment=variables or environment,
+            secret_values=secret_values, log_path=report/(label+'.log') if log else None, timeout=timeout)
         if (result.returncode == 0) != success:
             raise AssertionError(f"{label}: unexpected command exit {result.returncode}; inspect retained log")
         return result
@@ -580,6 +621,8 @@ def main() -> int:
                     labels = item["Config"]["Labels"]
                     assert labels.get("com.docker.compose.project") == name
                     assert labels.get("io.cjrepomesh.distribution") == image_tag
+                    if error:
+                        retain_container_failure(item, report, secret_values, run, diagnostic_errors)
                     run("cleanup-container", ("docker", "rm", "-f", identifier))
                 compose("cleanup-down-" + name, "down", cwd=cwd, name=name)
                 volumes = run("cleanup-volumes-" + name, ("docker", "volume", "ls", "-q", "--filter",
@@ -595,6 +638,7 @@ def main() -> int:
         summary = dict(success=success, passed=len(stages), total=total,
                        seconds=round(time.monotonic() - started, 2), stages=stages,
                        image=manifest["image"], error=error, cleanup_errors=cleanup_errors,
+                       diagnostic_errors=diagnostic_errors,
                        team_jobs=bool(args.team_sdk),
                        runtime_diagnostics=args.check_running,
                        team_client=client_identity,

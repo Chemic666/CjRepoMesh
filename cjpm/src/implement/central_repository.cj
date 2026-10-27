@@ -45,18 +45,18 @@ public func setRepoRoot(installConfig: InstallConfig, artifact: String): Bool {
                 .join(if (org.isEmpty()) { "default" } else { org })
                 .join("${name}-${params[1]}")
                 .toString()
-            if (directoryExists(installConfig.globalConfig.rootPath)) {
+            if (repositoryCacheEntryExists(Path(installConfig.globalConfig.rootPath))) {
+                if (!depot.verifyCachedSource(name, org, params[1])) {
+                    eprintln("Error: ${repositoryCacheIntegrityError()}")
+                    return false
+                }
                 if (installConfig.verbose) {
                     println("cjpm install skip downloading ${artifact}: local files exist")
                 }
-                installConfig.globalConfig.targetDir = getPath(installConfig.globalConfig.rootPath, TARGET)
-                return true
+            } else if (!downloadArtifact(depot, name, org, params[1], installConfig)) {
+                return false
             }
-            if (downloadArtifact(depot, name, org, params[1], installConfig)) {
-                installConfig.globalConfig.targetDir = getPath(installConfig.globalConfig.rootPath, TARGET)
-                return true
-            }
-            return false
+            return prepareRepositoryInstallCopy(installConfig, depot.localRepo)
         } else {
             return false
         }
@@ -71,6 +71,34 @@ public func setRepoRoot(installConfig: InstallConfig, artifact: String): Bool {
         } else {
             eprintln("Error: load module failed with network connection error") 
         }
+        return false
+    }
+}
+
+// Repository source remains immutable: install writes target, lockfiles and
+// provenance only in this newly owned work directory, never into the receipt's
+// source tree. Directory.createTemp avoids deleting/reusing unknown old work.
+private func prepareRepositoryInstallCopy(installConfig: InstallConfig, localRepo: String): Bool {
+    let parent = Path(localRepo).join("install-work")
+    if (repositoryCacheEntryExists(parent)) {
+        let info = FileInfo(parent)
+        if (info.isSymbolicLink() || !info.isDirectory()) {
+            eprintln("Error: ${repositoryCacheIntegrityError()}")
+            return false
+        }
+    }
+    if (!createDirectory(parent.toString())) { return false }
+    let work = Directory.createTemp(parent)
+    try {
+        let source = Path(installConfig.globalConfig.rootPath)
+        let destination = work.join("package")
+        copy(source, to: destination)
+        installConfig.globalConfig.rootPath = destination.toString()
+        installConfig.globalConfig.targetDir = destination.join(TARGET).toString()
+        return true
+    } catch (_: Exception) {
+        deleteDirectory(work.toString())
+        eprintln("Error: cannot prepare isolated repository installation")
         return false
     }
 }
@@ -108,7 +136,10 @@ func loadModuleFromRepo(fullName: String, version: String, depot: Depot): (Bool,
         let dependencyPath = Path(depot.localRepo).join("source").
             join(if (org.isEmpty()) { "default" } else { org }).
             join("${name}-${version}").toString()
-        if (directoryExists(dependencyPath)) {
+        if (repositoryCacheEntryExists(Path(dependencyPath))) {
+            if (!depot.verifyCachedSource(name, org, version)) {
+                return (false, repositoryCacheIntegrityError())
+            }
             return (true, dependencyPath)
         }
 

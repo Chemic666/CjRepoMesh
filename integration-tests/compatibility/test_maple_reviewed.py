@@ -75,6 +75,93 @@ class ReviewedMapleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dependency"):
             self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
 
+    def test_multiple_dependencies_are_independently_frozen_and_staged(self):
+        first, second = self.suite / "first", self.suite / "second"
+        first.mkdir()
+        second.mkdir()
+        (first / "value").write_bytes(b"first input")
+        (second / "value").write_bytes(b"second input")
+        (self.case / "local.info").write_text("// DEPENDENCE: ../%n ../first ../second\n// EXEC: true\n")
+        row = self.manifest["cases"][0]
+        row["files"] = self.runner.snapshot_tree(self.case)
+        row["dependencies"] = {"first": self.runner.snapshot_tree(first),
+                               "second": self.runner.snapshot_tree(second)}
+        try:
+            selected = self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+        except ValueError as error:
+            self.fail(f"Independently frozen local dependencies must be accepted: {error}")
+        owned = self.root / "owned"
+        owned.mkdir()
+        fixture, _ = self.runner.stage_inputs(selected[0], row, owned)
+        self.assertEqual((fixture.parent / "first/value").read_bytes(), b"first input")
+        self.assertEqual((fixture.parent / "second/value").read_bytes(), b"second input")
+        for directory in (first, second):
+            original = (directory / "value").read_bytes()
+            (directory / "value").write_bytes(b"unreviewed change")
+            with self.assertRaisesRegex(ValueError, "dependency"):
+                self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+            (directory / "value").write_bytes(original)
+        row["dependencies"].pop("second")
+        with self.assertRaisesRegex(ValueError, "dependency"):
+            self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+
+    def test_multiple_dependencies_reject_escaping_and_ambiguous_destinations(self):
+        shared = self.suite / "nested/local"
+        shared.mkdir(parents=True)
+        (shared / "helper").write_text("reviewed")
+        row = self.manifest["cases"][0]
+        for directive, message in (
+                ("../%n ../../outside", "escaping"),
+                ("../%n ../nested/local", "destination"),
+                ("../%n; ../nested/local", "Unsupported dependency")):
+            with self.subTest(directive=directive):
+                (self.case / "local.info").write_text(f"// DEPENDENCE: {directive}\n")
+                row["files"] = self.runner.snapshot_tree(self.case)
+                row["dependencies"] = {"nested/local": self.runner.snapshot_tree(shared)}
+                with self.assertRaisesRegex(ValueError, message):
+                    self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+
+    def test_explicit_shell_normalization_changes_only_owned_copy(self):
+        (self.case / "cjpm.toml").write_bytes(b'[package]\nname="local"\n')
+        helper = self.case / "fake/cjc"
+        helper.parent.mkdir()
+        helper.write_bytes(b'#!/bin/sh\r\necho "synthetic compiler"\r\n')
+        unlisted = self.case / "keep"
+        unlisted.write_bytes(b"unlisted\r\n")
+        row = self.manifest["cases"][0]
+        row["files"] = self.runner.snapshot_tree(self.case)
+        row["normalizeLineEndings"] = ["local/fake/cjc"]
+        self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+        self.assertTrue(callable(getattr(self.runner, "stage_inputs", None)),
+                        "Owned-input staging must apply explicit reviewed shell normalization")
+        owned = self.root / "owned"
+        owned.mkdir()
+        fixture, changes = self.runner.stage_inputs(self.case / "local.info", row, owned)
+        self.assertEqual((fixture / "fake/cjc").read_bytes(), b'#!/bin/sh\necho "synthetic compiler"\n')
+        self.assertEqual((fixture / "keep").read_bytes(), b"unlisted\r\n")
+        self.assertEqual(helper.read_bytes(), b'#!/bin/sh\r\necho "synthetic compiler"\r\n')
+        self.assertEqual(changes, ["local/fake/cjc"])
+
+    def test_explicit_normalization_requires_frozen_extensionless_shell(self):
+        external = self.suite / "not-copied"
+        external.mkdir()
+        (external / "cjc").write_bytes(b"#!/bin/sh\r\necho outside\r\n")
+        helper = self.case / "cjc"
+        helper.write_bytes(b"#!/bin/sh\r\necho reviewed\r\n")
+        row = self.manifest["cases"][0]
+        row["files"] = self.runner.snapshot_tree(self.case)
+        for paths in (["../not-copied/cjc"], ["not-copied/cjc"],
+                      ["local/cjpm.toml"], ["local/cjc", "local/cjc"], "local/cjc"):
+            with self.subTest(paths=paths):
+                row["normalizeLineEndings"] = paths
+                with self.assertRaises(ValueError):
+                    self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+        helper.write_bytes(b"ordinary non-shell text\r\n")
+        row["files"] = self.runner.snapshot_tree(self.case)
+        row["normalizeLineEndings"] = ["local/cjc"]
+        with self.assertRaisesRegex(ValueError, "extensionless /bin/sh"):
+            self.runner.preflight(self.manifest, self.suite, self.framework, self.client)
+
     def test_skip_and_missing_summary_never_count_as_pass(self):
         self.assertEqual(self.runner.result_status(0, "Total: 1, PASS: 1, FAIL: 0"), "PASS")
         self.assertEqual(self.runner.result_status(0, "Total: 1, PASS: 0, FAIL: 0, NOT_RUN: 1"), "SKIP")

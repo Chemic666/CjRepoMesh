@@ -221,6 +221,7 @@ main(): Int64 {
         let _ = maximumHostedIndexBytes()
         let _ = maximumConcurrentPublishes()
         let _ = maximumInflightArtifactBytes()
+        initializeStorageQuota(configuredStorage())
     } catch (e: Exception) {
         eprintln("Error: ${e.message}")
         return 2

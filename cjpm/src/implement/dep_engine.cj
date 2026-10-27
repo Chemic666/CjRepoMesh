@@ -472,7 +472,17 @@ public class DepAnalysisEngine {
                         let sourcePath = Path(sourceDepot.localRepo).join("source").
                             join(if (org.isEmpty()) { "default" } else { org }).
                             join("${name}-${version}").toString()
-                        if (!directoryExists(sourcePath)) {
+                        if (!this.indexMap.contains(fullName) || !this.indexMap[fullName].contains(version)) {
+                            eprintln("Error: repository source metadata is missing")
+                            return false
+                        }
+                        let (admitted, downloadNeeded) = admitRepositoryCache(sourceDepot.localRepo, org,
+                            Path(sourcePath), this.indexMap[fullName][version].sha256sum)
+                        if (!admitted) {
+                            eprintln("Error: ${repositoryCacheIntegrityError()}")
+                            return false
+                        }
+                        if (downloadNeeded) {
                             try {
                                 let (flag, output) = sourceDepot.download(name, org, version)
                                 if (!flag) {

@@ -412,6 +412,80 @@ def restore(root: Path, source: Path, port: int | None = None) -> dict:
     return result
 
 
+def verify_rotation(root: Path) -> dict:
+    """Verify a preparation artifact offline; this never applies its files."""
+    if not ordinary_directory(root) or not ordinary_directory(root/'trust'):
+        raise MaintenanceError('rotation preparation requires ordinary directories')
+    value = json.loads(read_configuration_bytes(root/'rotation.json').decode('utf-8'))
+    if (not isinstance(value, dict) or type(value.get('formatVersion')) is not int or
+            value['formatVersion'] != 1 or value.get('kind') != 'cjrepomesh-rotation-preparation' or
+            value.get('runtimeApplied') is not False or value.get('deploymentModified') is not False or
+            type(value.get('tokensReplaced')) is not bool or
+            not re.fullmatch(SHA256, value.get('sourceConfigurationSha256', '')) or
+            not re.fullmatch(r'sha256:[a-f0-9]{64}', value.get('imageId', ''))):
+        raise MaintenanceError('invalid rotation preparation metadata')
+    configuration = read_configuration_bytes(root/'.env')
+    values = read_configuration(configuration)
+    if (hashlib.sha256(configuration).hexdigest() != value.get('configurationSha256') or
+            values['COMPOSE_PROJECT_NAME'] != value.get('project') or
+            values['CJREPO_HOST_PORT'] != value.get('port') or
+            values['CJREPO_CA_SHA256'] != value.get('caSha256')):
+        raise MaintenanceError('rotation configuration does not match its preparation metadata')
+    expected = {'ca.pem'} if values['CJREPO_CA_SHA256'] else set()
+    if ({p.name for p in root.iterdir()} != {'.env', 'trust', 'rotation.json'} or
+            {p.name for p in (root/'trust').iterdir()} != expected):
+        raise MaintenanceError('rotation preparation contains missing or unexpected files')
+    if expected and hashlib.sha256(read_ca(root/'trust/ca.pem')).hexdigest() != values['CJREPO_CA_SHA256']:
+        raise MaintenanceError('rotation trust does not match its configuration')
+    return value
+
+
+def prepare_rotation(root: Path, output: Path, *, rotate_tokens: bool = False,
+                     ca_file: Path | None = None) -> dict:
+    """Write a new private candidate; never stop, restart or edit a deployment."""
+    if not rotate_tokens and ca_file is None:
+        raise MaintenanceError('select token replacement or an explicit public CA bundle')
+    if output.resolve().is_relative_to(root.resolve()):
+        raise MaintenanceError('rotation output must be outside the existing deployment')
+    require_absent(output)
+    manifest, configuration, values, current_ca = deployment(root, check_docker=False)
+    ca = read_ca(ca_file) if ca_file is not None else current_ca
+    # Match the accepted parser's splitlines semantics before anchored edits.
+    # CR-only or Unicode separators must not produce a false "tokens replaced".
+    updated = ('\n'.join(configuration.decode('utf-8').splitlines())+'\n').encode('utf-8')
+    replacements = {}
+    if rotate_tokens:
+        used = {values['CJREPO_READ_TOKEN'], values['CJREPO_PUBLISH_TOKEN']}
+        for key in ('CJREPO_READ_TOKEN', 'CJREPO_PUBLISH_TOKEN'):
+            while True:
+                token = secrets.token_hex(32)
+                if token not in used: break
+            used.add(token)
+            replacements[key] = token
+            updated = re.sub(rb'(?m)^'+key.encode()+rb'=[^\r\n]+', key.encode()+b'='+token.encode(), updated)
+    ca_digest = hashlib.sha256(ca).hexdigest() if ca is not None else ''
+    updated = re.sub(rb'(?m)^CJREPO_CA_SHA256=[^\r\n]*', b'CJREPO_CA_SHA256='+ca_digest.encode(), updated)
+    prepared_values = read_configuration(updated)
+    if any(prepared_values.get(key) != token for key, token in replacements.items()):
+        raise MaintenanceError('could not prepare replacement credentials')
+    output.mkdir(mode=0o700)
+    write_private(output/'.env', updated)
+    (output/'trust').mkdir(mode=0o700)
+    if ca is not None: write_private(output/'trust/ca.pem', ca)
+    # Configuration/CA changes during preparation invalidate the candidate.
+    # Retain incomplete output for inspection; it has no success receipt.
+    _, latest_configuration, _, latest_ca = deployment(root, check_docker=False)
+    if latest_configuration != configuration or latest_ca != current_ca:
+        raise MaintenanceError('deployment inputs changed; retain incomplete output and prepare again in a new directory')
+    value = dict(formatVersion=1, kind='cjrepomesh-rotation-preparation',
+        project=values['COMPOSE_PROJECT_NAME'], port=values['CJREPO_HOST_PORT'],
+        imageId=manifest['image']['id'], sourceConfigurationSha256=hashlib.sha256(configuration).hexdigest(),
+        configurationSha256=hashlib.sha256(updated).hexdigest(), caSha256=ca_digest,
+        tokensReplaced=rotate_tokens, runtimeApplied=False, deploymentModified=False)
+    write_private(output/'rotation.json', (json.dumps(value, indent=2)+'\n').encode())
+    return verify_rotation(output)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -424,6 +498,12 @@ def main() -> int:
     restore_parser.add_argument('--port', type=int, help='explicitly select a new loopback port')
     restore_parser.add_argument('--check-only', action='store_true',
                                 help='check backup and target inputs offline; no Docker or deployment writes')
+    rotation_parser = commands.add_parser('prepare-rotation', help='offline private candidate only; does not change the deployment')
+    rotation_parser.add_argument('--output', type=Path, required=True)
+    rotation_parser.add_argument('--rotate-tokens', action='store_true')
+    rotation_parser.add_argument('--ca-file', type=Path, help='explicit certificate-only public CA bundle; can contain overlap roots')
+    commands.add_parser('verify-rotation', help='offline preparation integrity, not runtime acceptance').add_argument(
+        '--prepared', type=Path, required=True)
     args = parser.parse_args()
     try:
         root = Path(__file__).absolute().parent
@@ -433,6 +513,11 @@ def main() -> int:
         elif args.command == 'verify-backup':
             verify_backup(args.backup.absolute())
             print('PASS: backup files and storage integrity; publisher authenticity is not established')
+        elif args.command == 'prepare-rotation':
+            print(json.dumps(prepare_rotation(root, args.output.absolute(),
+                rotate_tokens=args.rotate_tokens, ca_file=args.ca_file), indent=2))
+        elif args.command == 'verify-rotation':
+            print(json.dumps(verify_rotation(args.prepared.absolute()), indent=2))
         elif args.check_only:
             print(json.dumps(check_restore(root, args.backup.absolute(), args.port), indent=2))
         else:
