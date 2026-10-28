@@ -26,9 +26,31 @@ python3 integration-tests/compatibility/incremental_cutoff.py \
   --stage-parent /path/to/owned-scratch --results /path/to/new-evidence
 ```
 
-父目录必须是已有的自有临时目录，证据目录必须尚不存在。入口为每案复制原`incremental_37`夹具，不修改上游：验证仅触碰源码时静态消费者不重编译，以及API、源码、选项变更和缺失静态库时仍正确重建；语法错误必须失败。另用固定的本地编译器包装器模拟一次“返回成功却缺少归档”，验证不能复用旧成功结果。全部实际调用产品与编译器，保留前后产物和日志；包装器控制不是官方Maple用例。静态归档字节变化仍可要求重链接，七项专项通过不代表官方更严格的“仅编译a”断言已通过。
+父目录必须是已有的自有临时目录，证据目录必须尚不存在。入口每案复制原`incremental_37`，共8项：touch-only严格要求仅编译`default.a`且静态归档SHA不变；真实实现变更须改变归档SHA、重链接并运行程序验证新输出；另检查API、源码、选项变更、缺失静态库、语法错误和编译器返回成功却缺少归档。后者使用固定本地包装器，不伪造有效输出；全部日志、前后产物和失败保留。这8项专项与原始Maple复验分别记账。
 
-宏和CHIR实现输入另用同样的路径参数运行`integration-tests/compatibility/incremental_implementation_inputs.py`。三案包含直接宏体更新、宏静态依赖函数体更新（宏CJO保持不变而实现库变化）及静态源码集的CHIR更新，均编译并直接运行实际产物检查新输出。宏传递案是已复现的错误展开回归，其他两案为对照，不混称修前失败；原夹具只读，所有修改和缓存保留在自有副本中。七项与这三项是独立专项，不移算为官方Maple成绩。
+宏和CHIR实现输入另用同样的路径参数运行`integration-tests/compatibility/incremental_implementation_inputs.py`。三案包含直接宏体更新、宏静态依赖函数体更新（宏CJO保持不变而实现库变化）及静态源码集的CHIR更新，均编译并直接运行实际产物检查新输出。宏传递案是已复现的错误展开回归，其他两案为对照，不混称修前失败；原夹具只读，所有修改和缓存保留在自有副本中。八项与这三项是独立专项，不移算为官方Maple成绩。
+
+## Maple 准备兼容入口
+
+下列入口需要匹配的Linux SDK，仅访问隔离的自有副本。四项旧缓存原始夹具缺少可信索引摘要、CJP或receipt；先以真实bundle/download建立可验证缓存，再验证原业务断言：
+
+```bash
+python3 -B integration-tests/compatibility/maple_verified_cache.py \
+  --cjpm /path/to/cjpm --suite-root /path/to/cangjie-test/testsuites/LLT/Tools/cjpm/CJNATIVE \
+  --evidence-dir /path/to/new-cache-evidence
+```
+
+七项确定的夹具/输出/平台差异只在冻结输入副本中纠错，保留异常退出、真实算术、依赖声明、宏执行与选项检查：
+
+```bash
+python3 -B integration-tests/compatibility/maple_host_compatibility.py \
+  --manifest /path/to/frozen-reviewed-manifest.json --upstream /path/to/cangjie-test \
+  --framework /path/to/frozen-maple-framework --client /path/to/cjpm \
+  --client-sha256 APPROVED_SHA256 --pack /path/to/new-host-evidence \
+  --stage-parent /path/to/owned-scratch --execute
+```
+
+第二入口不加`--execute`只准备可审阅pack；变化diff、逐文件前后SHA和原始/派生结果单独记录。两入口都不修改原snapshot、不自动信任旧缓存，也不把准备后的4/4或7/7并入原始Maple成绩。
 
 ## Windows 全量入口
 

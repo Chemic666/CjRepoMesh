@@ -12,7 +12,7 @@
 - **发布和消费私有包**：[开发者与只读 CI 示例](examples/team/README.md)、[客户端离线包](deployment/client/README.md)。
 - **了解实现与维护**：[架构](docs/architecture.md)、[部署与恢复](docs/operations.md)、[升级回滚](docs/upgrade-and-rollback.md)、[容量样本](docs/capacity-report.md)。
 
-**当前候选（2026-10-28）**：21文件客户端`eb89bb64…`，服务端沿用`52ce146c…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)。修复普通增量连带重编译，保留宏/CHIR实现依赖及缺少产物保护；两套SDK共20项专项通过。使用SDK1.1.3/静态stdx1.1.3.1构建，隔离SDK1.2.0验证。原同一327项已从311/16变为 **320 PASS/7 FAIL**，原通过项无回退；扩展1248项主清单为 **1234 PASS/14 FAIL**，其中1条原平台条件零调度后单独Unix补测通过，原成绩保留。另111项前提未满足或待复核，完整Maple仍未通过。实际新归档核心4/4、缓存19/19、安装3/3、七阶段7/7、本机HTTPS单次任务10/10与无SDK13/13分别通过；旧Docker整包与容量成绩不移算。失败分类见[验证记录](docs/verification-report.md)，决赛材料见[演示入口](docs/demo-runbook.md)和[收口检查表](docs/submission-checklist.md)。
+**当前候选（2026-10-28）**：客户端`14240e1b…`、21文件确定化归档，服务端沿用`52ce146c…`，完整身份见[固定候选清单](docs/candidate-acceptance.md)。当前定向原始复验72/72，两SDK专项22/22；独立准备兼容4/4及7/7，与原官方结果分列。实际新归档核心4/4、缓存19/19、安装3/3、七阶段7/7、本机HTTPS单次任务10/10、无SDK13/13通过。新客户端未重跑1248项；eb89的1234/14仅为历史，另111项仍有前提，完整Maple未通过。失败与范围见[验证记录](docs/verification-report.md)，决赛材料见[演示入口](docs/demo-runbook.md)和[收口检查表](docs/submission-checklist.md)。
 
 Windows原生全量、完整官方Maple、全新/跨物理主机完整验收与真实生产信任/凭据轮换仍未完成；旧产物的跨机成绩不移算。本地receipt不防同权限同步篡改，不校验生成的编译产物；存储逻辑字节配额不等于OS磁盘限额。发布者签名、构建沙箱、流式落盘、完整操作总期限、在线备份一致性及多实例故障切换仍缺。历史Hosted容量样本不代表新包长期或饱和容量，不按短测推算生产人数或SLA。
 

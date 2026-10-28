@@ -12,9 +12,17 @@ Repository installation uses a unique temporary build copy. Generated targets, l
 
 ## Official legacy-cache compatibility
 
-The current-client official compatibility replay retains two failing original assertions: `install/coverage/repository_cached` and `update/coverage/central_dependency_cached_update`. They preseed bare extracted source, without the complete index/archive/receipt verification required by the new admission policy. The install fixture also lacks a trusted index and is rejected before receipt verification; the update fixture reaches receipt verification and is rejected there. The original assertions expect successful reuse, so these remain FAIL rather than being reclassified as successful security tests.
+The historical original-mode replay retains four failing fixtures: `check/coverage/central_dependency_cached`, `check/coverage/central_dependency_transitive`, `install/coverage/repository_cached`, and `update/coverage/central_dependency_cached_update`. All preseed bare extracted source without a matching CJP or receipt. The three check/update inputs contain empty selected `sha256sum` values; installation also lacks the package index and is rejected before receipt verification. The configured closed loopback endpoint cannot supply those missing trusted materials. This does not prove the existing source is corrupt.
 
-This is a documented backward-compatibility limitation. Preserve the previous directory, configure a new cache path and fetch from the intended trusted repository. Do not manufacture a receipt or remove the validation to pass a legacy assertion. Exact candidate counts and evidence are in the [verification report](verification-report.md#2026-10-27-当前客户端官方兼容性复验).
+Keep the original FAIL records and previous directories. Configure a new cache path and download from the intended trusted repository; do not manufacture receipts or relax admission. `integration-tests/compatibility/maple_verified_cache.py` separately prepares real bundled CJP artifacts, obtains indexes with matching SHA values, and lets actual client download/extraction create receipts. It then checks the four original business expectations, including offline reuse and installed program output. Package metadata/README preparation and every input hash are recorded; the original fixture trees remain unchanged.
+
+```bash
+python3 -B integration-tests/compatibility/maple_verified_cache.py \
+  --cjpm /path/to/cjpm --suite-root /path/to/cangjie-test/testsuites/LLT/Tools/cjpm/CJNATIVE \
+  --evidence-dir /path/to/new-prepared-cache-report
+```
+
+The final candidate passed this separate prepared 4/4 check. These results are not original Maple passes, and the final candidate's 72-case targeted replay is not a replay of the historical 1248-case suite. Exact identities and retained failures are in the [verification report](verification-report.md).
 
 ## Scope
 

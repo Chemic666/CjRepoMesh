@@ -457,7 +457,7 @@ private func collectRebuildList(engine: IncrementalEngine): HashSet<String> {
 
 private func createArtifactGroup(compileTask: CompileTask, buildConfig: BuildConfig): ArtifactGroup {
     func cjo(): Artifact { 
-        Artifact(Path(compileTask.targetPath).join("${swapOrgName(compileTask.fullName)}.cjo").toString(), CheckTimestamp) 
+        Artifact(Path(compileTask.targetPath).join("${swapOrgName(compileTask.fullName)}.cjo").toString(), CheckTimestamp)
     }
     func artifact(name: String, checkKind: ArtifactCheckKind): Artifact { 
         Artifact(Path(compileTask.targetPath).join(name).toString(), checkKind) 
@@ -521,6 +521,8 @@ private func registerReadCompilerOptionsTask(engine: IncrementalEngine, compileT
     // The proper incrementation between those scenarious is a separate task
     let comp: () -> CompilerOptions = { =>
         let res = ArrayList<String>()
+        // Rebuild once when adopting stable compiler-generated archive names.
+        res.add("cjrepomesh-deterministic-archive-cache-v2")
         if (compileTask.outputType == OutputType.Static) {
             // Invalidate old timestamp-only static artifacts once; this marker
             // participates only in the cache hash, never in compiler arguments.
@@ -561,6 +563,11 @@ private func registerCompilerCallTaskWithDeps(engine: IncrementalEngine, compile
         envBuilder.prepend(LD_PATH, buildConfig.globalConfig.ldPath)
         if (!callCompiler(compileTask, cjcCall, envBuilder, buildConfig)) {
             throw Exception("Failed to run task: `${compileTask.id}`")
+        }
+        if (compileTask.outputType == OutputType.Static && !compileTask.combineFlags.isLto &&
+            compileTask.target.contains("linux") && cjcCall.contains("--incremental-compile")) {
+            let name = swapOrgName(compileTask.filename)
+            normalizeIncrementalArchive(Path(compileTask.targetPath).join("lib${name}.a").toString(), "${name}.o")
         }
         artifacts
     }

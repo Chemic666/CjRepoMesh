@@ -2,9 +2,9 @@
 """Exercise cjo projection cutoff and necessary invalidation with real cjpm/cjc.
 
 Copies the original incremental_37 fixture into a fresh owned directory for each
-case. This checks product behavior, not the official fixture's stronger only-a
-assertion: unchanged cjo may skip static consumers while changed archive bytes
-still require the final link. Logs and owned stages are retained for audit.
+case. The touch-only case requires the original fixture's only-a assertion and
+stable static archive bytes. Real implementation changes and missing outputs
+must still invalidate dependents. Logs and owned stages are retained for audit.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import tempfile
 import time
 
 
-CASES = ("touch-only", "changed-api", "missing-static", "changed-source", "syntax-error",
+CASES = ("touch-only", "changed-api", "changed-implementation", "missing-static", "changed-source", "syntax-error",
          "missing-output", "changed-options")
 PACKAGES = {"default", "default.a", "default.b", "default.c", "default.d"}
 COMPILE = re.compile(r"^Compiling package `([^`]+)`: .+$", re.MULTILINE)
@@ -206,6 +206,12 @@ def main() -> int:
                 change_source(a_source)
             elif name == "changed-api":
                 change_source(a_source, "\npublic func cutoffAddedApi(): Int64 { return 314159 }\n")
+            elif name == "changed-implementation":
+                text = a_source.read_text(encoding="utf-8")
+                check(text.count('println("aaa")') == 1, "Expected the original a implementation")
+                a_source.write_text(text.replace('println("aaa")',
+                                                'println("cutoffImplementationChanged")'), encoding="utf-8")
+                change_source(a_source)
             elif name == "missing-static":
                 check(b_archive.is_file(), "Warm build did not produce b's static archive")
                 b_archive.unlink()
@@ -252,9 +258,24 @@ def main() -> int:
             else:
                 check(second["returncode"] == 0, "Second build failed")
                 if name == "touch-only":
-                    check(compiles.count("default.a") == 1, "Touched a was not compiled exactly once")
-                    check(set(compiles) <= {"default.a", "default"} and compiles.count("default") <= 1,
-                          "Unchanged cjo caused redundant static-consumer compilation: " + repr(compiles))
+                    check(compiles == ["default.a"],
+                          "Touch-only build compiled more than a: " + repr(compiles))
+                    archive = "release/default/libdefault.a.a"
+                    check(before[archive]["sha256"] == after[archive]["sha256"],
+                          "Unchanged object changed the produced static archive bytes")
+                elif name == "changed-implementation":
+                    check("default.a" in compiles and "default" in compiles,
+                          "Changed static implementation did not relink the executable")
+                    archive = "release/default/libdefault.a.a"
+                    check(before[archive]["sha256"] != after[archive]["sha256"],
+                          "Changed implementation was erased from the archive identity")
+                    runtime = run_owned([str(project / "target/release/bin/main")],
+                                        project=project, env=env, log=case_results / "runtime.log",
+                                        timeout=args.timeout)
+                    record["attempts"].append(runtime)
+                    check(not runtime["timedOut"] and runtime["returncode"] == 0 and
+                          "cutoffImplementationChanged" in (case_results / "runtime.log").read_text(),
+                          "Executable retained the old static implementation")
                 else:
                     check("default.b" in compiles, "Required invalidation did not rebuild b: " + repr(compiles))
                     check(b_archive.is_file(), "Rebuilt b archive is missing")
