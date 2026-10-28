@@ -16,6 +16,20 @@ Hosted分段帧回归：`python3 integration-tests/compatibility/hosted_frame_re
 
 Hosted制品缓冲预算回归：`python3 integration-tests/compatibility/publish_buffer_budget.py --server <已有Linux服务端> --evidence-dir <新私有目录>`。18项用32/64字节合成制品验证非法/最大配置、精确/超限、跨组织累计预留、拒绝不释放他人、双预留并存与逐个释放，以及成功/重复/断连/截断/尾部/哈希/索引/IO错误后的释放。部分请求先发送有效元数据及制品头再暂停，避免把处理器名额误当字节预留；失败保持证据、仅停止本次进程。不执行Windows仓颉；小字节专项不代替大包、GC、RSS或HTTP提前响应验收。
 
+## 增量构建实际编译器回归
+
+先加载匹配的已有Linux SDK，然后运行：
+
+```bash
+python3 integration-tests/compatibility/incremental_cutoff.py \
+  --cjpm /path/to/verified/cjpm --upstream /path/to/cangjie-test \
+  --stage-parent /path/to/owned-scratch --results /path/to/new-evidence
+```
+
+父目录必须是已有的自有临时目录，证据目录必须尚不存在。入口为每案复制原`incremental_37`夹具，不修改上游：验证仅触碰源码时静态消费者不重编译，以及API、源码、选项变更和缺失静态库时仍正确重建；语法错误必须失败。另用固定的本地编译器包装器模拟一次“返回成功却缺少归档”，验证不能复用旧成功结果。全部实际调用产品与编译器，保留前后产物和日志；包装器控制不是官方Maple用例。静态归档字节变化仍可要求重链接，七项专项通过不代表官方更严格的“仅编译a”断言已通过。
+
+宏和CHIR实现输入另用同样的路径参数运行`integration-tests/compatibility/incremental_implementation_inputs.py`。三案包含直接宏体更新、宏静态依赖函数体更新（宏CJO保持不变而实现库变化）及静态源码集的CHIR更新，均编译并直接运行实际产物检查新输出。宏传递案是已复现的错误展开回归，其他两案为对照，不混称修前失败；原夹具只读，所有修改和缓存保留在自有副本中。七项与这三项是独立专项，不移算为官方Maple成绩。
+
 ## Windows 全量入口
 
 在已经安装仓颉 SDK、stdx 和 Windows 构建工具的环境中，从项目根目录运行：

@@ -437,7 +437,10 @@ private func registerCompileTasks(
             registerMonitorTask(engine, compileTask, monitorId, buildConfig, channel)
         }
 
-        if (!buildConfig.isCompilePipelineParallel && typeInfoOnlyDeps.contains(compileTask.id)) {
+        // Macro consumers execute the implementation, and a later source set
+        // consumes the previous stage's CHIR. Neither dependency is cjo-only.
+        if (!buildConfig.isCompilePipelineParallel && typeInfoOnlyDeps.contains(compileTask.id) &&
+            !compileTask.isMacro && compileTask.outputType != OutputType.Chir) {
             extractCjo(compileTask)
         }
     }
@@ -1646,13 +1649,17 @@ private class Rebuilder {
         let dependencies = taskGraph.incoming(id)
 
         try {
-            if (incremental && cutoff && dependenciesResult.cached) {
-                if (id.isGenerated) {
+            if (incremental && cutoff) {
+                if (dependenciesResult.cached && id.isGenerated) {
                     task.compute()
                     let newInputCache = cache.forceComputeDepHash(dependencies)
                     cache.update(id, newInputCache, task.computedHash(), task.asDataModel())
                     return Cached
                 }
+                // A generated projection may report Rebuild even when the
+                // dependency value consumed here (for example a cjo) is
+                // unchanged. Compare this task's actual inputs and valid
+                // cached output instead of propagating that status alone.
                 if (canCutoffEarly(id, dependencies)) {
                     return Cached
                 }
@@ -1688,6 +1695,19 @@ private class Rebuilder {
 
     private func canCutoffEarly(id: TaskId, dependencies: Array<TaskId>): Bool {
         if (id.isDerived) {
+            return false
+        }
+        // A compiler may return success without recreating an expected output.
+        // In that case executeTask cannot update its output hash, and a stored
+        // hash alone is not evidence that this dependency is valid now.
+        try {
+            for (dependency in dependencies) {
+                let currentHash = taskStorage[dependency].tryComputedHash()
+                if (currentHash.isNone() || currentHash != cache.readOutputHash(dependency)) {
+                    return false
+                }
+            }
+        } catch (_: IncrementalEngineException) {
             return false
         }
         match ((cache.computeDependenciesHash(dependencies), cache.readInputHash(id))) {
